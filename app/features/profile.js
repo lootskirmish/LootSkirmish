@@ -163,9 +163,10 @@ export async function loadPublicProfile(username, calculateLevel, applyTranslati
   try {
     if (!username || typeof username !== 'string') {
       console.error('Invalid username provided');
-      showAlert('error', 'Invalid Profile', 'Profile could not be loaded.');
-      // Return to safe state
-      window.location.pathname = '/';
+      showToast('Invalid profile URL.', 'error');
+      // Return to safe state via router
+      window.history.replaceState({}, '', '/');
+      if (window.checkRouteAuth) window.checkRouteAuth();
       return;
     }
 
@@ -183,25 +184,28 @@ export async function loadPublicProfile(username, calculateLevel, applyTranslati
 
       if (!profileCheckResponse.ok) {
         console.error('Profile check failed:', profileCheckResponse.status);
-        showToast('This profile is private.', 'error');
-        // Return to safe state
-        window.location.pathname = '/';
+        showToast(`✖ Profile not found or is private.`, 'error');
+        // Return to safe state via router
+        window.history.replaceState({}, '', '/');
+        if (window.checkRouteAuth) window.checkRouteAuth();
         return;
       }
 
       const checkData = await profileCheckResponse.json();
       if (!checkData.success || !checkData.isPublic) {
         console.warn('Profile is not public');
-        showToast('This profile is private.', 'error');
-        // Return to safe state
-        window.location.pathname = '/';
+        showToast(`✖ ${checkData.username || 'User'} has a private profile.`, 'error');
+        // Return to safe state via router
+        window.history.replaceState({}, '', '/');
+        if (window.checkRouteAuth) window.checkRouteAuth();
         return;
       }
     } catch (err) {
       console.error('Error checking profile visibility:', err);
-      showToast('Error accessing profile.', 'error');
-      // Return to safe state
-      window.location.pathname = '/';
+      showToast('Unable to access profile. Please try again.', 'error');
+      // Return to safe state via router
+      window.history.replaceState({}, '', '/');
+      if (window.checkRouteAuth) window.checkRouteAuth();
       return;
     }
 
@@ -214,9 +218,10 @@ export async function loadPublicProfile(username, calculateLevel, applyTranslati
 
     if (error || !stats) {
       console.error('Error loading public profile:', error);
-      showAlert('error', 'Profile Not Found', 'This profile could not be loaded.');
-      // Return to safe state
-      window.location.pathname = '/';
+      showToast('Profile could not be loaded.', 'error');
+      // Return to safe state via router
+      window.history.replaceState({}, '', '/');
+      if (window.checkRouteAuth) window.checkRouteAuth();
       return;
     }
 
@@ -225,9 +230,10 @@ export async function loadPublicProfile(username, calculateLevel, applyTranslati
     const isPublic = stats.public === true || stats.public === 'true';
     if (!isPublic) {
       console.warn('Profile privacy verification failed - profile is private');
-      showToast('This profile is private.', 'error');
-      // Return to safe state
-      window.location.pathname = '/';
+      showToast(`✖ ${stats.username} has a private profile.`, 'error');
+      // Return to safe state via router
+      window.history.replaceState({}, '', '/');
+      if (window.checkRouteAuth) window.checkRouteAuth();
       return;
     }
 
@@ -236,7 +242,8 @@ export async function loadPublicProfile(username, calculateLevel, applyTranslati
     if (currentUser && stats.user_id === currentUser.id) {
       // Should load own profile, not public profile
       console.warn('Redirecting to own profile');
-      window.location.pathname = '/profile';
+      window.history.replaceState({}, '', '/profile');
+      if (window.checkRouteAuth) window.checkRouteAuth();
       return;
     }
 
@@ -295,8 +302,10 @@ export async function loadPublicProfile(username, calculateLevel, applyTranslati
     }
   } catch (err) {
     console.error('Error loading public profile:', err);
-    // Return to safe state
-    window.location.pathname = '/';
+    showToast('An unexpected error occurred. Returning to menu...', 'error');
+    // Return to safe state via router
+    window.history.replaceState({}, '', '/');
+    if (window.checkRouteAuth) window.checkRouteAuth();
   }
 }
 

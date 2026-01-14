@@ -182,6 +182,10 @@ async function _loadCasesRoute() {
   }
 }
 
+// Track in-flight public profile loads to prevent concurrent requests
+let currentLoadingPublicProfile = null;
+let publicProfileLoadStartTime = 0;
+
 /**
  * Carrega dados do perfil
  */
@@ -200,6 +204,24 @@ async function _loadProfileRoute() {
     const user = getActiveUser({ sync: true, allowStored: true });
 
     if (publicUsername) {
+      // GUARD: Prevent concurrent loads of the same profile
+      if (currentLoadingPublicProfile === publicUsername) {
+        console.warn('Profile load already in progress for:', publicUsername);
+        return; // Don't load again
+      }
+
+      const currentTime = Date.now();
+      // Debounce rapid successive requests (less than 500ms apart)
+      if (publicProfileLoadStartTime && currentTime - publicProfileLoadStartTime < 500) {
+        console.warn('Profile load debounced - too soon');
+        if (skeleton) skeleton.style.display = 'none';
+        if (content) content.style.display = 'block';
+        return;
+      }
+
+      currentLoadingPublicProfile = publicUsername;
+      publicProfileLoadStartTime = currentTime;
+
       // GUARD: Perform strict server-side validation before attempting to load public profile
       try {
         const checkResponse = await fetch('/api/_profile', {
@@ -214,12 +236,16 @@ async function _loadProfileRoute() {
         if (!checkResponse.ok) {
           console.warn('Public profile check failed with status:', checkResponse.status);
           // Return to safe state (menu)
-          if (window.showToast) window.showToast('This profile is private.', 'error');
+          if (window.showToast) window.showToast('Profile not found or is private. Returning to menu...', 'error');
           window.history.replaceState({}, '', '/');
+          // Force re-route to menu
+          await new Promise(resolve => setTimeout(resolve, 100));
+          if (window.checkRouteAuth) window.checkRouteAuth();
           if (skeleton) skeleton.style.display = 'none';
           if (content) content.style.display = 'block';
           store.dispatch(dataActions.setProfileLoading(false));
           window.publicProfileUsername = null;
+          currentLoadingPublicProfile = null;
           return;
         }
 
@@ -227,23 +253,31 @@ async function _loadProfileRoute() {
         if (!checkData.success || !checkData.isPublic) {
           console.warn('Profile visibility check: profile is private');
           // Return to safe state (menu)
-          if (window.showToast) window.showToast('This profile is private.', 'error');
+          if (window.showToast) window.showToast(`✖ ${checkData.username || 'User'} has a private profile.`, 'error');
           window.history.replaceState({}, '', '/');
+          // Force re-route to menu
+          await new Promise(resolve => setTimeout(resolve, 100));
+          if (window.checkRouteAuth) window.checkRouteAuth();
           if (skeleton) skeleton.style.display = 'none';
           if (content) content.style.display = 'block';
           store.dispatch(dataActions.setProfileLoading(false));
           window.publicProfileUsername = null;
+          currentLoadingPublicProfile = null;
           return;
         }
       } catch (err) {
         console.error('Error checking public profile visibility:', err);
         // Return to safe state (menu) on error
-        if (window.showToast) window.showToast('Error accessing profile.', 'error');
+        if (window.showToast) window.showToast('Error accessing profile. Please try again.', 'error');
         window.history.replaceState({}, '', '/');
+        // Force re-route to menu
+        await new Promise(resolve => setTimeout(resolve, 100));
+        if (window.checkRouteAuth) window.checkRouteAuth();
         if (skeleton) skeleton.style.display = 'none';
         if (content) content.style.display = 'block';
         store.dispatch(dataActions.setProfileLoading(false));
         window.publicProfileUsername = null;
+        currentLoadingPublicProfile = null;
         return;
       }
 
@@ -253,6 +287,8 @@ async function _loadProfileRoute() {
       } else {
         console.error('❌ window.loadPublicProfile não encontrada');
       }
+      
+      currentLoadingPublicProfile = null;
     } else {
       if (!user) {
         console.warn('⚠️ Nenhum usuário encontrado para carregar perfil');
@@ -282,6 +318,7 @@ async function _loadProfileRoute() {
     const content = document.getElementById('profile-content');
     if (skeleton) skeleton.style.display = 'none';
     if (content) content.style.display = 'block';
+    currentLoadingPublicProfile = null;
   } finally {
     window.publicProfileUsername = null;
     store.dispatch(dataActions.setProfileLoading(false));
