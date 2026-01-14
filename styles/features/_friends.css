@@ -1,0 +1,760 @@
+/* =============================================================
+   FRIENDS PANEL & NOTIFICATIONS - VERSÃO MELHORADA
+   ============================================================= */
+
+.friends-button-container,
+.notifications-button-container {
+  position: relative;
+}
+
+/* Badge com melhor visibilidade e animação */
+.friend-count-badge,
+.notification-count {
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  background: linear-gradient(135deg, #ef4444, #dc2626);
+  color: #fff;
+  font-size: 0.75rem;
+  font-weight: 800;
+  padding: 3px 7px;
+  border-radius: 12px;
+  border: 2.5px solid var(--cardBackground);
+  min-width: 22px;
+  text-align: center;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 8px rgba(239, 68, 68, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.15);
+  animation: pulse-badge 2s ease-in-out infinite;
+  z-index: 10;
+}
+
+@keyframes pulse-badge {
+  0%, 100% { 
+    transform: scale(1);
+    box-shadow: 0 2px 8px rgba(239, 68, 68, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.15);
+  }
+  50% { 
+    transform: scale(1.08);
+    box-shadow: 0 4px 12px rgba(239, 68, 68, 0.7), 0 0 0 2px rgba(255, 255, 255, 0.25);
+  }
+}
+
+.friend-toggle-icon,
+.notification-toggle-icon {
+  width: 44px;
+  height: 44px;
+  transition: transform 0.2s ease, filter 0.2s ease;
+  cursor: pointer;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.2));
+}
+
+.friend-toggle-icon:hover,
+.notification-toggle-icon:hover {
+  transform: scale(1.08);
+  filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.3));
+}
+
+.friend-toggle-icon:active,
+.notification-toggle-icon:active {
+  transform: scale(0.95);
+}
+
+/* Panel com backdrop blur */
+.friends-panel {
+  position: fixed;
+  right: -420px;
+  top: 80px;
+  bottom: 20px;
+  width: 400px;
+  background: var(--cardBackground);
+  backdrop-filter: blur(20px);
+  border: 2px solid var(--cardBorder);
+  border-radius: 16px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.05);
+  transition: right 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  display: flex;
+  flex-direction: column;
+  z-index: 999;
+  overflow: hidden;
+}
+
+.friends-panel.active {
+  right: 20px;
+  animation: slideIn 0.3s ease;
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0.8;
+    transform: translateX(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+/* Header melhorado */
+.friends-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px;
+  border-bottom: 2px solid var(--cardBorder);
+  gap: 12px;
+  background: linear-gradient(180deg, rgba(255,255,255,0.03) 0%, transparent 100%);
+}
+
+.friends-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 800;
+  font-size: 1.1rem;
+  color: var(--text-primary);
+}
+
+/* Tabs com melhor feedback visual */
+.friends-tabs {
+  display: flex;
+  gap: 6px;
+}
+
+.friends-tab {
+  padding: 8px 14px;
+  border-radius: 10px;
+  border: 2px solid rgba(var(--primary-rgb), 0.25);
+  background: rgba(var(--primary-rgb), 0.08);
+  color: var(--text-primary);
+  cursor: pointer;
+  font-weight: 700;
+  font-size: 0.85rem;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  overflow: hidden;
+}
+
+.friends-tab::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.1), transparent);
+  transition: left 0.5s ease;
+}
+
+.friends-tab:hover::before {
+  left: 100%;
+}
+
+.friends-tab:hover {
+  background: rgba(var(--primary-rgb), 0.15);
+  border-color: rgba(var(--primary-rgb), 0.5);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(var(--primary-rgb), 0.2);
+}
+
+.friends-tab.active {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: #fff;
+  box-shadow: 0 6px 16px rgba(var(--primary-rgb), 0.5);
+  transform: translateY(-1px);
+}
+
+.friends-tab:active {
+  transform: translateY(0) scale(0.97);
+}
+
+/* Botão de fechar melhorado */
+.friends-close {
+  border: none;
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-primary);
+  cursor: pointer;
+  font-size: 1.3rem;
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+  border-radius: 10px;
+  font-weight: 700;
+  opacity: 0.9;
+}
+
+.friends-close:hover {
+  background: rgba(var(--error-rgb), 0.2);
+  color: var(--error);
+  opacity: 1;
+  transform: rotate(90deg);
+  box-shadow: 0 4px 12px rgba(var(--error-rgb), 0.3);
+}
+
+.friends-close:active {
+  transform: rotate(90deg) scale(0.9);
+}
+
+/* Search com melhor contraste */
+.friends-search {
+  display: flex;
+  gap: 8px;
+  padding: 12px 16px;
+  border-bottom: 2px solid var(--cardBorder);
+  background: rgba(0, 0, 0, 0.15);
+}
+
+#friend-search-input {
+  flex: 1;
+  background: rgba(var(--primary-rgb), 0.1);
+  border: 2px solid rgba(var(--primary-rgb), 0.3);
+  border-radius: 12px;
+  padding: 12px 14px;
+  color: var(--text-primary);
+  font-weight: 600;
+  font-size: 0.95rem;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+#friend-search-input:focus {
+  border-color: var(--primary);
+  background: rgba(var(--primary-rgb), 0.15);
+  box-shadow: 0 0 0 4px rgba(var(--primary-rgb), 0.15), 0 4px 12px rgba(var(--primary-rgb), 0.2);
+  outline: none;
+  transform: translateY(-1px);
+}
+
+#friend-search-input::placeholder {
+  color: var(--text-tertiary);
+  opacity: 0.7;
+}
+
+#friend-search-btn {
+  padding: 12px 16px;
+  border-radius: 12px;
+  border: 2px solid var(--primary);
+  background: linear-gradient(135deg, var(--primary), rgba(var(--primary-rgb), 0.85));
+  color: #fff;
+  font-weight: 800;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 4px 12px rgba(var(--primary-rgb), 0.3);
+}
+
+#friend-search-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(var(--primary-rgb), 0.5);
+  border-color: #fff;
+}
+
+#friend-search-btn:active {
+  transform: translateY(0) scale(0.96);
+}
+
+/* Lists com scroll suave */
+.friends-search-results,
+#friends-list,
+#friends-incoming,
+#friends-outgoing {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 16px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(var(--primary-rgb), 0.4) transparent;
+}
+
+.friends-search-results::-webkit-scrollbar,
+#friends-list::-webkit-scrollbar,
+#friends-incoming::-webkit-scrollbar,
+#friends-outgoing::-webkit-scrollbar {
+  width: 8px;
+}
+
+.friends-search-results::-webkit-scrollbar-track,
+#friends-list::-webkit-scrollbar-track,
+#friends-incoming::-webkit-scrollbar-track,
+#friends-outgoing::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.friends-search-results::-webkit-scrollbar-thumb,
+#friends-list::-webkit-scrollbar-thumb,
+#friends-incoming::-webkit-scrollbar-thumb,
+#friends-outgoing::-webkit-scrollbar-thumb {
+  background: rgba(var(--primary-rgb), 0.4);
+  border-radius: 10px;
+  transition: background 0.2s ease;
+}
+
+.friends-search-results::-webkit-scrollbar-thumb:hover,
+#friends-list::-webkit-scrollbar-thumb:hover,
+#friends-incoming::-webkit-scrollbar-thumb:hover,
+#friends-outgoing::-webkit-scrollbar-thumb:hover {
+  background: rgba(var(--primary-rgb), 0.6);
+}
+
+.friends-section {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.friends-section.hidden {
+  display: none;
+}
+
+.friends-section-title {
+  padding: 8px 16px;
+  font-weight: 800;
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* Friend items com melhor hierarquia visual */
+.friend-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--cardRaisedBackground, rgba(255,255,255,0.05));
+  border: 2px solid var(--cardBorder);
+  border-radius: 14px;
+  padding: 12px;
+  gap: 12px;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  overflow: hidden;
+  min-height: 72px;
+}
+
+.friend-item::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 3px;
+  height: 100%;
+  background: var(--primary);
+  transform: scaleY(0);
+  transition: transform 0.2s ease;
+}
+
+.friend-item:hover {
+  background: rgba(255,255,255,0.08);
+  border-color: rgba(var(--primary-rgb), 0.4);
+  transform: translateX(4px);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+}
+
+.friend-item:hover::before {
+  transform: scaleY(1);
+}
+
+.friend-meta {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+  min-width: 0;
+}
+
+.friend-avatar {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 3px solid var(--primary);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+  transition: transform 0.2s ease;
+  flex-shrink: 0;
+}
+
+.friend-item:hover .friend-avatar {
+  transform: scale(1.08);
+  box-shadow: 0 6px 16px rgba(var(--primary-rgb), 0.4);
+}
+
+.friend-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.friend-name {
+  font-weight: 800;
+  font-size: 1rem;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.3;
+}
+
+.friend-sub {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  margin-top: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.3;
+}
+
+.friend-actions {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  flex-shrink: 0;
+  flex-wrap: nowrap;
+}
+
+/* Botões com feedback tátil melhorado */
+.friend-primary,
+.friend-secondary,
+.friend-danger,
+.friend-primary-btn {
+  border: 2px solid transparent;
+  border-radius: 10px;
+  padding: 8px 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  font-size: 0.85rem;
+  position: relative;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.friend-primary,
+.friend-primary-btn {
+  background: linear-gradient(135deg, var(--primary), rgba(var(--primary-rgb), 0.85));
+  border-color: var(--primary);
+  color: #fff;
+  box-shadow: 0 4px 12px rgba(var(--primary-rgb), 0.3);
+}
+
+.friend-primary:hover,
+.friend-primary-btn:hover {
+  background: linear-gradient(135deg, rgba(var(--primary-rgb), 0.9), rgba(var(--primary-rgb), 0.75));
+  border-color: #fff;
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(var(--primary-rgb), 0.5);
+}
+
+.friend-secondary {
+  background: rgba(var(--primary-rgb), 0.15);
+  border-color: rgba(var(--primary-rgb), 0.4);
+  color: var(--text-primary);
+  font-weight: 700;
+}
+
+.friend-secondary:hover {
+  background: rgba(var(--primary-rgb), 0.25);
+  border-color: var(--primary);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(var(--primary-rgb), 0.35);
+}
+
+.friend-danger {
+  background: rgba(var(--error-rgb), 0.15);
+  border-color: rgba(var(--error-rgb), 0.4);
+  color: var(--error);
+}
+
+.friend-danger:hover {
+  background: rgba(var(--error-rgb), 0.25);
+  border-color: var(--error);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(var(--error-rgb), 0.4);
+}
+
+.friend-primary:active,
+.friend-secondary:active,
+.friend-danger:active,
+.friend-primary-btn:active {
+  transform: translateY(0) scale(0.95);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+}
+
+/* Pill status */
+.friend-pill {
+  padding: 6px 12px;
+  background: rgba(var(--success-rgb, 34,197,94), 0.15);
+  border: 2px solid rgba(var(--success-rgb, 34,197,94), 0.5);
+  border-radius: 999px;
+  color: var(--text-primary);
+  font-weight: 700;
+  font-size: 0.8rem;
+  box-shadow: 0 2px 8px rgba(var(--success-rgb, 34,197,94), 0.2);
+}
+
+/* Empty state melhorado */
+.friends-empty {
+  text-align: center;
+  color: var(--text-secondary);
+  padding: 32px 16px;
+  font-size: 0.95rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  opacity: 0.8;
+}
+
+/* Notifications popover */
+.notifications-popover {
+  position: fixed;
+  right: 16px;
+  top: 70px;
+  width: 340px;
+  background: var(--cardBackground);
+  backdrop-filter: blur(20px);
+  border: 2px solid var(--cardBorder);
+  border-radius: 14px;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.4), 0 0 0 1px rgba(255, 255, 255, 0.05);
+  padding: 12px;
+  z-index: 1001;
+  animation: slideDown 0.25s ease;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.notifications-popover.hidden {
+  display: none;
+}
+
+.notifications-popover-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 800;
+  font-size: 1rem;
+  margin-bottom: 12px;
+  padding-bottom: 10px;
+  border-bottom: 2px solid var(--cardBorder);
+}
+
+.notification-item {
+  border: 2px solid var(--cardBorder);
+  border-radius: 12px;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 8px;
+  background: rgba(255,255,255,0.03);
+  transition: all 0.2s ease;
+}
+
+.notification-item:hover {
+  background: rgba(255,255,255,0.06);
+  border-color: rgba(var(--primary-rgb), 0.4);
+  transform: translateX(4px);
+}
+
+/* Public profile CTA */
+.profile-public-actions {
+  margin: 16px 0 8px;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.friend-primary-btn {
+  border: 2px solid var(--primary);
+  background: linear-gradient(135deg, var(--primary), rgba(var(--primary-rgb), 0.85));
+  color: #fff;
+  padding: 12px 16px;
+  border-radius: 12px;
+  font-weight: 800;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(var(--primary-rgb), 0.3);
+}
+
+/* ============ RESPONSIVO - TABLET ============ */
+@media (max-width: 1200px) {
+  .friends-panel {
+    width: 360px;
+  }
+}
+
+/* ============ RESPONSIVO - MOBILE LANDSCAPE & PORTRAIT ============ */
+@media (max-width: 768px) {
+  .friend-toggle-icon,
+  .notification-toggle-icon {
+    width: 42px;
+    height: 42px;
+  }
+
+  .friends-panel {
+    right: auto;
+    left: -100%;
+    width: 100%;
+    top: 0;
+    bottom: 0;
+    border-radius: 0;
+    border: none;
+    transition: left 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+    z-index: 998;
+    padding-top: 85px;
+  }
+  
+  .friends-panel.active {
+    left: 0;
+    right: auto;
+  }
+
+  .friends-header {
+    padding: 16px;
+  }
+
+  .friends-title {
+    font-size: 1.05rem;
+    gap: 8px;
+  }
+
+  .friends-tab {
+    padding: 8px 12px;
+    font-size: 0.8rem;
+  }
+
+  .friend-item {
+    padding: 10px;
+  }
+
+  .friend-avatar {
+    width: 44px;
+    height: 44px;
+  }
+
+  .friend-name {
+    font-size: 0.95rem;
+  }
+
+  .friend-sub {
+    font-size: 0.8rem;
+  }
+
+  .notifications-popover {
+    width: calc(100% - 32px);
+    right: 16px;
+    left: 16px;
+  }
+}
+
+/* ============ RESPONSIVO - MOBILE PEQUENO ============ */
+@media (max-width: 500px) {
+  .friend-toggle-icon,
+  .notification-toggle-icon {
+    width: 38px;
+    height: 38px;
+  }
+
+  .friend-count-badge,
+  .notification-count {
+    font-size: 0.7rem;
+    padding: 2px 6px;
+    min-width: 20px;
+    top: -6px;
+    right: -6px;
+  }
+
+  .friends-panel {
+    padding-top: 75px;
+  }
+
+  .friends-header {
+    padding: 12px 14px;
+  }
+
+  .friends-title {
+    font-size: 1rem;
+  }
+
+  .friends-tab {
+    padding: 7px 10px;
+    font-size: 0.75rem;
+  }
+
+  .friend-item {
+    padding: 8px;
+  }
+
+  .friend-avatar {
+    width: 40px;
+    height: 40px;
+    border-width: 2px;
+  }
+
+  .friend-name {
+    font-size: 0.9rem;
+  }
+
+  .friend-sub {
+    font-size: 0.75rem;
+  }
+
+  .friend-primary,
+  .friend-secondary,
+  .friend-danger {
+    padding: 7px 10px;
+    font-size: 0.8rem;
+  }
+
+  #friend-search-input {
+    padding: 10px 12px;
+    font-size: 0.9rem;
+  }
+
+  #friend-search-btn {
+    padding: 10px 14px;
+  }
+}
+
+/* ============ ACESSIBILIDADE ============ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Modo de alto contraste */
+@media (prefers-contrast: high) {
+  .friend-item {
+    border-width: 3px;
+  }
+
+  .friend-primary,
+  .friend-secondary,
+  .friend-danger {
+    border-width: 3px;
+  }
+
+  .friends-tab {
+    border-width: 3px;
+  }
+}

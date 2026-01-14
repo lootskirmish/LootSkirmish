@@ -1,0 +1,141 @@
+/* ===============================================================
+   VARIÁVEIS CSS DINÂMICAS - SISTEMA DE CORES
+   =============================================================== */
+
+:root {
+  /* ============ TEXTOS (PADRÃO GLOBAL) ============ */
+  --text-primary: #ffffff;
+  --text-secondary: #9ca3af;
+  --text-muted: #666666;
+  --text-highlight: #facc15;
+  
+  /* ============ ESTADOS (PADRÃO GLOBAL) ============ */
+  --success: #22c55e;
+  --success-rgb: 34, 197, 94;
+  --warning: #facc15;
+  --warning-rgb: 250, 204, 21;
+  --error: #ef4444;
+  --error-rgb: 239, 68, 68;
+  --info: #06b6d4;
+  --info-rgb: 6, 182, 212;
+  
+  /* ============ BOTÕES DE AÇÃO (PADRÃO GLOBAL) ============ */
+  /* Success Button */
+  --button-success: linear-gradient(135deg, #22c55e, #16a34a);
+  --button-success-hover: linear-gradient(135deg, #16a34a, #15803d);
+  --button-success-rgb: 34, 197, 94;
+  --button-success-hover-rgb: 22, 163, 74;
+  
+  /* Danger Button */
+  --button-danger: linear-gradient(135deg, #ef4444, #dc2626);
+  --button-danger-hover: linear-gradient(135deg, #dc2626, #b91c1c);
+  --button-danger-rgb: 239, 68, 68;
+  --button-danger-hover-rgb: 220, 38, 38;
+  
+  /* Secondary Button */
+  --button-secondary: rgba(60, 60, 80, 0.5);
+  --button-secondary-hover: rgba(70, 70, 90, 0.6);
+  --button-secondary-rgb: 60, 60, 80;
+
+  /* Shared glow tokens for lighter shadows (performance-friendly) */
+  --shadow-soft: 0 8px 18px rgba(0, 0, 0, 0.35);
+  --shadow-strong: 0 12px 26px rgba(0, 0, 0, 0.45);
+}
+
+/* ===== CORES POR RARIDADE (checkbox E texto) ===== */
+
+/* Common - Cinza */
+.rarity-checkbox:has(input[value="Common"]) span {
+  color: #9CA3AF;
+}
+
+.rarity-checkbox:has(input[value="Common"]) input:checked {
+  background: #9CA3AF;
+  border-color: #9CA3AF;
+  box-shadow: 0 0 15px rgba(156,163,175,0.6);
+}
+
+.rarity-checkbox:has(input[value="Common"]):has(input:checked) {
+  border-color: #9CA3AF;
+  box-shadow: 0 0 20px rgba(156,163,175,0.3);
+}
+
+/* Uncommon - Verde */
+.rarity-checkbox:has(input[value="Uncommon"]) span {
+  color: #22C55E;
+}
+
+.rarity-checkbox:has(input[value="Uncommon"]) input:checked {
+  background: #22C55E;
+  border-color: #22C55E;
+  box-shadow: 0 0 15px rgba(34,197,94,0.6);
+}
+
+.rarity-checkbox:has(input[value="Uncommon"]):has(input:checked) {
+  border-color: #22C55E;
+  box-shadow: 0 0 20px rgba(34,197,94,0.3);
+}
+
+/* Rare - Azul */
+.rarity-checkbox:has(input[value="Rare"]) span {
+  color: #3B82F6;
+}
+
+.rarity-checkbox:has(input[value="Rare"]) input:checked {
+  background: #3B82F6;
+  border-color: #3B82F6;
+  box-shadow: 0 0 15px rgba(59,130,246,0.6);
+}
+
+.rarity-checkbox:has(input[value="Rare"]):has(input:checked) {
+  border-color: #3B82F6;
+  box-shadow: 0 0 20px rgba(59,130,246,0.3);
+}
+
+/* Epic - Roxo */
+.rarity-checkbox:has(input[value="Epic"]) span {
+  color: #A855F7;
+}
+
+.rarity-checkbox:has(input[value="Epic"]) input:checked {
+  background: #A855F7;
+  border-color: #A855F7;
+  box-shadow: 0 0 15px rgba(168,85,247,0.6);
+}
+
+.rarity-checkbox:has(input[value="Epic"]):has(input:checked) {
+  border-color: #A855F7;
+  box-shadow: 0 0 20px rgba(168,85,247,0.3);
+}
+
+/* Legendary - Amarelo */
+.rarity-checkbox:has(input[value="Legendary"]) span {
+  color: #EAB308;
+}
+
+.rarity-checkbox:has(input[value="Legendary"]) input:checked {
+  background: #EAB308;
+  border-color: #EAB308;
+  box-shadow: 0 0 15px rgba(234,179,8,0.6);
+}
+
+.rarity-checkbox:has(input[value="Legendary"]):has(input:checked) {
+  border-color: #EAB308;
+  box-shadow: 0 0 20px rgba(234,179,8,0.3);
+}
+
+/* Mythic - Vermelho */
+.rarity-checkbox:has(input[value="Mythic"]) span {
+  color: #EF4444;
+}
+
+.rarity-checkbox:has(input[value="Mythic"]) input:checked {
+  background: #EF4444;
+  border-color: #EF4444;
+  box-shadow: 0 0 15px rgba(239,68,68,0.6);
+}
+
+.rarity-checkbox:has(input[value="Mythic"]):has(input:checked) {
+  border-color: #EF4444;
+  box-shadow: 0 0 20px rgba(239,68,68,0.3);
+}

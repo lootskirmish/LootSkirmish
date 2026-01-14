@@ -1,0 +1,806 @@
+{
+  "terms": {
+    "title": "Terms of Use",
+    "effective_date": "2025-01-12",
+    "language": "en",
+    "last_updated": "2025-01-12",
+    "sections": [
+      {
+        "heading": "1. Acceptance of Terms",
+        "content": "By accessing and using LootSkirmish ('the Service', 'we', 'us', or 'our'), you accept and agree to be bound by these Terms of Use. If you do not agree to these terms, you must not use the Service. These Terms constitute a legally binding agreement between you and LootSkirmish."
+      },
+      {
+        "heading": "2. Description of Service",
+        "content": "LootSkirmish is a free-to-play web-based gaming platform featuring strategy games, minigames, and social features. The Service includes both single-player and multiplayer game modes. Currently available games include case opening, with plans to add case battles, blackjack, mines, and other games in the future. All games require an active internet connection to play. We reserve the right to add, modify, or remove games and features at any time without prior notice."
+      },
+      {
+        "heading": "3. Eligibility and Age Requirements",
+        "content": "You must be at least 13 years old to use the Service. Users between 13 and 18 years old (or the age of majority in their jurisdiction) may use the Service and make purchases only with parental or guardian consent. By using the Service, you represent and warrant that you meet these age requirements and have obtained any necessary parental consent. We reserve the right to request proof of age and parental consent at any time."
+      },
+      {
+        "heading": "4. Geographic Restrictions",
+        "content": "The Service is not available in certain jurisdictions where online gaming is restricted or prohibited by law. We reserve the right to restrict access from any geographic location at our discretion to comply with applicable laws and regulations. By using the Service, you confirm that online gaming is legal in your jurisdiction."
+      },
+      {
+        "heading": "5. Account Registration and Security",
+        "subsections": [
+          {
+            "subheading": "5.1 Account Creation",
+            "content": "To use certain features of the Service, you must create an account by providing a valid email address, password, and username. You must verify your email address to activate your account. You are responsible for choosing a unique username and may change it once for free in account settings, with subsequent changes requiring payment in Diamonds."
+          },
+          {
+            "subheading": "5.2 Account Security",
+            "content": "You are solely responsible for maintaining the confidentiality of your account credentials and for all activities that occur under your account. We offer two-factor authentication (2FA) as an additional security measure, and we strongly recommend enabling it. You must notify us immediately of any unauthorized access or security breach. We are not liable for any loss or damage arising from your failure to protect your account information."
+          },
+          {
+            "subheading": "5.3 Account Recovery",
+            "content": "In the event of account compromise, if you contact support within a reasonable timeframe and can verify your identity, we may be able to restore lost currencies (free coins and Diamonds) and experience levels. However, certain items and actions may be irreversible. Account recovery is provided at our sole discretion and is not guaranteed."
+          },
+          {
+            "subheading": "5.4 Multiple Accounts",
+            "content": "Users are prohibited from creating or operating multiple accounts. If we detect multiple accounts linked to the same user and find evidence of violations of these Terms, we will apply penalties proportionate to the severity and critical risk level of the infractions, which may include temporary or permanent suspension of all associated accounts."
+          },
+          {
+            "subheading": "5.5 Account Sharing",
+            "content": "Sharing your account credentials with others is strictly prohibited and may result in account suspension or termination."
+          },
+          {
+            "subheading": "5.6 Deceased User Accounts",
+            "content": "In the event of a user's death, the account will remain inactive indefinitely unless access credentials are provided by authorized parties. We do not provide account access to family members or third parties without proper authentication credentials. All virtual currencies, including purchased Diamonds, and account data associated with deceased users' accounts are forfeited and cannot be transferred, refunded, or recovered."
+          }
+        ]
+      },
+      {
+        "heading": "6. Virtual Currency and Items",
+        "subsections": [
+          {
+            "subheading": "6.1 Types of Currency",
+            "content": "The Service uses two primary types of virtual currency: (a) Free Coins (gold icon) - earned through gameplay and may regenerate over time through certain game mechanics; (b) Diamonds (blue gem icon) - premium currency purchased with real money. Additional event-specific currencies or points may be introduced in the future."
+          },
+          {
+            "subheading": "6.2 Use of Free Coins",
+            "content": "Free Coins are used to play minigames and participate in various game activities. Free Coins cannot be exchanged for Diamonds, real money, or transferred between accounts. Free Coins have no monetary value."
+          },
+          {
+            "subheading": "6.3 Use of Diamonds",
+            "content": "Diamonds can be used to purchase: (a) VIP/Premium subscriptions and membership benefits; (b) Permanent passes and benefits; (c) Visual themes and cosmetic items; (d) Access to special games (subject to availability); (e) Battle Passes (typically lasting 15-30 days before reset, requiring repurchase); (f) Battle Pass tier advancement to progress faster through Battle Pass levels; (g) Username changes (after the first free change); (h) Other in-game benefits and features. Diamonds cannot be used to directly purchase Free Coins, cannot be exchanged for real money, and cannot be transferred or gifted to other users."
+          },
+          {
+            "subheading": "6.4 Purchase Bonuses",
+            "content": "Certain Diamond packages may include bonus Diamonds during promotional periods. For example, a package offering 1,000 Diamonds with a 25% bonus would provide 1,250 Diamonds total. Bonus amounts are subject to change and are displayed at the time of purchase."
+          },
+          {
+            "subheading": "6.5 No Monetary Value",
+            "content": "All virtual currencies, items, experience points, levels, and other virtual goods obtained through the Service have no monetary value and cannot be redeemed, exchanged, or sold for real-world money or consideration. Virtual goods are licensed, not sold, and remain the property of LootSkirmish at all times."
+          },
+          {
+            "subheading": "6.6 No Expiration",
+            "content": "Virtual currencies and items do not expire and will remain in your account as long as your account remains active and in good standing, subject to these Terms."
+          }
+        ]
+      },
+      {
+        "heading": "7. VIP/Premium Subscriptions",
+        "subsections": [
+          {
+            "subheading": "7.1 Subscription Features",
+            "content": "We offer VIP/Premium monthly subscriptions that can be purchased with Diamonds or through direct payment methods. Subscription benefits may include but are not limited to: (a) Experience (XP) boost multipliers; (b) Daily Free Coins rewards; (c) Daily Diamonds rewards; (d) Exclusive access to special features, games, or content; (e) Cosmetic items and visual perks; (f) Other benefits as specified at the time of subscription. Subscription benefits and features are subject to change with notice to active subscribers."
+          },
+          {
+            "subheading": "7.2 Subscription Renewal",
+            "content": "VIP/Premium subscriptions renew automatically on a monthly basis unless you disable automatic renewal in your account settings. You will be charged for the renewal using your selected payment method or Diamonds balance at the beginning of each billing cycle. You may cancel automatic renewal at any time, and your subscription benefits will continue until the end of the current billing period."
+          },
+          {
+            "subheading": "7.3 Subscription Cancellation",
+            "content": "If you cancel your subscription or disable automatic renewal, you will retain subscription benefits until the end of your current paid period. No refunds or prorated credits will be issued for partial subscription periods. Canceled subscriptions do not result in a refund of Diamonds or payment amounts."
+          }
+        ]
+      },
+      {
+        "heading": "8. Battle Pass System",
+        "subsections": [
+          {
+            "subheading": "8.1 Battle Pass Structure",
+            "content": "The Service offers a Battle Pass system featuring two reward tracks: (a) Free Track: Available to all users at no cost, offering basic rewards; (b) Premium Track: Unlocked by purchasing the Battle Pass with Diamonds or through certain VIP/Premium subscriptions, offering enhanced and exclusive rewards. Both tracks require earning Battle Pass points through gameplay and completing objectives to unlock rewards."
+          },
+          {
+            "subheading": "8.2 Battle Pass Duration and Reset",
+            "content": "Each Battle Pass season typically lasts 15-30 days. At the end of each season: (a) The Battle Pass completely resets; (b) All unclaimed rewards are forfeited and cannot be recovered; (c) Battle Pass progress (earned points and tier levels) resets to zero; (d) Any rewards you have already claimed are retained permanently; (e) A new Battle Pass season begins with new rewards. You must purchase the Premium Track separately for each new season if you wish to access premium rewards."
+          },
+          {
+            "subheading": "8.3 Battle Pass Tier Advancement",
+            "content": "You may use Diamonds to purchase individual Battle Pass tier levels to advance faster through the reward tracks. Each purchased tier level immediately unlocks the corresponding rewards for both free and premium tracks (if you own the Premium Battle Pass). Tier purchases do not carry over to future Battle Pass seasons."
+          },
+          {
+            "subheading": "8.4 Battle Pass Expiration",
+            "content": "Purchased Battle Passes and tier advancements are only valid for the current season. If you do not claim rewards or complete tiers before the season ends, those opportunities are permanently lost without refund or compensation."
+          }
+        ]
+      },
+      {
+        "heading": "9. Purchases and Payments",
+        "subsections": [
+          {
+            "subheading": "9.1 Payment Methods",
+            "content": "We accept various payment methods including credit/debit cards, PIX, cryptocurrency (LTC), and gift cards. All purchases are processed through third-party payment providers, and you agree to comply with their terms and conditions."
+          },
+          {
+            "subheading": "9.2 Pricing and Taxes",
+            "content": "All prices are displayed in the applicable currency at the time of purchase. Displayed prices do not include applicable taxes, duties, or fees, which will be calculated and added at checkout based on your location and the payment integration provider. We reserve the right to modify prices for Diamond packages, subscriptions, and other purchasable items at any time. Price changes will not affect purchases already completed but will apply to all future purchases."
+          },
+          {
+            "subheading": "9.3 Purchase Verification",
+            "content": "All purchases require user confirmation and verification before completion. The Service includes visual indicators and confirmation prompts to ensure you intend to make the purchase. By confirming a purchase, you acknowledge that you have reviewed the transaction details and agree to proceed."
+          },
+          {
+            "subheading": "9.4 Non-Refundable Purchases",
+            "content": "All purchases of Diamonds, virtual items, subscriptions, Battle Passes, and other virtual goods are final and non-refundable, except as expressly provided in Section 9.5 or as required by applicable law. This includes purchases made in error, accidental clicks, buyer's remorse, or dissatisfaction with purchased items. Due to purchase verification requirements and clear visual indicators, user errors in purchasing do not qualify for refunds."
+          },
+          {
+            "subheading": "9.5 Limited Refund Exceptions",
+            "content": "Refunds may be issued only in the following circumstances: (a) Duplicate Charges: If you are charged multiple times for the same purchase, we will refund the duplicate charges only; (b) Payment Method Errors: For certain payment methods (such as PIX), technical errors may be eligible for refund at our discretion; (c) Technical Failures: If a technical error on our part prevents Diamonds from being credited to your account after confirmed payment, we will credit the missing Diamonds rather than issue a refund. Refund requests must be submitted within 7 days of the purchase date through our support channels with proof of payment. We reserve the right to investigate all refund requests and deny requests that do not meet these criteria."
+          },
+          {
+            "subheading": "9.6 Technical Issues and Support",
+            "content": "If you complete a purchase but do not receive the purchased Diamonds due to a technical error, you must contact support within 7 days with proof of payment. We will investigate the issue and, upon verification that payment was received and no fraud is detected, will credit the appropriate amount of Diamonds to your account. This is your sole remedy for technical issues related to purchases."
+          },
+          {
+            "subheading": "9.7 Chargebacks and Payment Disputes",
+            "content": "If you initiate a chargeback or payment dispute with your financial institution for any purchase: (a) The disputed amount of Diamonds will be immediately removed from your account; (b) If you have already spent the disputed Diamonds, your account will be suspended for 7 days; (c) Your purchase history will be restricted and reviewed; (d) Any items or benefits purchased with the disputed Diamonds during that period will be removed; (e) Repeated chargebacks or fraudulent disputes may result in permanent account termination. If you believe there is an error with a charge, you must contact our support team first before initiating a chargeback."
+          },
+          {
+            "subheading": "9.8 No Spending Limits or Warnings",
+            "content": "The Service does not impose automatic spending limits or provide warnings for excessive purchases. You are solely responsible for monitoring and controlling your own spending. We do not provide alerts, notifications, or interventions regarding purchase amounts or frequency."
+          }
+        ]
+      },
+      {
+        "heading": "10. Gift Cards and Promotional Codes",
+        "subsections": [
+          {
+            "subheading": "10.1 Gift Card Redemption",
+            "content": "Gift cards may be purchased from authorized partner sites and stores and redeemed on the Service for Diamonds. Each gift card code can only be used once. Gift card codes expire 30 days after purchase date. We are not responsible for lost, stolen, or damaged gift card codes."
+          },
+          {
+            "subheading": "10.2 Gift Card Issues",
+            "content": "If a gift card code does not work, you must contact support within 7 days of purchase with proof of purchase from an authorized retailer. We do not provide support for gift cards purchased from unauthorized resellers or third-party marketplaces."
+          },
+          {
+            "subheading": "10.3 Promotional Codes",
+            "content": "We may offer promotional discount or bonus codes from time to time. Promotional codes may have expiration dates and specific terms of use. Promotional codes cannot be revoked once applied to your account, but unused codes may expire."
+          }
+        ]
+      },
+      {
+        "heading": "11. Referral Program",
+        "subsections": [
+          {
+            "subheading": "11.1 How Referrals Work",
+            "content": "The Service includes a referral program that allows you to invite friends to join LootSkirmish. When you invite someone using your unique referral code or link: (a) The new user must create an account using your referral code; (b) Upon successful account creation with your code, the new user receives 100 Diamonds as a welcome bonus; (c) As the referrer, you receive Free Coins based on a percentage of the referred user's future earnings and activity on the platform; (d) Referral rewards are calculated and credited automatically based on the referred user's ongoing engagement."
+          },
+          {
+            "subheading": "11.2 Referral Program Abuse",
+            "content": "The following activities related to the referral program are strictly prohibited: (a) Creating multiple fake accounts to generate referral rewards; (b) Using automated systems or bots to create referral accounts; (c) Coordinating with others to artificially inflate referral rewards; (d) Any other fraudulent or abusive use of the referral system. Violations will result in forfeiture of all referral rewards and may lead to permanent account termination for all associated accounts."
+          },
+          {
+            "subheading": "11.3 Referral Link Usage",
+            "content": "Your referral code and link are for personal use to invite genuine new users to the Service. Selling, trading, or commercializing your referral link or code is prohibited. You may share your referral link through legitimate channels such as social media, but must not engage in spam or unsolicited promotional activities."
+          }
+        ]
+      },
+      {
+        "heading": "12. Gameplay and Game Mechanics",
+        "subsections": [
+          {
+            "subheading": "12.1 Available Games",
+            "content": "Current games include case opening, with planned additions including case battles, blackjack, mines, and other games. All games are the property of LootSkirmish, and we reserve the right to add, modify, or remove any game or game feature at any time without notice or liability."
+          },
+          {
+            "subheading": "12.2 Case Battles",
+            "content": "Case Battles are multiplayer competitive game modes where players use Free Coins to open cases simultaneously. Game mechanics include: (a) Players enter a battle by purchasing case entries with Free Coins; (b) Multiple players (or game modes) compete to achieve the highest total item value from opened cases; (c) The winner receives all items from the battle, with total value calculated; (d) LootSkirmish retains a 5% house fee from the total prize value; (e) Battle outcomes are determined by the random number generator and the items obtained from each case opening. Case Battles involve competition for virtual resources between players."
+          },
+          {
+            "subheading": "12.3 Randomization and Fairness",
+            "content": "Game outcomes are determined by a random number generator (RNG) using cryptographic seeds to ensure fairness and unpredictability. While we use provably fair technology with seed-based randomization, the seeds are not displayed to users. We display the odds and probabilities of outcomes where applicable."
+          },
+          {
+            "subheading": "12.4 Experience Points and Levels",
+            "content": "Players earn experience points (XP) through gameplay activities. XP accumulates to increase your account level. Account levels: (a) May provide permanent benefits such as cosmetic rewards, temporary boosts, or other perks; (b) Are purely progressive and cannot be lost or reduced; (c) Do not provide competitive advantages in gameplay; (d) Do not directly affect game outcomes or mechanics. Level benefits are cosmetic or convenience-based rather than gameplay-affecting."
+          },
+          {
+            "subheading": "12.5 Game Rewards",
+            "content": "Players may earn the following through gameplay: (a) Free Coins; (b) Experience points (XP) and levels; (c) Event points and special currencies during limited-time events; (d) Other non-monetary virtual rewards. All rewards have no real-world monetary value and cannot be exchanged for cash or real-world goods."
+          },
+          {
+            "subheading": "12.6 Game Changes",
+            "content": "We reserve the right to modify game mechanics, difficulty, reward structures, house fees, and any other aspect of gameplay at any time. Major updates may be announced, but we are not obligated to provide advance notice of changes."
+          }
+        ]
+      },
+      {
+        "heading": "13. Prohibited Activities",
+        "content": "You agree not to engage in any of the following prohibited activities: (a) Using bots, scripts, automation tools, or any other third-party software or unofficial API access to interact with the Service; (b) Creating or operating multiple accounts; (c) Exploiting bugs, glitches, or vulnerabilities in the Service for personal gain (note: reporting bugs may result in rewards); (d) Buying, selling, trading, or transferring accounts; (e) Initiating fraudulent chargebacks or payment disputes; (f) Engaging in harassment, hate speech, threats, or toxic behavior toward other users; (g) Modifying, reverse engineering, or tampering with client-side code or game files; (h) Sharing account credentials with others; (i) Using the Service for money laundering or any illegal financial activity; (j) Spamming chat or other communication features; (k) Posting offensive language, illegal content, or external links in chat; (l) Attempting to bypass or circumvent any security measures or access restrictions; (m) Impersonating LootSkirmish staff, moderators, or other users; (n) Conducting unauthorized giveaways or scams involving promises of Diamonds or items (as gifting is not supported); (o) Any other activity that violates these Terms or disrupts the Service or other users' enjoyment."
+      },
+      {
+        "heading": "14. Third-Party Integrations and API",
+        "subsections": [
+          {
+            "subheading": "14.1 Unauthorized API Usage",
+            "content": "Use of any unofficial API, third-party tools, bots, scripts, or automated systems to access or interact with the Service is strictly prohibited. We do not provide public API access for third-party developers. Any unauthorized API usage or attempt to create tools that interact with the Service will result in immediate and permanent account termination."
+          },
+          {
+            "subheading": "14.2 Detection and Enforcement",
+            "content": "We employ automated systems to detect unauthorized API usage, botting, and automation. Accounts found using such methods will be permanently banned without warning."
+          }
+        ]
+      },
+      {
+        "heading": "15. Content Creation and Streaming",
+        "subsections": [
+          {
+            "subheading": "15.1 Permitted Content Creation",
+            "content": "You are permitted and encouraged to create content featuring the Service, including: (a) Streaming gameplay on platforms such as Twitch, YouTube, or other services; (b) Recording and uploading gameplay videos; (c) Creating monetized content with advertisements; (d) Taking and sharing screenshots; (e) Discussing strategies, features, and experiences. No special permission is required for content creation, provided it complies with these Terms."
+          },
+          {
+            "subheading": "15.2 Official Giveaways Only",
+            "content": "Only LootSkirmish staff or authorized moderators may conduct official giveaways of Diamonds or virtual items. Such giveaways will be clearly identified as official and conducted through designated channels. Any user-run 'giveaways' or promises of Diamonds or items are fraudulent, as the Service does not support gifting of Diamonds or items between users. Participating in or promoting unauthorized giveaways may result in account suspension."
+          },
+          {
+            "subheading": "15.3 Prohibited Content Activities",
+            "content": "When creating content about the Service, you must not: (a) Promote scams, fraud, or unauthorized giveaways; (b) Encourage violation of these Terms; (c) Misrepresent the Service or its features; (d) Engage in activities that could be considered theft, hacking, or exploitation; (e) Promote or facilitate account trading or selling; (f) Use the Service's intellectual property in misleading or disparaging ways."
+          }
+        ]
+      },
+      {
+        "heading": "16. Bug Reporting and Rewards",
+        "content": "We encourage users to report bugs, glitches, and security vulnerabilities responsibly. Users who report significant bugs through proper channels may receive substantial rewards at our discretion. However, exploiting known bugs for personal gain before reporting them is prohibited and may result in penalties."
+      },
+      {
+        "heading": "17. Consequences and Enforcement",
+        "subsections": [
+          {
+            "subheading": "17.1 Penalties",
+            "content": "Violations of these Terms may result in consequences proportionate to the severity of the violation, including but not limited to: (a) Warnings; (b) Temporary account suspension; (c) Permanent account termination; (d) Removal of virtual currencies, items, or benefits; (e) Restriction of features or access; (f) Legal action in cases of fraud or illegal activity. The specific penalty applied will depend on the nature and severity of the violation and is determined at our sole discretion."
+          },
+          {
+            "subheading": "17.2 Permanent Bans",
+            "content": "Permanent account termination does not result in automatic removal of account data, virtual currencies, or items unless you request account deletion as described in Section 18.3. However, you will be unable to access your account or the Service."
+          },
+          {
+            "subheading": "17.3 No Compensation",
+            "content": "You are not entitled to any refund, compensation, or transfer of virtual items if your account is suspended or terminated for violating these Terms."
+          }
+        ]
+      },
+      {
+        "heading": "18. Account Management",
+        "subsections": [
+          {
+            "subheading": "18.1 Account Inactivity",
+            "content": "Accounts do not expire due to inactivity. Your virtual currencies, items, and progress will be preserved indefinitely as long as your account remains in good standing."
+          },
+          {
+            "subheading": "18.2 Username Changes",
+            "content": "You may change your username once for free in account settings. Subsequent username changes require payment in Diamonds. There is no limit to the number of paid username changes you may make."
+          },
+          {
+            "subheading": "18.3 Account Deletion",
+            "content": "You may request account deletion at any time if you have two-factor authentication (2FA) enabled on your account. Upon account deletion: (a) All account data, virtual currencies, Diamonds, items, and progress will be permanently deleted; (b) Purchased Diamonds and items are forfeited without refund; (c) The deletion process will be completed within 3-7 business days; (d) Account deletion is irreversible. To request account deletion, contact support through the designated channels."
+          }
+        ]
+      },
+      {
+        "heading": "19. Social Features and Communication",
+        "subsections": [
+          {
+            "subheading": "19.1 Chat and Interaction",
+            "content": "The Service includes a global chat feature where users can communicate. There is currently no private messaging feature. Users must comply with chat rules including: (a) No spam (messages are rate-limited to one every 5 seconds); (b) No offensive language, hate speech, or harassment; (c) No external links or promotional content; (d) No illegal content or activities; (e) Respect for other users and moderators."
+          },
+          {
+            "subheading": "19.2 Friends and Social Features",
+            "content": "The Service includes a friends system that allows users to connect and invite friends to play together in multiplayer games such as case battles. Trading of items between users is not currently available but may be introduced in future game modes. Gifting of Diamonds between users is not permitted."
+          },
+          {
+            "subheading": "19.3 Leaderboards",
+            "content": "The Service features leaderboards displaying user rankings based on various metrics. Leaderboard data is public and visible to all users."
+          },
+          {
+            "subheading": "19.4 Moderation",
+            "content": "The Service employs a moderation team with hierarchical roles to maintain a safe and respectful environment. Chat is moderated both automatically and manually. Depending on the severity of violations, moderators may issue warnings, temporary mutes, or temporary bans. Repeated or severe violations may result in permanent account termination."
+          },
+          {
+            "subheading": "19.5 User-Generated Content",
+            "content": "Any content you post, submit, or transmit through the Service (including chat messages, usernames, and other communications) is considered user-generated content. By posting content, you grant LootSkirmish a non-exclusive, worldwide, royalty-free, perpetual license to use, display, reproduce, and distribute such content in connection with the Service. You retain ownership of your content but acknowledge that we may need to use it to operate the Service."
+          }
+        ]
+      },
+      {
+        "heading": "20. Events, Promotions, and Giveaways",
+        "subsections": [
+          {
+            "subheading": "20.1 Special Events",
+            "content": "We may offer special events featuring bonus rewards, double XP, bonus Diamonds, or other benefits. We reserve the right to cancel or modify promotions at any time, with advance notice when feasible. If a technical error causes excessive rewards to be distributed during an event, we reserve the right to adjust user balances accordingly and take responsibility for any necessary corrections."
+          },
+          {
+            "subheading": "20.2 Giveaways and Contests",
+            "content": "We may conduct giveaways and contests from time to time. Each giveaway will have specific rules which may include: (a) One entry per person; (b) Requirements such as following social media accounts or completing in-game activities; (c) Eligibility restrictions; (d) Prize distribution methods. Giveaway rules will be posted at the time of each event and are incorporated into these Terms by reference."
+          },
+          {
+            "subheading": "20.3 Promotional Codes",
+            "content": "Promotional discount or bonus codes may be distributed through various channels. Codes may have expiration dates and usage restrictions as specified at the time of distribution."
+          }
+        ]
+      },
+      {
+        "heading": "21. Service Availability and Maintenance",
+        "subsections": [
+          {
+            "subheading": "21.1 Service Availability",
+            "content": "We strive to provide continuous access to the Service, but we do not guarantee 100% uptime. The Service may be temporarily unavailable due to maintenance, updates, technical issues, or circumstances beyond our control. We are not liable for any disruption, downtime, or unavailability of the Service."
+          },
+          {
+            "subheading": "21.2 Maintenance and Updates",
+            "content": "We may perform scheduled or emergency maintenance at any time. During emergency maintenance periods, depending on the severity and impact, we may provide compensation in the form of temporary rewards or bonuses available for collection for a limited time after maintenance is completed. Compensation is not automatic and is provided at our sole discretion."
+          },
+          {
+            "subheading": "21.3 Data Loss",
+            "content": "We perform backups of Service data every 7 days. In the event of data loss: (a) If complete data loss occurs, we will take full responsibility for restoration from the most recent backup; (b) If partial data loss occurs, we will attempt recovery but cannot guarantee full restoration; (c) Users may experience loss of progress or items that occurred between backups. We are not liable for data loss beyond our reasonable efforts to restore from backups."
+          }
+        ]
+      },
+      {
+        "heading": "22. Transfer of Ownership and Service Discontinuation",
+        "subsections": [
+          {
+            "subheading": "22.1 Transfer of Ownership",
+            "content": "In the event that LootSkirmish is sold, transferred, or acquired by another entity: (a) User accounts will continue to exist and remain accessible; (b) All virtual currencies, including Diamonds, will remain valid and usable; (c) Users will be notified of the ownership change; (d) The new owner may implement changes to Terms, policies, or the Service itself in accordance with Section 25; (e) The new owner may choose to modify, discontinue, or delete accounts at their discretion, with at least 7 days advance notice when feasible. Your continued use of the Service after ownership transfer constitutes acceptance of operation under the new ownership."
+          },
+          {
+            "subheading": "22.2 Permanent Service Discontinuation",
+            "content": "If we decide to permanently discontinue the Service: (a) We will provide users with 30-90 days advance notice before shutdown; (b) All virtual currencies, including purchased Diamonds, will be forfeited without refund or compensation; (c) All account data, items, and progress will be permanently deleted; (d) No refunds will be issued for any prior purchases; (e) Notice will be provided via email to all registered users and prominently displayed on the Service. By using the Service, you acknowledge and accept that permanent discontinuation may occur and that all virtual goods will be lost without compensation."
+          }
+        ]
+      },
+      {
+        "heading": "23. Intellectual Property Rights",
+        "subsections": [
+          {
+            "subheading": "23.1 Ownership",
+            "content": "All content, features, functionality, graphics, code, and materials on the Service are owned by LootSkirmish and are protected by copyright, trademark, and other intellectual property laws. Audio assets may be sourced from free or licensed providers. You are granted a limited, non-exclusive, non-transferable license to access and use the Service for personal, non-commercial purposes only."
+          },
+          {
+            "subheading": "23.2 User Permissions",
+            "content": "You are permitted to: (a) Take screenshots of your gameplay; (b) Record videos of your gameplay; (c) Stream or create content featuring the Service on platforms such as YouTube, Twitch, or other social media; (d) Share your gameplay experiences with others. We encourage content creation and sharing, provided it complies with these Terms and does not misrepresent or disparage the Service."
+          },
+          {
+            "subheading": "23.3 Restrictions",
+            "content": "You may not: (a) Copy, modify, distribute, or create derivative works from any part of the Service; (b) Reverse engineer, decompile, or disassemble any software or code; (c) Remove or modify any copyright, trademark, or proprietary notices; (d) Use the Service's intellectual property for commercial purposes without express written permission."
+          }
+        ]
+      },
+      {
+        "heading": "24. Bug Exploitation and Reversals",
+        "content": "If a bug or glitch results in unintended benefits to users (such as excessive currency or items being credited): (a) We reserve the right to reverse any unintended benefits and restore account balances to their proper state; (b) We will investigate reports and user transaction histories to determine appropriate actions; (c) Users who knowingly and deliberately exploit bugs for personal gain, depending on the severity, may face temporary or permanent account suspension; (d) Users who report bugs promptly and responsibly may receive rewards at our discretion."
+      },
+      {
+        "heading": "25. Limitation of Liability and Disclaimers",
+        "subsections": [
+          {
+            "subheading": "25.1 No Warranties",
+            "content": "THE SERVICE IS PROVIDED 'AS IS' AND 'AS AVAILABLE' WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, OR NON-INFRINGEMENT. WE DO NOT WARRANT THAT THE SERVICE WILL BE UNINTERRUPTED, ERROR-FREE, SECURE, OR FREE FROM VIRUSES OR OTHER HARMFUL COMPONENTS."
+          },
+          {
+            "subheading": "25.2 Limitation of Liability",
+            "content": "TO THE MAXIMUM EXTENT PERMITTED BY LAW, LOOTSKIRMISH SHALL NOT BE LIABLE FOR ANY INDIRECT, INCIDENTAL, SPECIAL, CONSEQUENTIAL, OR PUNITIVE DAMAGES, OR ANY LOSS OF PROFITS, REVENUE, DATA, OR USE, ARISING FROM: (a) YOUR USE OF OR INABILITY TO USE THE SERVICE; (b) ANY UNAUTHORIZED ACCESS TO OR USE OF YOUR ACCOUNT; (c) ANY BUGS, VIRUSES, OR HARMFUL CODE TRANSMITTED THROUGH THE SERVICE; (d) ANY ERRORS OR OMISSIONS IN CONTENT; (e) ANY USER CONDUCT OR CONTENT. OUR TOTAL LIABILITY FOR ANY CLAIMS RELATED TO THE SERVICE SHALL NOT EXCEED THE AMOUNT YOU PAID TO US IN THE SIX (6) MONTHS PRECEDING THE CLAIM."
+          },
+          {
+            "subheading": "25.3 Addiction and Responsible Use",
+            "content": "We are not responsible for any negative consequences arising from excessive use of the Service, including but not limited to excessive spending or compulsive behavior. We encourage all users to use the Service responsibly and within their means. We do not impose spending limits or provide spending warnings, and users are solely responsible for managing their own usage and purchases. Parents and guardians are responsible for monitoring minors' use of the Service."
+          },
+          {
+            "subheading": "25.4 Third-Party Services",
+            "content": "The Service integrates with third-party payment processors and other services. We are not responsible for the actions, content, or policies of these third parties. Your use of third-party services is subject to their respective terms and conditions."
+          }
+        ]
+      },
+      {
+        "heading": "26. Modifications to Terms and Service",
+        "subsections": [
+          {
+            "subheading": "26.1 Changes to Terms",
+            "content": "We reserve the right to modify these Terms of Use at any time. We may update these Terms as frequently as once per month or as needed. When we make material changes, we will notify users by email to the address associated with their account. Continued use of the Service after receiving notice of changes constitutes acceptance of the modified Terms."
+          },
+          {
+            "subheading": "26.2 Disagreement with Changes",
+            "content": "If you do not agree to modified Terms, you must stop using the Service. Your account will remain inactive until you accept the updated Terms. If you do not accept the updated Terms within a reasonable time period, we may permanently close your account."
+          },
+          {
+            "subheading": "26.3 Changes to Service",
+            "content": "We reserve the right to modify, suspend, or discontinue any aspect of the Service at any time, including but not limited to games, features, virtual items, and functionality. We will provide notice of major changes when feasible, but we are not obligated to provide advance notice for all modifications."
+          }
+        ]
+      },
+      {
+        "heading": "27. Support and Contact",
+        "subsections": [
+          {
+            "subheading": "27.1 Support Channels",
+            "content": "If you need assistance, you may contact our support team through: (a) Email; (b) Discord; (c) Support ticket system on the website (which routes to email). We strive to respond to all inquiries within 24-48 hours during business days."
+          },
+          {
+            "subheading": "27.2 Transaction Disputes",
+            "content": "If you believe there is an error with a transaction (such as payment made but Diamonds not received), you must contact support with: (a) Proof of payment (receipt, screenshot, or transaction confirmation); (b) Account information; (c) Detailed description of the issue. We will investigate all legitimate transaction disputes within 7-14 business days. We will request detailed information and concrete evidence before taking action. Resolution of disputes is at our sole discretion based on the evidence provided."
+          }
+        ]
+      },
+      {
+        "heading": "28. Governing Law and Dispute Resolution",
+        "subsections": [
+          {
+            "subheading": "28.1 Governing Law",
+            "content": "These Terms and your use of the Service shall be governed by and construed in accordance with the laws of Brazil, without regard to its conflict of law provisions."
+          },
+          {
+            "subheading": "28.2 Jurisdiction",
+            "content": "Any legal disputes or claims arising from these Terms or the Service shall be subject to the exclusive jurisdiction of the courts located in Passo Fundo, Rio Grande do Sul, Brazil."
+          },
+          {
+            "subheading": "28.3 Language",
+            "content": "These Terms are provided primarily in English. The Service may offer language settings to display content in other languages, including Portuguese, for user convenience. In the event of any conflict or inconsistency between the English version and any translated version of these Terms, the English version shall prevail. However, for disputes initiated by users whose primary language is Portuguese, the Portuguese version may be referenced as appropriate."
+          }
+        ]
+      },
+      {
+        "heading": "29. Miscellaneous",
+        "subsections": [
+          {
+            "subheading": "29.1 Entire Agreement",
+            "content": "These Terms, together with our Privacy Policy, constitute the entire agreement between you and LootSkirmish regarding the Service and supersede all prior agreements and understandings."
+          },
+          {
+            "subheading": "29.2 Severability",
+            "content": "If any provision of these Terms is found to be invalid or unenforceable, the remaining provisions shall continue in full force and effect."
+          },
+          {
+            "subheading": "29.3 Waiver",
+            "content": "Our failure to enforce any right or provision of these Terms shall not constitute a waiver of such right or provision."
+          },
+          {
+            "subheading": "29.4 Assignment",
+            "content": "You may not assign or transfer these Terms or your account to any third party without our express written consent. We may assign or transfer these Terms and all associated rights and obligations at any time without notice."
+          },
+          {
+            "subheading": "29.5 Contact Information",
+            "content": "For questions about these Terms of Use, please contact us through our support channels as described in Section 27."
+          }
+        ]
+      }
+    ]
+  },
+  "privacy": {
+    "title": "Privacy Policy",
+    "effective_date": "2025-01-12",
+    "language": "en",
+    "last_updated": "2025-01-12",
+    "sections": [
+      {
+        "heading": "1. Introduction",
+        "content": "LootSkirmish ('we', 'us', or 'our') is committed to protecting your privacy and personal information. This Privacy Policy explains how we collect, use, store, and protect your data when you use our web-based gaming platform ('the Service'). By using the Service, you agree to the collection and use of information in accordance with this Privacy Policy. This Privacy Policy should be read in conjunction with our Terms of Use."
+      },
+      {
+        "heading": "2. Information We Collect",
+        "subsections": [
+          {
+            "subheading": "2.1 Account Information",
+            "content": "When you create an account, we collect the following mandatory information: (a) Email address - required for account verification and communication; (b) Username - your unique identifier on the platform; (c) Password - securely stored and managed by our authentication provider. We do not collect optional information such as real names, dates of birth, phone numbers, or other personal identifiers. Users under 18 years of age are not required to provide parental or guardian information, though parental consent is required as stated in our Terms of Use."
+          },
+          {
+            "subheading": "2.2 Profile Information",
+            "content": "You may optionally provide additional profile information: (a) Avatar/Profile Picture - uploaded images are stored securely in our Supabase database and associated with your user account; (b) Profile Biography - limited to 100 characters and stored in our database (feature to be implemented); (c) Language Preference - your selected language for the interface; (d) Theme Preference - your visual theme choice (light/dark mode or other themes)."
+          },
+          {
+            "subheading": "2.3 Gameplay Data",
+            "content": "We collect and store information about your gameplay activities: (a) Game History - records of cases opened, games played, and outcomes are stored for 1-3 months before automatic deletion; (b) Virtual Currency Balances - current amounts of Free Coins and Diamonds; (c) Items and Inventory - virtual items you have acquired; (d) Experience Points and Levels - your progression metrics; (e) Battle Pass Progress - current season progress and claimed rewards; (f) Leaderboard Statistics - publicly visible competitive metrics. Gameplay data is retained for 1-3 months and then automatically deleted unless required for longer retention by law."
+          },
+          {
+            "subheading": "2.4 Transaction and Purchase Data",
+            "content": "We maintain records of your financial transactions: (a) Diamond Purchase History - complete records retained for 5-10 years as required by applicable tax and financial regulations; (b) Diamond Spending History - records of how you spend Diamonds, retained for 1-3 months; (c) Subscription History - VIP/Premium subscription purchases and renewals, retained for 1-6 months; (d) Battle Pass Purchases - purchase records retained for 1-6 months; (e) Payment Method Information - we store the last 4 digits of credit/debit cards and the name on the card for reference purposes. Complete payment card information is never stored on our servers and is handled exclusively by third-party payment processors."
+          },
+          {
+            "subheading": "2.5 Referral Program Data",
+            "content": "If you participate in our referral program: (a) We store records of which users you have referred; (b) Referral earnings history is retained for 7-30 days depending on activity level; (c) Referral codes and links associated with your account are stored permanently while your account is active."
+          },
+          {
+            "subheading": "2.6 Technical and Device Information",
+            "content": "We automatically collect certain technical information: (a) IP Address - your internet protocol address is collected and stored for 7-30 days for security, fraud prevention, multi-account detection, VPN detection, and geographic restriction enforcement; (b) Login Logs - records of login times, dates, IP addresses, and device information (when available) are stored for 15-30 days; (c) Screen Resolution and Device Type - collected for responsive design optimization; (d) Timezone - collected from your system settings; (e) Browser Type and Version - basic information for compatibility purposes. We do not collect detailed hardware information such as GPU or CPU specifications, detailed User-Agent strings, or extensive device fingerprinting data."
+          },
+          {
+            "subheading": "2.7 Geolocation Data",
+            "content": "We determine your approximate location based on your IP address to: (a) Enforce geographic restrictions on the Service; (b) Comply with regional laws and regulations; (c) Detect and prevent fraud; (d) Calculate applicable taxes at checkout. We do not collect precise GPS location data."
+          },
+          {
+            "subheading": "2.8 Communication Data",
+            "content": "We store communications you have through the Service: (a) Global Chat Messages - all chat messages are stored in our database for 30 days, after which they are automatically deleted. Messages you delete are immediately removed from the database and are not retained; (b) Support Communications - emails, support tickets, and correspondence with our support team are stored in our database for 1-3 months. We handle any sensitive information shared in support requests with care and delete it promptly after resolution; (c) User-generated content such as usernames and messages is stored as described above."
+          },
+          {
+            "subheading": "2.9 Moderation and Enforcement Data",
+            "content": "We maintain records related to account moderation: (a) Warnings, temporary suspensions, mutes, and bans; (b) Reasons for moderation actions; (c) Duration of penalties; (d) Identity of the moderator who applied the action; (e) Related evidence or context. Users cannot automatically request their moderation history, but may be provided with this information at our discretion depending on circumstances."
+          }
+        ]
+      },
+      {
+        "heading": "3. Cookies and Tracking Technologies",
+        "subsections": [
+          {
+            "subheading": "3.1 Types of Cookies We Use",
+            "content": "We use cookies and similar technologies for essential Service functionality. The cookies we use include: (a) Session Cookies - essential for maintaining your login session and expire when you close your browser; (b) Preference Cookies - store your language, theme, and interface preferences; (c) Analytics Cookies - help us understand how users interact with the Service to improve functionality and user experience. Session cookies are temporary and essential for the Service to function. Preference cookies are persistent and may last for extended periods to remember your settings across sessions."
+          },
+          {
+            "subheading": "3.2 Local Storage",
+            "content": "We use browser Local Storage to store: (a) Account data and session information; (b) Theme and visual preferences; (c) Cached data for improved performance; (d) Other settings that need to persist across browser sessions. Local Storage is necessary for the Service to function properly."
+          },
+          {
+            "subheading": "3.3 Third-Party Cookies",
+            "content": "We may implement third-party cookies in the future for analytics, performance monitoring, or other purposes. Any such implementation will be updated in this Privacy Policy. We do not currently use third-party tracking cookies from advertising networks or social media platforms."
+          },
+          {
+            "subheading": "3.4 Cookie Consent",
+            "content": "We use essential cookies that are necessary for the Service to function. Because these cookies are crucial for basic functionality, we do not request explicit consent before placing them on your device. By using the Service, you consent to our use of these essential cookies. If we implement non-essential cookies in the future, we will update our consent mechanisms accordingly."
+          }
+        ]
+      },
+      {
+        "heading": "4. How We Use Your Information",
+        "subsections": [
+          {
+            "subheading": "4.1 Service Provision",
+            "content": "We use your information to: (a) Create and manage your account; (b) Provide access to games and features; (c) Process purchases and manage virtual currencies; (d) Enable social features such as chat, friends lists, and leaderboards; (e) Maintain game progression, statistics, and achievements; (f) Facilitate the referral program and distribute rewards."
+          },
+          {
+            "subheading": "4.2 Security and Fraud Prevention",
+            "content": "We use your information to: (a) Verify your identity and authenticate access; (b) Detect and prevent fraud, cheating, and abuse; (c) Identify multiple accounts operated by the same user; (d) Detect VPN usage when necessary for security or compliance; (e) Enforce our Terms of Use and maintain platform integrity; (f) Investigate violations and respond to security incidents."
+          },
+          {
+            "subheading": "4.3 Communication",
+            "content": "We use your email address to: (a) Send account verification and password reset emails; (b) Provide customer support and respond to your inquiries; (c) Send important Service announcements and updates; (d) Notify you of changes to our Terms of Use or Privacy Policy; (e) Send marketing communications, promotional offers, and newsletters (you may opt out of marketing emails); (f) Communicate about events, giveaways, and special features."
+          },
+          {
+            "subheading": "4.4 Service Improvement and Analytics",
+            "content": "We analyze aggregated and anonymized data to: (a) Understand how users interact with the Service; (b) Identify technical issues and improve performance; (c) Develop new features and enhance existing ones; (d) Optimize game balance and user experience; (e) Generate statistical reports and insights. We do not use personal data to train artificial intelligence or machine learning models."
+          },
+          {
+            "subheading": "4.5 Legal Compliance",
+            "content": "We may use and retain your information to: (a) Comply with applicable laws and regulations; (b) Respond to legal requests, court orders, and government inquiries; (c) Maintain financial records as required by tax authorities; (d) Enforce our legal rights and defend against claims; (e) Protect the safety and security of our users and the Service."
+          }
+        ]
+      },
+      {
+        "heading": "5. How We Share Your Information",
+        "subsections": [
+          {
+            "subheading": "5.1 Third-Party Service Providers",
+            "content": "We share certain information with trusted third-party service providers who assist us in operating the Service: (a) Supabase - our backend infrastructure and database provider has access to all data stored on our platform. Supabase servers are located in the United States and Supabase may access data for the purpose of providing hosting and database services to us. Supabase does not use your data for their own purposes beyond providing services to LootSkirmish; (b) Payment Processors - when you make purchases, we share necessary information (name, email, transaction amount) with payment processors such as credit card processors, PayPal, PIX providers, and cryptocurrency payment gateways. These processors handle payment information according to their own privacy policies; (c) Email Service Providers - we may use third-party email services to send transactional and marketing emails."
+          },
+          {
+            "subheading": "5.2 Public Information",
+            "content": "Certain information is publicly visible to other users of the Service: (a) Username - visible to all users; (b) Avatar/Profile Picture - visible to all users; (c) Level and Experience Points - publicly displayed; (d) Leaderboard Statistics - competitive statistics and rankings are public; (e) Game History - records of Case Battle participation and outcomes may be visible to other users; (f) Profile Biography - when implemented, will be publicly visible. Your email address, IP address, purchase history, and other sensitive information is never publicly displayed."
+          },
+          {
+            "subheading": "5.3 Gift Card Partners",
+            "content": "We do not sell physical gift cards directly. If you purchase gift cards from authorized third-party retailers, those retailers may have access to your purchase information according to their own privacy policies. When you redeem a gift card, we may receive information about the purchase, but we do not share your email address or account information with gift card retailers."
+          },
+          {
+            "subheading": "5.4 Business Transfers",
+            "content": "In the event that LootSkirmish is sold, merged, acquired, or undergoes a similar business transaction: (a) All user data, including information stored in our Supabase database, may be transferred to the new owner; (b) Users will be notified of the ownership change; (c) The new owner will be bound by this Privacy Policy until they provide notice of any changes. Your continued use of the Service after an ownership transfer constitutes acceptance of the transfer."
+          },
+          {
+            "subheading": "5.5 Legal Requirements",
+            "content": "We may disclose your information if required by law or if we believe in good faith that such disclosure is necessary to: (a) Comply with legal obligations, court orders, or government requests; (b) Enforce our Terms of Use and investigate violations; (c) Protect the rights, property, or safety of LootSkirmish, our users, or the public; (d) Detect, prevent, or address fraud, security, or technical issues."
+          },
+          {
+            "subheading": "5.6 No Sale of Personal Data",
+            "content": "We do not sell, rent, or trade your personal information to third parties for their marketing purposes. We do not monetize your data through advertising networks or data brokers."
+          }
+        ]
+      },
+      {
+        "heading": "6. Data Storage and Security",
+        "subsections": [
+          {
+            "subheading": "6.1 Data Storage Location",
+            "content": "Your data is stored on servers operated by Supabase, which are located in the United States. By using the Service, you consent to the transfer and storage of your information in the United States, which may have different data protection laws than your country of residence."
+          },
+          {
+            "subheading": "6.2 Security Measures",
+            "content": "We implement industry-standard security measures to protect your data: (a) Passwords - user passwords are securely hashed and managed by Supabase's authentication system using industry-standard cryptographic methods; (b) Encryption - all data transmission between your browser and our servers is encrypted using HTTPS/TLS protocols. The Service is designed to function over HTTPS, though HTTP connections may technically function; (c) Data Encryption at Rest - sensitive data stored in our database is encrypted by Supabase's infrastructure; (d) Two-Factor Authentication - we offer optional 2FA using Time-Based One-Time Passwords (TOTP) for additional account security. Backup codes are provided for account recovery; (e) Access Controls - only authorized personnel (the platform owner and CEO) have access to the complete database. We plan to implement logging of internal data access for accountability."
+          },
+          {
+            "subheading": "6.3 Moderator Access",
+            "content": "Our moderation team has limited access to user data necessary for their moderation duties, including chat history, account status, and moderation records. Moderators do not have access to sensitive information such as passwords, payment details, or private communications."
+          },
+          {
+            "subheading": "6.4 Data Breach Response",
+            "content": "In the event of a data breach that compromises user information: (a) We will investigate and assess the scope of the breach within 24-96 hours; (b) Affected users will be notified via email within 24-96 hours of discovering the breach; (c) We will communicate through all available channels including the website, social media, and direct email; (d) We will provide information about what data was compromised and steps users should take to protect themselves. While we do not currently have a formal incident response plan documented, we are committed to transparent and timely communication in the event of any security incident."
+          }
+        ]
+      },
+      {
+        "heading": "7. Data Retention",
+        "subsections": [
+          {
+            "subheading": "7.1 Active Accounts",
+            "content": "While your account is active and in good standing, we retain different types of data for varying periods: (a) Account Information - email, username, password, and profile information are retained indefinitely while your account is active; (b) Gameplay History - automatically deleted after 1-3 months; (c) Diamond Spending History - automatically deleted after 1-3 months; (d) Subscription History - automatically deleted after 1-6 months; (e) Referral Earnings History - automatically deleted after 7-30 days depending on activity level; (f) Chat Messages - automatically deleted after 30 days; (g) Login Logs - automatically deleted after 15-30 days; (h) IP Address Records - retained for 7-30 days; (i) Support Communications - retained for 1-3 months; (j) Diamond Purchase History - retained for 5-10 years as required by financial and tax regulations."
+          },
+          {
+            "subheading": "7.2 Banned Accounts",
+            "content": "If your account is permanently banned for violations of our Terms of Use, your data is completely deleted from our systems unless retention is required for legal, security, or fraud prevention purposes."
+          },
+          {
+            "subheading": "7.3 Deleted Accounts",
+            "content": "When you request account deletion (as described in Section 8): (a) Most data is completely and permanently deleted from our database within 3-7 business days; (b) Diamond Purchase History may be retained for 5-10 years as required by financial regulations and tax compliance obligations; (c) Data is truly deleted (not just marked as deleted) and cannot be recovered; (d) Deletion is irreversible and you cannot restore your account or data after deletion is complete."
+          },
+          {
+            "subheading": "7.4 Backups",
+            "content": "We perform complete system backups every 7 days for disaster recovery purposes: (a) Backups are retained for 30 days before being deleted; (b) If your account is deleted during this 30-day period, your data may still exist in backups created before deletion; (c) Backup data is not accessible for normal operations and is only used in the event of catastrophic data loss; (d) Data in backups is automatically purged after 30 days."
+          }
+        ]
+      },
+      {
+        "heading": "8. Your Rights and Choices",
+        "subsections": [
+          {
+            "subheading": "8.1 Access to Your Data",
+            "content": "You have the right to request access to the personal data we hold about you. To request a copy of your data: (a) Contact our support team through the channels listed in Section 14; (b) We will provide your data in JSON format within 24-96 hours of verification; (c) The data export will include all personal information we have collected and stored about you."
+          },
+          {
+            "subheading": "8.2 Correction of Data",
+            "content": "You have the right to correct inaccurate personal information: (a) You can update your password directly through your account settings; (b) For other corrections (such as email address), contact our support team; (c) Some information cannot be changed due to technical or security constraints. We cannot change your email address once it has been set, though this may change in future updates."
+          },
+          {
+            "subheading": "8.3 Data Portability",
+            "content": "You may request an export of your data in a machine-readable format (JSON) as described in Section 8.1. However, you cannot transfer your LootSkirmish account or data to another platform or service."
+          },
+          {
+            "subheading": "8.4 Account Deletion",
+            "content": "You have the right to request complete deletion of your account and associated data: (a) Account deletion requires that you have Two-Factor Authentication (2FA) enabled; (b) Contact support through designated channels to request deletion; (c) Deletion is completed within 3-7 business days; (d) All data is permanently deleted except Diamond Purchase History, which may be retained for legal compliance; (e) Deletion is irreversible and cannot be undone. Refer to Section 7.3 for details on what happens to your data after deletion."
+          },
+          {
+            "subheading": "8.5 Objection to Processing",
+            "content": "You have the right to object to certain uses of your data: (a) You can opt out of marketing emails by using the unsubscribe link in any marketing email or by contacting support; (b) You can disable certain analytics or tracking features if implemented in the future; (c) However, you cannot opt out of data processing that is essential for the Service to function, including account management, security measures, and gameplay features."
+          },
+          {
+            "subheading": "8.6 Marketing Communications",
+            "content": "We may send you marketing emails including newsletters, promotions, and updates about the Service: (a) Marketing emails are opt-in by default when you create an account; (b) You may opt out at any time by clicking the unsubscribe link in any marketing email; (c) Even if you opt out of marketing emails, we will still send you essential transactional emails related to your account and purchases."
+          }
+        ]
+      },
+      {
+        "heading": "9. Children's Privacy",
+        "subsections": [
+          {
+            "subheading": "9.1 Age Requirements",
+            "content": "Users must be at least 13 years old to use the Service, as stated in our Terms of Use. Users between 13 and 18 years old may use the Service with parental or guardian consent. We do not knowingly collect personal information from children under 13."
+          },
+          {
+            "subheading": "9.2 Parental Rights",
+            "content": "Parents or legal guardians of users under 18 may: (a) Request information about what data we have collected about their child; (b) Request deletion of their child's account and data by contacting our support team; (c) We rely on users to accurately represent their age and do not perform age verification beyond what users provide."
+          },
+          {
+            "subheading": "9.3 COPPA Compliance",
+            "content": "If we discover that a user under 13 years old has created an account in violation of our Terms of Use, we will immediately and permanently ban the account and delete all associated data from our systems."
+          },
+          {
+            "subheading": "9.4 No Special Data Collection for Minors",
+            "content": "We do not collect different or additional information from users under 18 compared to adult users. All users are subject to the same data collection practices described in this Privacy Policy."
+          }
+        ]
+      },
+      {
+        "heading": "10. International Data Transfers",
+        "subsections": [
+          {
+            "subheading": "10.1 Cross-Border Transfers",
+            "content": "LootSkirmish operates globally, but our servers are located in the United States through our infrastructure provider Supabase. If you access the Service from outside the United States, your information will be transferred to, stored, and processed in the United States."
+          },
+          {
+            "subheading": "10.2 Data Protection Standards",
+            "content": "The United States may have data protection laws that differ from those in your country. By using the Service, you consent to the transfer of your information to the United States and acknowledge that U.S. law will govern the collection, use, and storage of your data."
+          }
+        ]
+      },
+      {
+        "heading": "11. Legal Compliance and Your Rights Under Privacy Laws",
+        "subsections": [
+          {
+            "subheading": "11.1 LGPD (Brazil)",
+            "content": "For users in Brazil, we comply with the Lei Geral de Proteção de Dados (LGPD): (a) LootSkirmish acts as a data controller (controlador) for the personal data we collect; (b) We are in the process of designating a Data Protection Officer (DPO) and will update this policy with contact information once appointed; (c) You may exercise your LGPD rights by contacting us through the support channels listed in Section 14; (d) You have the right to file a complaint with the Brazilian National Data Protection Authority (ANPD) if you believe your data protection rights have been violated."
+          },
+          {
+            "subheading": "11.2 GDPR (European Union)",
+            "content": "Although LootSkirmish does not specifically target European users, if you access the Service from the European Union, you may have rights under the General Data Protection Regulation (GDPR): (a) Legal bases for processing your data include contract performance, legitimate interests, and legal compliance; (b) You have rights to access, rectification, erasure, restriction, portability, and objection as described in Section 8; (c) Data transfers to the United States are necessary for the provision of the Service; (d) You have the right to lodge a complaint with your national data protection supervisory authority."
+          },
+          {
+            "subheading": "11.3 CCPA (California)",
+            "content": "For California residents, under the California Consumer Privacy Act (CCPA): (a) We do not sell your personal information to third parties; (b) You have the right to request disclosure of what personal information we collect, use, and disclose; (c) You have the right to request deletion of your personal information; (d) You have the right to opt out of the sale of personal information (though we do not sell data); (e) We will not discriminate against you for exercising your CCPA rights."
+          },
+          {
+            "subheading": "11.4 Other Jurisdictions",
+            "content": "If you reside in a jurisdiction with specific data protection laws not mentioned above, you may have additional rights. Contact us to inquire about your rights under local law."
+          }
+        ]
+      },
+      {
+        "heading": "12. Third-Party Links and Services",
+        "subsections": [
+          {
+            "subheading": "12.1 External Links",
+            "content": "The Service may contain links to third-party websites, social media platforms, partner sites, or other external services. We are responsible for the privacy practices and content of these third-party services. We encourage you to review the privacy policies of any third-party sites you visit."
+          },
+          {
+            "subheading": "12.2 Social Media",
+            "content": "If we integrate social media features or allow you to connect your account with social media platforms, those platforms will have access to certain information according to their own privacy policies and your privacy settings on those platforms."
+          },
+          {
+            "subheading": "12.3 Payment Processors",
+            "content": "When you make purchases, third-party payment processors handle your payment information. We do not have access to your complete payment card details. Payment processors operate under their own privacy policies, which you should review."
+          }
+        ]
+      },
+      {
+        "heading": "13. Changes to This Privacy Policy",
+        "subsections": [
+          {
+            "subheading": "13.1 Policy Updates",
+            "content": "We reserve the right to update or modify this Privacy Policy at any time to reflect changes in our practices, legal requirements, or Service features. When we make material changes to this Privacy Policy: (a) We will update the 'Last Updated' date at the top of this document; (b) We will notify users via email to the address associated with their account; (c) We will provide 1-3 days advance notice before changes take effect when feasible; (d) For minor or non-material changes, we may update the policy without advance notice."
+          },
+          {
+            "subheading": "13.2 Acceptance of Changes",
+            "content": "Your continued use of the Service after we post or send notice of changes to this Privacy Policy constitutes your acceptance of the updated Privacy Policy. If you do not agree to the changes, you must stop using the Service and may request account deletion as described in Section 8.4."
+          },
+          {
+            "subheading": "13.3 Review of Policy",
+            "content": "We encourage you to review this Privacy Policy periodically to stay informed about how we protect your information."
+          }
+        ]
+      },
+      {
+        "heading": "14. Contact Us",
+        "subsections": [
+          {
+            "subheading": "14.1 Privacy Questions and Requests",
+            "content": "If you have questions about this Privacy Policy or wish to exercise your privacy rights, you may contact us through: (a) Email: privacy@lootskirmish.com (or general support email); (b) Discord: Our official Discord server; (c) Support Ticket System: Available on our website. We strive to respond to all privacy-related inquiries within 24-96 hours."
+          },
+          {
+            "subheading": "14.2 Data Protection Officer",
+            "content": "We are in the process of designating a Data Protection Officer (DPO) as required by certain privacy regulations. Once appointed, DPO contact information will be provided here and you may contact the DPO directly for privacy-related matters."
+          },
+          {
+            "subheading": "14.3 Regulatory Complaints",
+            "content": "If you believe we have not adequately addressed your privacy concerns, you have the right to lodge a complaint with your local data protection authority or regulatory agency."
+          }
+        ]
+      },
+      {
+        "heading": "15. Additional Information",
+        "subsections": [
+          {
+            "subheading": "15.1 Data Accuracy",
+            "content": "You are responsible for ensuring that the information you provide to us is accurate, complete, and up-to-date. We are not responsible for any issues arising from inaccurate information you provide."
+          },
+          {
+            "subheading": "15.2 Automated Decision-Making",
+            "content": "We do not use automated decision-making or profiling that produces legal effects or similarly significantly affects you. Game outcomes are determined by random number generation as described in our Terms of Use, not by profiling your personal data."
+          },
+          {
+            "subheading": "15.3 Do Not Track Signals",
+            "content": "Our Service does not currently respond to 'Do Not Track' browser signals or similar mechanisms. We may implement such features in the future and will update this policy accordingly."
+          },
+          {
+            "subheading": "15.4 Financial and Tax Compliance",
+            "content": "We retain certain financial records, including Diamond purchase history, for 5-10 years as required by applicable tax laws and financial regulations. This retention is necessary for legal compliance and cannot be waived even upon account deletion."
+          }
+        ]
+      }
+    ]
+  }
+}

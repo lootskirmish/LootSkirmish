@@ -1,0 +1,1347 @@
+<!DOCTYPE html>
+<html lang="en-US">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Loot Skirmish - open cases, collect items, and compete on the leaderboard.">
+  <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
+  <title>Loot Skirmish</title>
+  <link rel="stylesheet" href="./styles/main.css">
+</head>
+<body>
+
+  <!-- Auth Screen -->
+  <section id="auth-screen" class="screen active">
+    <div class="auth-container">
+      <div class="auth-box">
+        <h1><span class="yellow">LOOT</span><span class="purple">SKIRMISH</span></h1>
+        <div id="auth-tabs">
+          <button class="auth-tab active" onclick="showAuthTab('login', event)" data-translate>Login</button>
+          <button class="auth-tab" onclick="showAuthTab('register', event)" data-translate>Sign Up</button>
+        </div>
+        
+        <!-- Login Form -->
+        <div id="login-form" class="auth-form">
+          <input type="email" id="login-email" placeholder="Email" data-translate autocomplete="email" />
+          <input type="password" id="login-password" placeholder="Password" data-translate autocomplete="current-password" />
+          <div class="auth-inline">
+            <label class="remember-me">
+              <input type="checkbox" id="remember-me" />
+              <span data-translate>Remember me</span>
+            </label>
+            <button type="button" class="auth-link-btn" onclick="handlePasswordReset()" data-translate style="padding: 0; color: #666; text-decoration: underline; font-size: 0.85em; border: none; background: none; cursor: pointer;">Forgot Password?</button>
+          </div>
+          <div class="auth-terms-checkbox">
+            <label>
+              <input type="checkbox" id="login-terms-accept" />
+              <span>I agree to the <a href="#" onclick="event.preventDefault(); window.goToLegal('terms');" style="color: var(--primary); text-decoration: underline;">Terms of Use</a> and <a href="#" onclick="event.preventDefault(); window.goToLegal('privacy');" style="color: var(--primary); text-decoration: underline;">Privacy Policy</a></span>
+            </label>
+          </div>
+          <div class="auth-stack" id="login-captcha-block">
+            <div id="login-hcaptcha" class="hcaptcha-box" aria-label="Captcha"></div>
+            <span class="auth-helper" data-translate>Complete the captcha to continue.</span>
+          </div>
+          <button type="button" onclick="handleLogin()" data-translate>Login</button>
+          <p class="auth-error" id="login-error"></p>
+        </div>
+
+        <!-- Sign Up Form -->
+        <div id="register-form" class="auth-form hidden">
+          <input type="text" id="register-username" placeholder="Username" data-translate autocomplete="username" />
+          <input type="email" id="register-email" placeholder="Email" data-translate autocomplete="email" />
+          <input type="password" id="register-password" placeholder="Password" data-translate autocomplete="new-password" />
+          <input type="password" id="register-confirm" placeholder="Confirm Password" data-translate autocomplete="new-password" />
+          <input type="text" id="register-referral-code" placeholder="Referral code (optional)" data-translate autocomplete="off" />
+          <div class="auth-terms-checkbox">
+            <label>
+              <input type="checkbox" id="register-terms-accept" />
+              <span>I agree to the <a href="#" onclick="event.preventDefault(); window.goToLegal('terms');" style="color: var(--primary); text-decoration: underline;">Terms of Use</a> and <a href="#" onclick="event.preventDefault(); window.goToLegal('privacy');" style="color: var(--primary); text-decoration: underline;">Privacy Policy</a></span>
+            </label>
+          </div>
+          <div class="auth-stack" id="register-captcha-block">
+            <div id="register-hcaptcha" class="hcaptcha-box" aria-label="Captcha"></div>
+            <span class="auth-helper" data-translate>Complete the captcha to continue.</span>
+          </div>
+          <button type="button" onclick="handleRegister()" data-translate>Create Account</button>
+          <p class="auth-error" id="register-error"></p>
+        </div>
+
+        <!-- Reset Password Form (aparece quando clica no link do email) -->
+        <div id="reset-password-form" class="auth-form hidden">
+          <h3 style="margin-bottom: 1.5rem; color: #fff;">🔑 Reset Your Password</h3>
+          <input type="password" id="reset-new-password" placeholder="New Password" data-translate autocomplete="new-password" />
+          <input type="password" id="reset-confirm-password" placeholder="Confirm New Password" data-translate autocomplete="new-password" />
+          <button type="button" onclick="handleUpdatePassword()" data-translate>Update Password</button>
+          <p class="auth-error" id="reset-error"></p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Header -->
+  <header id="header" class="hidden">
+    <h1 onclick="goTo('menu')" style="cursor: pointer;"><span class="yellow">LOOT</span><span class="purple">SKIRMISH</span></h1>
+    <div class="header-right">
+      <div class="money-box">
+        <span class="header-icon" data-lucide="coins"></span>
+        <span id="money">0</span>
+      </div>
+      <div class="diamond-box" onclick="goTo('shop')" style="cursor: pointer;">
+        <span class="header-icon" data-lucide="gem"></span>
+        <span id="diamonds">0</span>
+      </div>
+
+      <div class="chat-button-container" id="chat-button-container">
+        <button class="chat-toggle-icon" id="chat-toggle-icon" onclick="window.toggleChat()">
+          <span class="header-icon" data-lucide="messages-square"></span>
+          <span class="chat-online-count" id="chat-online-count">0</span>
+        </button>
+      </div>
+
+      <div class="friends-button-container" id="friends-button-container">
+        <button class="chat-toggle-icon friend-toggle-icon" id="friends-toggle-icon">
+          <span class="header-icon" data-lucide="users"></span>
+          <span class="friend-count-badge" id="friends-count-badge">0</span>
+        </button>
+      </div>
+
+      <div class="notifications-button-container" id="notifications-button-container">
+        <button class="chat-toggle-icon notification-toggle-icon" id="notifications-toggle-icon">
+          <span class="header-icon" data-lucide="bell"></span>
+          <span class="notification-count" id="notifications-count">0</span>
+        </button>
+      </div>
+      
+      <!-- Profile Dropdown -->
+      <div class="profile-dropdown-container">
+        <button class="profile-btn" onclick="toggleProfileDropdown()">
+          <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=default" alt="Avatar" class="profile-avatar-small" id="header-avatar">
+        </button>
+        
+        <!-- Dropdown Menu -->
+        <div class="profile-dropdown" id="profile-dropdown">
+          <button onclick="goToProfile()">
+            <span>👤</span>
+            <span data-translate>Profile</span>
+          </button>
+          <button onclick="goToSettings()">
+            <span>⚙️</span>
+            <span data-translate>Settings</span>
+          </button>
+          <button onclick="goToAdmin()" id="admin-btn" class="hidden">
+            <span>🛠️</span>
+            <span data-translate>Admin</span>
+          </button>
+          <button onclick="goTo('skill-tree')">
+            <span>🌟</span>
+            <span data-translate>Skill Tree</span>
+          </button>
+          <div class="profile-section">
+          </div>
+          <button onclick="handleLogout()" class="dropdown-logout">
+            <span>🚪</span>
+            <span data-translate>Log Out</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- Menu Screen -->
+  <section id="menu" class="screen">
+    <div class="welcome">
+      <div class="welcome-top">
+        <div class="welcome-avatar">
+          <img id="menu-avatar" alt="Profile avatar" loading="lazy" src="https://api.dicebear.com/7.x/avataaars/svg?seed=default" decoding="async">
+        </div>
+        <div class="welcome-info">
+          <div class="welcome-greeting">
+            <h2 data-translate>Hello,</h2>
+            <span class="yellow" id="username-display"></span>
+          </div>
+          <div class="welcome-meta">
+            <div class="level-chip">
+              <span class="welcome-icon" data-lucide="shield"></span>
+              <span class="level-label" data-translate>Lv.</span>
+              <span id="user-level"></span>
+            </div>
+            <div class="xp-chip">
+              <span class="welcome-icon" data-lucide="sparkles"></span>
+              <span class="xp-text" id="user-xp">0/100 XP</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="xp-container">
+        <div class="xp-bar">
+          <div class="xp-bar-fill" id="xp-bar-fill"></div>
+        </div>
+      </div>
+    </div>
+    <div class="menu-grid">
+      <button onclick="goTo('case-opening')">
+        <span class="menu-icon" data-lucide="gift"></span>
+        <span data-translate>Cases</span>
+      </button>
+      <button onclick="goTo('inventory')">
+        <span class="menu-icon" data-lucide="package"></span>
+        <span data-translate>Inventory</span>
+      </button>
+      <button onclick="goTo('leaderboard')">
+        <span class="menu-icon" data-lucide="trophy"></span>
+        <span data-translate>Leaderboard</span>
+      </button>
+      <button onclick="goTo('referrals')">
+        <span class="menu-icon" data-lucide="heart-handshake"></span>
+        <span data-translate>Referrals</span>
+      </button>
+    </div>
+  </section>
+
+  <!-- Case Opening Screen -->
+  <section id="case-opening" class="screen">
+    <!-- SCREEN 1: CASE GALLERY -->
+    <div id="case-gallery-screen" class="case-screen active">
+      <div class="case-gallery-header">
+        <button class="back-button" onclick="goTo('menu')" data-translate>← Back</button>
+        <h1 data-translate>🎁 Cases</h1>
+        <div class="case-filters">
+          <select id="price-filter" class="filter-select">
+            <option value="all" data-translate>All Prices</option>
+            <option value="0-10" data-translate>$0 - $10</option>
+            <option value="10-50" data-translate>$10 - $50</option>
+            <option value="50-250" data-translate>$50 - $250</option>
+            <option value="250+" data-translate>$250+</option>
+          </select>
+        </div>
+      </div>
+
+      <div id="case-gallery-grid" class="case-gallery-grid">
+        <!-- Cases will be rendered here by JS -->
+      </div>
+    </div>
+
+    <!-- SCREEN 2: CASE OPENING VIEW -->
+    <div id="case-opening-screen" class="case-screen">
+      <!-- Header -->
+      <div class="case-opening-header">
+        <button id="back-to-gallery" class="back-button" data-translate>← Back</button>
+        <div class="case-info">
+          <h2 id="current-case-name">Case Name</h2>
+          <p id="current-case-price">$0.00</p>
+        </div>
+      </div>
+
+      <!-- Main Content -->
+      <div class="case-opening-content">
+        <!-- Reel Container -->
+        <div id="reel-wrapper" class="reel-wrapper">
+          <!-- Will be populated by JS -->
+        </div>
+
+        <!-- Controls -->
+        <div class="case-controls">
+          <!-- Quantity Selector -->
+          <div class="quantity-selector">
+            <button class="qty-btn" data-qty="1">1</button>
+            <button class="qty-btn" data-qty="2">2</button>
+            <button class="qty-btn" data-qty="3">3</button>
+            <button class="qty-btn" data-qty="4">4</button>
+          </div>
+
+          <!-- Total Cost Display -->
+          <div class="total-cost-box">
+            <p data-translate>Total Cost</p>
+            <div class="total-cost-values">
+              <span id="base-cost-display" class="base-cost">$0.00</span>
+              <h3 id="total-cost-display">$0.00</h3>
+            </div>
+            <div class="discount-chip" id="discount-chip">No discount applied</div>
+          </div>
+
+          <!-- Discount Upgrade -->
+          <div class="discount-upgrade">
+            <div class="discount-upgrade-info">
+              <p class="label" data-translate>Case Discount</p>
+              <div class="discount-current">
+                <span id="case-discount-percent" class="discount-percent">0% OFF</span>
+                <span class="discount-level" id="case-discount-level">Lvl 0 / 40</span>
+              </div>
+              <p class="next-cost" id="case-discount-next-cost">Next: $0</p>
+            </div>
+            <button id="upgrade-discount-btn" class="upgrade-discount-btn" data-translate>
+              Upgrade Discount
+            </button>
+          </div>
+
+          <!-- Quick Spin Toggle -->
+          <div class="quick-spin-toggle">
+            <label>
+              <input type="checkbox" id="quick-spin-checkbox">
+              <span data-translate>⚡ Quick Spin</span>
+              <span id="quick-spin-cost" class="quick-spin-cost">100 💎</span>
+            </label>
+          </div>
+
+          <!-- Open Button -->
+          <button id="open-case-btn" class="open-case-btn">
+            <span data-translate>Open Case</span>
+          </button>
+        </div>
+
+        <!-- Loot Table -->
+        <div class="loot-table">
+          <h3 data-translate>📦 Possible Items</h3>
+          <div id="loot-table-grid" class="loot-table-grid">
+            <!-- Will be populated by JS -->
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- RESULT MODAL -->
+    <div id="result-modal" class="result-modal">
+      <div class="result-modal-content">
+        <h2 data-translate>🎉 You Won!</h2>
+        <div id="result-items-grid" class="result-items-grid">
+          <!-- Items will be rendered here -->
+        </div>
+        <div class="result-total">
+          <p data-translate>Total Value</p>
+          <h3 id="result-total-value">$0.00</h3>
+        </div>
+        <button id="result-continue-btn" class="result-continue-btn" data-translate>Continue</button>
+      </div>
+    </div>
+
+    <!-- PASS PURCHASE MODAL -->
+    <div id="pass-modal" class="pass-modal">
+      <div class="pass-modal-content">
+        <div class="pass-modal-icon" id="pass-modal-icon">⚡</div>
+        <h2 class="pass-modal-title" id="pass-modal-title">Pass Name</h2>
+        <p class="pass-modal-desc" id="pass-modal-desc">Pass description</p>
+        
+        <div class="pass-modal-benefits-section">
+          <h3 class="pass-benefits-title" data-translate>Benefits:</h3>
+          <ul class="pass-benefits-list" id="pass-modal-benefits">
+            <!-- Populated by JS -->
+          </ul>
+        </div>
+        
+        <div class="pass-modal-price-box">
+          <span class="pass-price-label" data-translate>Price:</span>
+          <span class="pass-price-value" id="pass-modal-cost">100 💎</span>
+        </div>
+        
+        <div class="pass-modal-actions">
+          <button class="pass-modal-btn cancel" id="pass-modal-cancel" data-translate>Cancel</button>
+          <button class="pass-modal-btn confirm" id="pass-modal-confirm" data-translate>Buy Pass</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Inventory Screen -->
+  <section id="inventory" class="screen">
+    <button class="back-btn" onclick="goTo('menu')" data-translate>← Back</button>
+    
+    <!-- Inventory Header -->
+    <div class="inv-header">
+      <div class="inv-title-row">
+        <h3><span data-translate>📦 Inventory</span> (<span id="inv-count">0</span>)</h3>
+      </div>
+      
+      <!-- Capacity Bar + Upgrade -->
+      <div class="inv-capacity-row">
+        <div class="inv-capacity-bar">
+          <div class="inv-capacity-fill" id="inv-capacity-fill"></div>
+          <span class="inv-capacity-text" id="inv-capacity-text">0/15</span>
+        </div>
+        <button id="inv-upgrade-btn" class="inv-upgrade-btn" onclick="openInventoryUpgradeModal()">Upgrade +5</button>
+        <button id="grid-mode-btn" class="inv-grid-mode-btn" onclick="cycleGridMode()">Layout 3x3</button>
+      </div>
+      
+      <!-- Action Buttons -->
+      <div class="inv-actions-row">
+        <button class="inv-btn filter-btn" onclick="openFilterModal()">
+          <span>🔽</span>
+          <span data-translate>Filters</span>
+        </button>
+        <button class="inv-btn sell-selected-btn" id="sell-selected-btn" onclick="sellSelected()" disabled>
+          <span>✔</span>
+          <span data-translate>Sell Selected (0)</span>
+        </button>
+        <button class="inv-btn sell-all-btn" onclick="openSellAllModal()">
+          <span>💰</span>
+          <span data-translate>Sell All</span>
+        </button>
+      </div>
+    </div>
+    
+    <!-- Skeleton Loading -->
+    <div id="inventory-skeleton" class="skeleton-container">
+      <div class="skeleton-inventory-grid">
+        <div class="skeleton skeleton-inventory-item"></div>
+        <div class="skeleton skeleton-inventory-item"></div>
+        <div class="skeleton skeleton-inventory-item"></div>
+        <div class="skeleton skeleton-inventory-item"></div>
+        <div class="skeleton skeleton-inventory-item"></div>
+        <div class="skeleton skeleton-inventory-item"></div>
+        <div class="skeleton skeleton-inventory-item"></div>
+        <div class="skeleton skeleton-inventory-item"></div>
+      </div>
+    </div>
+    
+    <!-- Items Grid -->
+    <div id="inv-grid"></div>
+    
+    <!-- Empty State -->
+    <div id="inv-empty" style="display: none;">
+      <div class="empty-icon">📦</div>
+      <p data-translate>Empty inventory</p>
+      <button onclick="goTo('case-opening')" data-translate>Open Cases</button>
+    </div>
+  </section>
+
+  <!-- Filters Modal -->
+  <div id="filter-modal" class="filter-modal">
+    <div class="filter-modal-box">
+      <div class="filter-modal-top">
+        <h3>
+          <span>🔽</span>
+          <span data-translate>Filters</span>
+        </h3>
+        <button onclick="closeFilterModal()">✕</button>
+      </div>
+      
+      <div class="filter-section">
+        <label data-translate>Rarity</label>
+        <select id="filter-rarity">
+          <option value="all" data-translate>All Rarities</option>
+          <option value="Common" data-translate>Common</option>
+          <option value="Uncommon" data-translate>Uncommon</option>
+          <option value="Rare" data-translate>Rare</option>
+          <option value="Epic" data-translate>Epic</option>
+          <option value="Legendary" data-translate>Legendary</option>
+          <option value="Mythic" data-translate>Mythic</option>
+        </select>
+      </div>
+      
+      <div class="filter-section">
+        <label data-translate>Sort by Value</label>
+        <select id="filter-value">
+          <option value="none" data-translate>No Sorting</option>
+          <option value="high" data-translate>Higher First</option>
+          <option value="low" data-translate>Lower First</option>
+        </select>
+      </div>
+      
+      <div class="filter-section">
+        <label data-translate>Sort by Date</label>
+        <select id="filter-date">
+          <option value="newest" data-translate>Most Recent</option>
+          <option value="oldest" data-translate>Oldest</option>
+        </select>
+      </div>
+      
+      <div class="filter-actions">
+        <button class="filter-reset-btn" onclick="resetFilters()" data-translate>Reset</button>
+        <button class="filter-apply-btn" onclick="applyFilters()" data-translate>Apply</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Sale Confirmation Modal -->
+  <div id="sell-confirm-modal" class="sell-confirm-modal">
+    <div class="sell-confirm-box">
+      <div class="sell-confirm-icon">💰</div>
+      <h3 class="sell-confirm-title" data-translate>Sale Completed!</h3>
+      <div class="sell-confirm-details" id="sell-confirm-details">
+        <p>
+          <span data-translate>Items sold:</span>
+          <span id="sold-count">0</span>
+        </p>
+        <p>
+          <span data-translate>Total received:</span>
+          <span id="sold-total">0 💰</span>
+        </p>
+      </div>
+      <button class="sell-confirm-btn" onclick="closeSellConfirmModal()" data-translate>Continue</button>
+    </div>
+  </div>
+
+  <!-- Sell All Modal -->
+  <div id="sell-all-modal" class="modal hidden">
+    <div class="modal-box">
+      <div class="modal-top">
+        <h3 data-translate>💰 Sell Items</h3>
+        <button onclick="closeSellAllModal()">✕</button>
+      </div>
+      <div class="sell-all-content">
+        <p data-translate>
+          Select the rarities you want to sell:
+        </p>
+        <div class="rarity-checkboxes">
+          <label class="rarity-checkbox">
+            <input type="checkbox" value="Common" checked />
+            <span data-translate>Common</span>
+          </label>
+          <label class="rarity-checkbox">
+            <input type="checkbox" value="Uncommon" checked />
+            <span data-translate>Uncommon</span>
+          </label>
+          <label class="rarity-checkbox">
+            <input type="checkbox" value="Rare" checked />
+            <span data-translate>Rare</span>
+          </label>
+          <label class="rarity-checkbox">
+            <input type="checkbox" value="Epic" />
+            <span data-translate>Epic</span>
+          </label>
+          <label class="rarity-checkbox">
+            <input type="checkbox" value="Legendary" />
+            <span data-translate>Legendary</span>
+          </label>
+          <label class="rarity-checkbox">
+            <input type="checkbox" value="Mythic" />
+            <span data-translate>Mythic</span>
+          </label>
+        </div>
+        <div class="sell-all-summary">
+          <p>
+            <span data-translate>📦 Selected Items:</span>
+            <span id="sell-count" style="color: #06b6d4; font-size: 1.2rem;">0</span>
+          </p>
+          <p>
+            <span data-translate>💵 Total Value:</span>
+            <span id="sell-total" class="yellow">0 💰</span>
+          </p>
+        </div>
+        <button class="modal-create-btn" onclick="confirmSellAll()" disabled data-translate>
+          ❌ No items selected
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Inventory Upgrade Modal -->
+  <div id="inventory-upgrade-modal" class="inv-upgrade-modal hidden">
+    <div class="inv-upgrade-box">
+      <div class="inv-upgrade-top">
+        <h3>📦 Inventory Upgrade</h3>
+        <button onclick="closeInventoryUpgradeModal()">✕</button>
+      </div>
+      <div class="inv-upgrade-body">
+        <p class="inv-upgrade-desc">Increase your inventory capacity by 5 slots per upgrade.</p>
+        <div class="inv-upgrade-progress">
+          <span id="upgrade-current-cap">15</span>
+          <span class="inv-upgrade-arrow">→</span>
+          <span id="upgrade-next-cap">20</span>
+        </div>
+        <div class="inv-upgrade-price">
+          <span class="price-label">Cost</span>
+          <div class="price-value">
+            <span id="upgrade-cost">50</span>
+            <span class="price-icon">💎</span>
+            <span id="upgrade-discount" class="discount-badge">-30%</span>
+          </div>
+        </div>
+        <p class="inv-upgrade-note" id="upgrade-note">Each upgrade adds 5 slots. Maximum capacity is 50.</p>
+      </div>
+      <div class="inv-upgrade-actions">
+        <button class="upgrade-cancel" onclick="closeInventoryUpgradeModal()">Cancel</button>
+        <button class="upgrade-confirm" id="upgrade-confirm-btn" onclick="purchaseInventoryUpgrade()">Buy for 50 💎</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Leaderboard Screen -->
+  <section id="leaderboard" class="screen">
+    <button class="back-btn" onclick="goTo('menu')" data-translate>← Back</button>
+    <h2 data-translate>🏆 Leaderboard</h2>
+    
+    <!-- Skeleton Loading -->
+    <div id="leaderboard-skeleton" class="skeleton-container skeleton-leaderboard">
+      <div class="skeleton-leaderboard-podium">
+        <div class="skeleton skeleton-podium-card"></div>
+        <div class="skeleton skeleton-podium-card"></div>
+        <div class="skeleton skeleton-podium-card"></div>
+      </div>
+      <div class="skeleton-leaderboard-list">
+        <div class="skeleton skeleton-leaderboard-item"></div>
+        <div class="skeleton skeleton-leaderboard-item"></div>
+        <div class="skeleton skeleton-leaderboard-item"></div>
+        <div class="skeleton skeleton-leaderboard-item"></div>
+      </div>
+    </div>
+    
+    <div id="leader-list" style="display:none;"></div>
+  </section>
+
+
+  <!-- Profile Screen -->
+  <section id="profile" class="screen profile">
+    <button class="back-btn" onclick="goTo('menu')">
+      <span>←</span>
+      <span data-translate>Back</span>
+    </button>
+    
+    <!-- Skeleton Loading -->
+    <div id="profile-skeleton" class="skeleton-container skeleton-profile">
+      <div class="skeleton-profile-header">
+        <div class="skeleton skeleton-avatar"></div>
+        <div class="skeleton skeleton-text-large"></div>
+        <div class="skeleton skeleton-text"></div>
+      </div>
+      <div class="skeleton-profile-stats">
+        <div class="skeleton skeleton-stat-card"></div>
+        <div class="skeleton skeleton-stat-card"></div>
+        <div class="skeleton skeleton-stat-card"></div>
+        <div class="skeleton skeleton-stat-card"></div>
+      </div>
+    </div>
+    
+    <!-- Profile Content -->
+    <div id="profile-content" style="display:none;">
+    <!-- Banner + Avatar + Info -->
+    <div class="profile-banner" id="profile-banner">
+      <!-- Banner Badges -->
+      <div class="banner-badges" id="banner-badges">
+        <!-- Populated Dynamically -->
+      </div>
+      
+      <div class="profile-avatar-container">
+        <img alt="Avatar" class="profile-avatar-large" id="profile-avatar">
+      </div>
+    </div>
+
+    <!-- Hidden Avatar Upload Input -->
+    <input type="file" id="avatar-upload" accept="image/*" class="upload-hidden">
+
+    <!-- Hidden Banner Upload Input -->
+    <input type="file" id="banner-upload" accept="image/*" class="upload-hidden">
+
+    <!-- Upload Notification -->
+    <div id="upload-notification" class="upload-notification">
+      <div class="upload-notification-content">
+        <span class="upload-icon">✅</span>
+        <span class="upload-text" data-translate>Avatar updated successfully!</span>
+      </div>
+    </div>
+    
+    <div class="profile-info-card">
+      <h2 class="profile-username" id="profile-username">Username</h2>
+      <div class="profile-level-badge">
+        <span data-translate>Lv.</span><span id="profile-level">1</span>
+      </div>
+      <div class="profile-xp-bar-container">
+        <div class="profile-xp-bar">
+          <div class="profile-xp-bar-fill" id="profile-xp-bar"></div>
+        </div>
+        <p class="profile-xp-text" id="profile-xp-text">0/100 XP</p>
+      </div>
+    </div>
+
+    <div class="profile-public-actions" id="profile-public-actions" style="display:none;">
+      <button id="public-profile-add-friend" class="friend-primary-btn">Add friend</button>
+    </div>
+    
+    <!-- Stats Grid -->
+    <div class="profile-stats-grid">
+      <div class="profile-stat-card">
+        <div class="stat-icon">📦</div>
+        <div class="stat-value" id="stat-cases-opened">0</div>
+        <div class="stat-label" data-translate>Cases Opened</div>
+      </div>
+      <div class="profile-stat-card">
+        <div class="stat-icon">⚔️</div>
+        <div class="stat-value" id="stat-battles">0</div>
+        <div class="stat-label" data-translate>Battles</div>
+      </div>
+      <div class="profile-stat-card">
+        <div class="stat-icon">🏆</div>
+        <div class="stat-value" id="stat-wins">0</div>
+        <div class="stat-label" data-translate>Wins</div>
+      </div>
+      <div class="profile-stat-card">
+        <div class="stat-icon">💰</div>
+        <div class="stat-value" id="stat-best-drop">0</div>
+        <div class="stat-label" data-translate>Best Drop</div>
+      </div>
+      
+      <!-- New Stats Cards -->
+      <div class="profile-stat-card">
+        <div class="stat-icon">💸</div>
+        <div class="stat-value" id="stat-total-spent">0</div>
+        <div class="stat-label" data-translate>Total Spent</div>
+      </div>
+      <div class="profile-stat-card">
+        <div class="stat-icon">💎</div>
+        <div class="stat-value" id="stat-total-gains">0</div>
+        <div class="stat-label" data-translate>Total Gains</div>
+      </div>
+    </div>
+    
+    <!-- Profile Actions -->
+    <div class="profile-section">
+      <h3 class="section-title" data-translate>📊 Quick Actions</h3>
+      <div class="profile-actions-grid">
+        <button class="profile-action-btn" onclick="goTo('skill-tree')">
+          <span class="action-icon">🌟</span>
+          <span class="action-label" data-translate>Skill Tree</span>
+        </button>
+      </div>
+    </div>
+    
+    <!-- Themes Shop -->
+    <div class="profile-section">
+      <div class="themes-shop-container">
+        <div class="themes-shop-header">
+          <h3 class="themes-shop-title">
+            <span>🎨</span>
+            <span data-translate>Themes Shop</span>
+            <span class="themes-count" id="themes-owned-count">0/12 owned</span>
+          </h3>
+          <div style="display: flex; gap: 8px; align-items: center;">
+            <span style="color: #facc15; font-weight: 700; font-size: 1.1rem;">
+              <span id="player-diamonds-display"></span> 💎
+            </span>
+          </div>
+        </div>
+        
+        <div class="themes-grid" id="themes-grid">
+          <!-- Populated Dynamically -->
+        </div>
+      </div>
+    </div>
+
+    <!-- Theme Purchase Modal -->
+    <div class="theme-purchase-modal" id="theme-purchase-modal">
+      <div class="theme-purchase-box">
+        <div class="theme-purchase-preview" id="modal-theme-preview"></div>
+        <h3 class="theme-purchase-title" id="modal-theme-name">Theme Name</h3>
+        <p class="theme-purchase-desc" id="modal-theme-desc">Theme description</p>
+        
+        <div class="theme-purchase-price-box">
+          <div class="theme-purchase-price-label" data-translate>Price</div>
+          <div class="theme-purchase-price-value">
+            <span id="modal-theme-price">0</span>
+            <span>💎</span>
+          </div>
+          <div class="theme-purchase-balance" id="modal-balance-check">
+            <span data-translate>Your balance:</span> <span id="modal-player-diamonds"></span> 💎
+          </div>
+        </div>
+        
+        <div class="theme-purchase-actions">
+          <button class="theme-purchase-btn cancel" onclick="closeThemePurchaseModal()">
+            <span>✕</span>
+            <span data-translate>Cancel</span>
+          </button>
+          <button class="theme-purchase-btn confirm" id="confirm-purchase-btn" onclick="confirmThemePurchase()">
+            <span>✔</span>
+            <span data-translate>Buy</span>
+          </button>
+        </div>
+      </div>
+    </div>
+    </div><!-- End #profile-content -->
+  </section>
+
+  <!-- Settings Screen -->
+  <section id="settings" class="screen">
+    <button class="back-btn" onclick="goTo('menu')">
+      <span>←</span>
+      <span data-translate>Back</span>
+    </button>
+    <h2 data-translate>⚙️ Settings</h2>
+    
+    <!-- Account -->
+    <div class="settings-section">
+      <h3 data-translate>👤 Account</h3>
+      <div class="settings-card">
+        <div class="setting-item">
+          <label data-translate>Email</label>
+          <input type="email" id="settings-email" value="user@example.com" disabled>
+        </div>
+        <div class="setting-item username-item">
+          <div class="username-input-stack">
+            <div class="username-header">
+              <label data-translate>Username</label>
+              <button onclick="enableUsernameEdit()" id="edit-username-btn" data-translate>Edit</button>
+            </div>
+            <input type="text" id="settings-username" value="Username" disabled>
+            <div class="username-helper-row">
+              <span class="username-badge" id="username-cost-badge">First change is free</span>
+              <span class="username-helper" id="username-helper">3-16 chars • letters/numbers/._- • case-insensitive unique</span>
+            </div>
+          </div>
+          <div class="username-actions">
+            <button onclick="cancelUsernameEdit()" id="cancel-username-btn" aria-label="Cancel username edit">✕</button>
+          </div>
+        </div>
+        <div class="setting-item">
+          <button class="setting-btn" onclick="changePassword()" data-translate>Change Password</button>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Sound -->
+    <div class="settings-section">
+      <h3 data-translate>🔊 Sound</h3>
+      <div class="settings-card">
+        <div class="setting-item">
+          <button class="setting-btn secondary" id="sound-config-btn" data-translate>Sound Channels</button>
+        </div>
+        <div class="setting-item range">
+          <label data-translate>Volume</label>
+          <input type="range" min="0" max="100" value="50" id="volume-slider">
+        </div>
+      </div>
+    </div>
+    
+    <!-- Privacy -->
+    <div class="settings-section">
+      <h3 data-translate>🔒 Privacy</h3>
+      <div class="settings-card">
+        <div class="setting-item toggle">
+          <label data-translate>Public Profile</label>
+          <input type="checkbox" id="public-profile" checked>
+        </div>
+        <div class="setting-item toggle">
+          <label data-translate>Show Statistics</label>
+          <input type="checkbox" id="show-stats" checked>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Notifications -->
+    <div class="settings-section">
+      <h3 data-translate>🔔 Notifications</h3>
+      <div class="settings-card">
+        <div class="setting-item toggle">
+          <label data-translate>Event Notifications</label>
+          <input type="checkbox" id="event-notifications" checked>
+        </div>
+        <div class="setting-item toggle">
+          <label data-translate>Daily Rewards</label>
+          <input type="checkbox" id="daily-notifications" checked>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Language -->
+    <div class="settings-section">
+      <h3 data-translate>🌍 Language</h3>
+      <div class="settings-card">
+        <div class="setting-item">
+          <select id="language-select">
+            <option value="en" selected>English</option>
+            <option value="es">Español</option>
+            <option value="pt-BR">Português (BR)</option>
+          </select>
+        </div>
+      </div>
+    </div>
+    
+    <!-- App Info -->
+    <div class="settings-section">
+      <h3 data-translate>ℹ️ App Info</h3>
+      <div class="settings-card">
+        <div class="setting-item">
+          <label data-translate>Version</label>
+          <span class="setting-value">v1.0.0</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Sound Config Modal -->
+  <div class="sound-modal" id="sound-config-modal">
+    <div class="sound-modal-content">
+      <div class="sound-modal-header">
+        <h3>Sound Channels</h3>
+        <button id="sound-config-close" aria-label="Close" class="sound-close">✕</button>
+      </div>
+      <div class="sound-modal-body">
+        <div class="sound-master-row">
+          <label><input type="checkbox" id="sound-effects" checked> Sound Effects (Master)</label>
+          <label><input type="checkbox" id="background-music" > Background Music</label>
+        </div>
+        <div class="sound-grid">
+          <label><input type="checkbox" id="sound-toggle-click" checked> Clicks</label>
+          <label><input type="checkbox" id="sound-toggle-hover" checked> Hover</label>
+          <label><input type="checkbox" id="sound-toggle-open" checked> Open Case</label>
+          <label><input type="checkbox" id="sound-toggle-reel" checked> Reel Spin</label>
+          <label><input type="checkbox" id="sound-toggle-payout" checked> Payout / Sell</label>
+          <label><input type="checkbox" id="sound-toggle-switch" checked> Toggles</label>
+          <label><input type="checkbox" id="sound-toggle-notify" checked> Notifications</label>
+          <label><input type="checkbox" id="sound-toggle-error" checked> Errors</label>
+          <label><input type="checkbox" id="sound-toggle-win" checked> Wins</label>
+        </div>
+      </div>
+      <div class="sound-modal-footer">
+        <button class="setting-btn secondary" id="sound-mute-all">Mute All</button>
+        <button class="setting-btn" id="sound-allow-all">Allow All</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Legal Screen (Terms, Privacy) - Acessível sem login -->
+  <section id="legal" class="screen">
+    <button class="back-btn" onclick="window.history.back()" data-translate>← Back</button>
+    <h2 data-translate>📄 Legal</h2>
+    
+    <div class="legal-tabs">
+      <button class="legal-tab active" data-legal-tab="terms">Terms of Use</button>
+      <button class="legal-tab" data-legal-tab="privacy">Privacy Policy</button>
+    </div>
+    
+    <div class="legal-container">
+      <!-- Terms of Use -->
+      <div class="legal-content active" data-legal-content="terms">
+        <h3>Terms of Use</h3>
+        <div class="legal-text" id="terms-content-text">
+          <p><em>Loading terms...</em></p>
+        </div>
+      </div>
+      
+      <!-- Privacy Policy -->
+      <div class="legal-content" data-legal-content="privacy">
+        <h3>Privacy Policy</h3>
+        <div class="legal-text" id="privacy-content-text">
+          <p><em>Loading privacy policy...</em></p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Shop Screen -->
+  <section id="shop" class="screen">
+    <button class="back-btn" onclick="goTo('menu')" data-translate>← Back</button>
+    
+    <!-- Shop Header -->
+    <div class="shop-header">
+      <h2 data-translate>💎 Diamond Shop</h2>
+      <p class="shop-subtitle" data-translate>Secure payments • Instant delivery • 24/7 support</p>
+    </div>
+    
+    <!-- Shop Packages Container -->
+    <div id="shop-packages" class="shop-packages-container">
+      
+      <!-- Diamond Packages Section -->
+      <div class="shop-section">
+        <div class="shop-section-header">
+          <h3><span>💎</span> <span data-translate>Diamond Packages</span></h3>
+          <p data-translate>One-time purchases with instant delivery</p>
+        </div>
+        <div class="shop-packages-grid" id="packages-grid">
+          <!-- Packages will be rendered here by JS -->
+        </div>
+      </div>
+
+      <!-- Subscriptions Section -->
+      <div class="shop-section">
+        <div class="shop-section-header">
+          <h3><span>👑</span> <span data-translate>Subscriptions</span></h3>
+          <p data-translate>Recurring benefits and daily rewards</p>
+        </div>
+        <div class="shop-subscriptions-grid" id="subscriptions-grid">
+          <!-- Subscriptions will be rendered here by JS -->
+        </div>
+      </div>
+
+    </div>
+    
+    <!-- Payment Modal -->
+    <div class="shop-payment-modal" id="shop-payment-modal">
+      <div class="shop-payment-box">
+        <button class="payment-close-btn" onclick="window.closeShopPaymentModal()">✕</button>
+        
+        <!-- Product Header (will be populated by JS) -->
+        <div id="payment-product-container">
+          <!-- Dynamic content here -->
+        </div>
+
+        <!-- Payment Methods -->
+        <div class="payment-methods-section">
+          <h4 data-translate>Select Payment Method</h4>
+          <div class="payment-methods-grid">
+            <button class="payment-method-btn" data-method="mercadopago">
+              <div class="method-icon">🇧🇷</div>
+              <div class="method-info">
+                <div class="method-name">MercadoPago</div>
+                <div class="method-desc">Brazilian payments</div>
+              </div>
+              <div class="method-price" id="mercadopago-price">$0.00</div>
+            </button>
+            <button class="payment-method-btn active" data-method="stripe">
+              <div class="method-icon">💳</div>
+              <div class="method-info">
+                <div class="method-name">Stripe</div>
+                <div class="method-desc">International cards</div>
+              </div>
+              <div class="method-price" id="stripe-price">$0.00</div>
+            </button>
+            <button class="payment-method-btn" data-method="nowpayments">
+              <div class="method-icon">₿</div>
+              <div class="method-info">
+                <div class="method-name">Crypto</div>
+                <div class="method-desc">LTC recommended</div>
+              </div>
+              <div class="method-price" id="nowpayments-price">$0.00</div>
+            </button>
+          </div>
+        </div>
+
+        <button class="payment-continue-btn" onclick="window.proceedToCheckout()">
+          <span data-translate>Continue to Checkout</span>
+          <span class="btn-icon">→</span>
+        </button>
+
+        <div class="payment-security-note">
+          <span class="security-icon">🔒</span>
+          <span>Secure payment • Instant delivery • 24/7 support</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Admin Screen -->
+  <section id="admin" class="screen">
+    <button class="back-btn" onclick="goTo('menu')" data-translate>← Back</button>
+    <h2 data-translate>🛠️ Admin Panel</h2>
+    
+    <!-- Stats -->
+    <!-- ABAS PRINCIPAIS -->
+    <div class="admin-main-tabs">
+      <button class="admin-main-tab-btn active" data-tab="purchases" onclick="window.switchMainAdminTab('purchases')">
+        💳 Purchases
+      </button>
+      <button class="admin-main-tab-btn" data-tab="support" onclick="window.switchMainAdminTab('support')">
+        📧 Support
+      </button>
+    </div>
+
+    <!-- CONTEÚDO DINÂMICO -->
+    <div id="admin-content" class="admin-content">
+      <!-- SEÇÃO COMPRAS -->
+      <div id="admin-purchases-section" class="admin-section">
+        <!-- Stats -->
+        <div class="admin-stats-grid">
+          <div class="admin-stat-card">
+            <div class="admin-stat-icon">⏳</div>
+            <div class="admin-stat-value" id="admin-pending-count">0</div>
+            <div class="admin-stat-label">Pending</div>
+          </div>
+          <div class="admin-stat-card">
+            <div class="admin-stat-icon">✅</div>
+            <div class="admin-stat-value" id="admin-approved-count">0</div>
+            <div class="admin-stat-label">Approved</div>
+          </div>
+          <div class="admin-stat-card">
+            <div class="admin-stat-icon">usd</div>
+            <div class="admin-stat-value" id="admin-total-usd">$ 0</div>
+            <div class="admin-stat-label">Total USD</div>
+          </div>
+          <div class="admin-stat-card">
+            <div class="admin-stat-icon">🇧🇷</div>
+            <div class="admin-stat-value" id="admin-total-brl">R$ 0</div>
+            <div class="admin-stat-label">Total BRL</div>
+          </div>
+          <div class="admin-stat-card">
+            <div class="admin-stat-icon">🪙</div>
+            <div class="admin-stat-value" id="admin-total-ltc">0 LTC</div>
+            <div class="admin-stat-label">Total LTC</div>
+          </div>
+        </div>
+        
+        <!-- Abas de Pedidos -->
+        <div class="admin-tabs">
+          <button class="admin-tab active" onclick="switchAdminTab('pending')">⏳ Pending</button>
+          <button class="admin-tab" onclick="switchAdminTab('history')">📋 History</button>
+        </div>
+        
+        <!-- Pending Orders -->
+        <div id="admin-pending-list" class="admin-orders-list">
+          <p class="no-orders">No pending orders</p>
+        </div>
+        
+        <!-- History Orders -->
+        <div id="admin-history-list" class="admin-orders-list hidden">
+          <p class="no-orders">No orders in history.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Skill Tree Screen -->
+
+  <section id="skill-tree" class="screen">
+    <!-- Header with Back Button and Zoom Controls -->
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+      <button class="back-btn" onclick="goTo('profile')" data-translate>← Back</button>
+      
+      <div class="st-controls" style="display: flex; gap: 12px;">
+        <button class="st-btn" onclick="zoomSkillTree(0.1)" data-translate>➕ Zoom In</button>
+        <button class="st-btn" onclick="zoomSkillTree(-0.1)" data-translate>➖ Zoom Out</button>
+        <button class="st-btn" onclick="resetSkillTreeZoom()" data-translate>🔄 Reset</button>
+      </div>
+    </div>
+
+    <!-- Hint -->
+    <div style="text-align: center; padding: 12px; color: #9ca3af; font-size: 0.9rem; background: rgba(20,20,30,0.6); border-radius: 8px; margin-bottom: 16px;" data-translate>
+      💡 Drag to navigate • Click badges for details • Use + - 0 for zoom
+    </div>
+
+    <!-- Viewport -->
+    <div class="st-viewport" id="st-viewport">
+      <div class="st-canvas" id="st-canvas">
+        
+        <!-- SVG Lines -->
+        <svg class="st-lines" id="st-lines" xmlns="http://www.w3.org/2000/svg"></svg>
+
+        <!-- Hub -->
+        <div class="st-hub">
+          <div class="st-hub-title" data-translate>BADGES</div>
+          <div class="st-hub-icons">
+            <div class="st-hub-icon" title="Battles">⚔️</div>
+            <div class="st-hub-icon" title="Money">💎</div>
+            <div class="st-hub-icon" title="Cases">📦</div>
+            <div class="st-hub-icon" title="Level">⚡</div>
+            <div class="st-hub-icon" title="Collector">🏆</div>
+          </div>
+        </div>
+
+        <!-- Badges will be created by JS -->
+      </div>
+    </div>
+
+    <!-- Modal -->
+    <div class="st-modal" id="st-modal">
+      <div class="st-modal-box" id="st-modal-box">
+        <div class="st-modal-icon" id="st-modal-icon">🎯</div>
+        <h2 class="st-modal-title" id="st-modal-title">Badge Name</h2>
+        <p class="st-modal-desc" id="st-modal-desc">Description here</p>
+        <div class="st-modal-rewards" id="st-modal-rewards">
+          <span>💎 10</span>
+          <span>⭐ 50 XP</span>
+        </div>
+        <button class="st-modal-btn" onclick="closeSkillTreeModal()">OK</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- Referrals Screen -->
+  <section id="referrals" class="screen">
+    <button class="back-btn" onclick="goTo('menu')" data-translate>← Back</button>
+
+    <div class="referrals-header">
+      <div>
+        <h2 data-translate>🤝 Referral Hub</h2>
+        <p class="referrals-subtext" data-translate>Invite friends, earn coins, withdraw once a day.</p>
+      </div>
+      <div class="referral-tier-chip" id="referral-tier-chip">
+        <span id="referral-tier-label">Bronze</span>
+        <span id="referral-tier-percent">0%</span>
+      </div>
+    </div>
+
+    <div id="referrals-skeleton" class="skeleton-container referral-skeleton">
+      <div class="skeleton skeleton-card"></div>
+      <div class="skeleton skeleton-card"></div>
+      <div class="skeleton skeleton-card"></div>
+      <div class="skeleton skeleton-card"></div>
+    </div>
+
+    <div id="referrals-content" class="referrals-content" style="display: none;">
+      <div class="referrals-grid">
+        <div class="referral-card referral-link-card">
+          <div class="referral-card-head">
+            <div>
+              <p class="referral-label" data-translate>Your link</p>
+              <h3 id="referral-code">username</h3>
+            </div>
+            <span class="referral-badge" id="referral-badge">Level 0</span>
+          </div>
+          <div class="referral-link-row">
+            <input id="referral-link" class="referral-link-input" readonly value="https://example.com/auth?ref=username" />
+            <button id="referral-copy-btn" class="referral-copy-btn" data-translate>Copy</button>
+          </div>
+          <p class="referral-helper" data-translate>Share with friends to grant them +100💎 on signup.</p>
+        </div>
+
+        <div class="referral-card referral-stats-card">
+          <div class="referral-stat">
+            <span class="referral-stat-label" data-translate>Total referrals</span>
+            <strong id="referral-count">0</strong>
+          </div>
+          <div class="referral-stat">
+            <span class="referral-stat-label" data-translate>Commission level</span>
+            <strong id="referral-percent">0%</strong>
+          </div>
+          <div class="referral-stat">
+            <span class="referral-stat-label" data-translate>Lifetime earned</span>
+            <strong id="referral-total-earned">0</strong>
+          </div>
+          <div class="referral-stat">
+            <span class="referral-stat-label" data-translate>Total withdrawn</span>
+            <strong id="referral-total-withdrawn">0</strong>
+          </div>
+        </div>
+
+        <div class="referral-card referral-withdraw-card">
+          <div class="referral-withdraw-top">
+            <div>
+              <p class="referral-label" data-translate>Available to withdraw</p>
+              <h2 id="referral-pending">0</h2>
+            </div>
+            <div class="withdraw-countdown" id="referral-countdown">--:--:--</div>
+          </div>
+          <p class="referral-helper" data-translate>Withdraw once per day. Earnings go straight to your wallet.</p>
+          <div class="referral-withdraw-actions">
+            <button id="referral-withdraw-btn" class="referral-withdraw-btn" data-translate>Withdraw now</button>
+            <span class="referral-note" id="referral-withdraw-note"></span>
+          </div>
+        </div>
+      </div>
+
+      <div class="referral-history-card">
+        <div class="referral-history-head">
+          <h3 data-translate>Recent activity</h3>
+          <button id="referral-history-load" class="referral-secondary" data-translate>Load more</button>
+        </div>
+        <div id="referral-history-list" class="referral-history-list"></div>
+        <div id="referral-history-empty" class="referral-history-empty" style="display: none;" data-translate>
+          No referral events yet. Invite friends to start earning!
+        </div>
+      </div>
+    </div>
+  </section>
+
+    <!-- Chat Panel (Right Side) -->
+  <div id="chat-panel" class="chat-panel">
+    <!-- Header -->
+    <div class="chat-panel-header">
+      <div class="chat-panel-title">
+        <span class="chat-title-icon">💬</span>
+        <span class="chat-title-text" data-translate>Live Chat</span>
+      </div>
+      <div class="chat-panel-stats">
+        <span class="chat-online-badge">
+          <span class="chat-online-dot"></span>
+          <span id="chat-online-users">0</span> <span data-translate>Online</span>
+        </span>
+      </div>
+    </div>
+    
+    <!-- Messages -->
+    <div class="chat-panel-messages" id="chat-messages-container">
+      <div class="chat-empty-state">
+        <div class="chat-empty-icon">💬</div>
+        <p data-translate>No messages yet</p>
+        <p class="chat-empty-hint" data-translate>Be the first to say something!</p>
+      </div>
+    </div>
+    
+    <!-- Input -->
+    <div class="chat-panel-input">
+      <div id="chat-error" class="chat-error"></div>
+      <div class="chat-input-wrapper">
+        <input 
+          type="text" 
+          id="chat-input" 
+          placeholder="Type a message..."
+          data-translate
+          maxlength="60"
+          autocomplete="off"
+        >
+        <button id="chat-send-btn" onclick="sendChatMessage()">
+          <span>➤</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Friends Panel -->
+  <div id="friends-panel" class="friends-panel">
+    <div class="friends-header">
+      <div class="friends-title">
+        <span>🤝</span>
+        <span>Friends</span>
+      </div>
+      <div class="friends-tabs">
+        <button class="friends-tab active" data-friends-tab="friends">Friends</button>
+        <button class="friends-tab" data-friends-tab="requests">Requests</button>
+      </div>
+      <button class="friends-close" id="friends-close-btn">✕</button>
+    </div>
+
+    <div class="friends-search">
+      <input type="text" id="friend-search-input" placeholder="Search username..." autocomplete="off">
+      <button id="friend-search-btn">Search</button>
+    </div>
+
+    <div class="friends-search-results" id="friend-search-results"></div>
+
+    <div class="friends-section" data-friends-section="friends">
+      <div class="friends-section-title">Friends</div>
+      <div id="friends-list" class="friends-list"></div>
+    </div>
+
+    <div class="friends-section hidden" data-friends-section="requests">
+      <div class="friends-section-title">Incoming</div>
+      <div id="friends-incoming"></div>
+      <div class="friends-section-title">Outgoing</div>
+      <div id="friends-outgoing"></div>
+    </div>
+  </div>
+
+  <div id="notifications-popover" class="notifications-popover hidden">
+    <div class="notifications-popover-header">
+      <span class="header-icon" data-lucide="bell"></span>
+      <span>Notifications</span>
+    </div>
+    <div id="notification-items"></div>
+    <button id="notifications-open-requests" class="friend-primary-btn">Open requests</button>
+  </div>
+
+    <!-- Notification Containers -->
+  <div id="toast-container"></div>
+  <div id="alert-container"></div>
+
+  <!-- Footer -->
+  <footer id="site-footer" class="site-footer">
+    <div class="footer-content">
+      <p>© 2025 LootSkirmish | 
+        <a href="#" onclick="event.preventDefault(); window.goToLegal('terms');">Terms of Use</a> | 
+        <a href="#" onclick="event.preventDefault(); window.goToLegal('privacy');">Privacy Policy</a><span id="footer-support-link"> | 
+        <a href="#" onclick="event.preventDefault(); window.goToLegal('support');">Support</a></span>
+      </p>
+    </div>
+  </footer>
+
+    <!-- Initializers -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/seedrandom/3.0.5/seedrandom.min.js"></script>
+  <script src="https://unpkg.com/lucide@0.469.0/dist/umd/lucide.min.js"></script>
+  <script>
+    window.refreshLucideIcons = function() {
+      if (window.lucide && typeof window.lucide.createIcons === 'function') {
+        window.lucide.createIcons({ attrs: { 'stroke-width': 2.2 } });
+      }
+    };
+
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', window.refreshLucideIcons, { once: true });
+    } else {
+      window.refreshLucideIcons();
+    }
+  </script>
+  <script type="module" src="app/app.js"></script>
+
+  <p style="text-align: center; margin: 10px 0; font-size: 12px; opacity: 0.7;">
+    v0.9.0
+  </p>
+
+</body>
+</html>

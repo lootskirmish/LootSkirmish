@@ -1,0 +1,31 @@
+{
+  "name": "lootskirmish",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --config config/vite.config.js",
+    "server": "node scripts/server.js",
+    "start": "node scripts/server.js",
+    "build": "vite build --config config/vite.config.js",
+    "preview": "vite preview --config config/vite.config.js",
+    "email-processor": "node scripts/email-queue-processor.js",
+    "email-processor:manual": "node scripts/email-queue-processor.js --manual"
+  },
+  "dependencies": {
+    "@reduxjs/toolkit": "^2.11.2",
+    "@supabase/supabase-js": "^2.39.0",
+    "cors": "^2.8.5",
+    "dotenv": "^17.2.3",
+    "express": "^4.18.2",
+    "node-cron": "^3.0.3",
+    "node-fetch": "^3.3.0",
+    "nodemailer": "^6.9.7",
+    "react-redux": "^9.2.0",
+    "react-router-dom": "^7.11.0",
+    "stripe": "^14.0.0"
+  },
+  "devDependencies": {
+    "vite": "^5.0.0"
+  }
+}

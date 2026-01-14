@@ -1,0 +1,215 @@
+/* ===============================================================
+   BUTTONS - REUSABLE, RESPONSIVE, PLAYFUL
+   =============================================================== */
+
+/* Core button primitives (opt-in, keeps legacy safe) */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 12px 16px;
+  border-radius: 12px;
+  border: 1px solid var(--card-border);
+  background: var(--card-background);
+  color: #fff;
+  font-weight: 700;
+  font-size: 0.95rem;
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+  transition: transform 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease, background 0.25s ease;
+  -webkit-user-select: none;
+  user-select: none;
+  touch-action: manipulation;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35), 0 0 0 1px rgba(255, 255, 255, 0.04) inset;
+}
+
+.btn::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(120deg, rgba(255,255,255,0.08), transparent 60%);
+  opacity: 0;
+  transition: opacity 0.25s ease;
+}
+
+.btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.05) inset;
+}
+
+.btn:hover::after {
+  opacity: 1;
+}
+
+.btn:active {
+  transform: translateY(0) scale(0.98);
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.32), 0 0 0 1px rgba(255, 255, 255, 0.03) inset;
+}
+
+.btn:focus-visible {
+  outline: 3px solid rgba(var(--primary-rgb), 0.65);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 6px rgba(var(--primary-rgb), 0.18);
+}
+
+.btn-primary {
+  background: linear-gradient(135deg, rgba(var(--primary-rgb), 0.9), rgba(var(--accent-rgb), 0.85));
+  border-color: rgba(var(--primary-rgb), 0.55);
+}
+
+.btn-secondary {
+  background: rgba(var(--secondary-rgb), 0.16);
+  border-color: rgba(var(--secondary-rgb), 0.45);
+}
+
+.btn-ghost {
+  background: transparent;
+  border-color: rgba(255, 255, 255, 0.14);
+  box-shadow: none;
+}
+
+.btn-pill {
+  border-radius: 999px;
+  padding-inline: 16px;
+}
+
+.btn-icon {
+  padding: 10px 12px;
+}
+
+.btn-small { padding: 10px 12px; font-size: 0.85rem; }
+.btn-large { padding: 14px 18px; font-size: 1rem; }
+
+/* ============ BACK BUTTON COM MICRO-INTERAÇÃO ============ */
+.back-btn { 
+  background: linear-gradient(135deg, rgba(var(--primary-rgb), 0.85), rgba(var(--accent-rgb), 0.75));
+  border: 1px solid rgba(var(--primary-rgb), 0.45);
+  border-radius: 12px;
+  padding: 11px 18px;
+  color: #fff; 
+  cursor: pointer; 
+  margin-bottom: 16px; 
+  font-size: 0.9rem; 
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  position: relative;
+  overflow: hidden;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  -webkit-user-select: none;
+  user-select: none;
+  touch-action: manipulation;
+  box-shadow: 0 12px 28px rgba(var(--primary-rgb), 0.35), 0 0 0 1px rgba(255,255,255,0.05) inset;
+}
+
+.back-btn::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 0;
+  height: 100%;
+  background: linear-gradient(90deg, rgba(255,255,255,0.14), transparent);
+  transition: width 0.3s ease;
+}
+
+.back-btn:hover::before {
+  width: 100%;
+}
+
+.back-btn:hover { 
+  color: #fff;
+  background: linear-gradient(135deg, rgba(var(--primary-rgb), 0.95), rgba(var(--accent-rgb), 0.85));
+  border-color: rgba(var(--primary-rgb), 0.6);
+  transform: translateX(-4px);
+  box-shadow: 
+    0 14px 32px rgba(var(--primary-rgb), 0.35),
+    0 0 0 1px rgba(255,255,255,0.06) inset;
+}
+
+.back-btn span:first-child {
+  display: inline-block;
+  transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.back-btn:hover span:first-child {
+  transform: translateX(-4px);
+}
+
+.back-btn:active {
+  transform: translateX(-1px) scale(0.97);
+  box-shadow: 
+    0 8px 18px rgba(var(--primary-rgb), 0.22),
+    0 0 0 1px rgba(255,255,255,0.04) inset;
+}
+
+.back-btn:focus-visible {
+  outline: 3px solid rgba(var(--primary-rgb), 0.65);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 6px rgba(var(--primary-rgb), 0.16), 0 12px 28px rgba(var(--primary-rgb), 0.32);
+}
+
+/* ============ RESPONSIVE MOBILE ============ */
+
+/* Remove hover effects on touch devices */
+@media (hover: none) and (pointer: coarse) {
+  .back-btn:hover {
+    transform: none;
+    background: linear-gradient(135deg, rgba(var(--primary-rgb), 0.9), rgba(var(--accent-rgb), 0.75));
+    border-color: rgba(var(--primary-rgb), 0.45);
+    box-shadow: 0 8px 20px rgba(var(--primary-rgb), 0.22);
+  }
+  
+  .back-btn:hover::before {
+    width: 0;
+  }
+  
+  .back-btn:hover span:first-child {
+    transform: none;
+  }
+  
+  .back-btn:active {
+    transform: scale(0.96);
+    background: linear-gradient(135deg, rgba(var(--primary-rgb), 0.95), rgba(var(--accent-rgb), 0.8));
+  }
+}
+
+/* Tablet */
+@media (max-width: 768px) {
+  .back-btn {
+    padding: 9px 14px;
+    font-size: 0.85rem;
+    margin-bottom: 14px;
+  }
+}
+
+/* Mobile */
+@media (max-width: 500px) {
+  .back-btn {
+    padding: 9px 12px;
+    font-size: 0.85rem;
+    margin-bottom: 12px;
+    gap: 7px;
+    border-radius: 10px;
+  }
+}
+
+/* Extra small mobile */
+@media (max-width: 360px) {
+  .back-btn {
+    padding: 7px 10px;
+    font-size: 0.78rem;
+  }
+}
+
+/* Landscape mobile optimization */
+@media (max-height: 500px) and (orientation: landscape) {
+  .back-btn {
+    margin-bottom: 8px;
+    padding: 6px 10px;
+  }
+}

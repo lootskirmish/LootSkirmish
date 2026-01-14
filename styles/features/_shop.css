@@ -1,0 +1,1487 @@
+/* ============================================================
+   SHOP STYLES - MODERN DESIGN WITH LUCIDE ICONS
+   ============================================================ */
+
+/* ============================================================
+   SHOP CONTAINER & SECTIONS
+   ============================================================ */
+
+.shop-packages-container {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 0 1.5rem 2rem;
+}
+
+.shop-section {
+  margin-bottom: 4rem;
+}
+
+.shop-section-header {
+  text-align: center;
+  margin-bottom: 2.5rem;
+}
+
+.shop-section-header h3 {
+  font-size: 2rem;
+  font-weight: 800;
+  margin-bottom: 0.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  color: #ffffff;
+  letter-spacing: -0.3px;
+}
+
+.shop-section-header p {
+  color: rgba(255, 255, 255, 0.55);
+  font-size: 0.9rem;
+  font-weight: 500;
+}
+
+/* ============================================================
+   PACKAGES GRID - CENTRALIZADO
+   ============================================================ */
+
+.shop-packages-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1.5rem;
+  justify-items: center;
+  max-width: 1280px;
+  margin: 0 auto;
+}
+
+@media (min-width: 1200px) {
+  .shop-packages-grid {
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1.75rem;
+  }
+}
+
+@media (min-width: 900px) and (max-width: 1199px) {
+  .shop-packages-grid {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1.75rem;
+  }
+}
+
+@media (min-width: 600px) and (max-width: 899px) {
+  .shop-packages-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 1.75rem;
+  }
+}
+
+/* Mobile: 2 colunas com cards menores */
+@media (max-width: 599px) {
+  .shop-packages-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 1rem;
+  }
+  
+  .shop-package-card {
+    max-width: 100%;
+  }
+  
+  .package-content {
+    padding: 1.25rem 1rem 1rem;
+    min-height: 380px;
+    gap: 0.5rem;
+  }
+  
+  .package-icon-wrapper {
+    width: 70px;
+    height: 70px;
+  }
+  
+  .package-icon-lucide {
+    width: 38px !important;
+    height: 38px !important;
+  }
+  
+  .base-value {
+    font-size: 0.65rem;
+    padding: 0.15rem 0.5rem;
+  }
+  
+  .package-name {
+    font-size: 0.9rem;
+  }
+  
+  .diamonds-amount {
+    font-size: 2rem;
+  }
+  
+  .diamonds-icon-lucide {
+    width: 26px !important;
+    height: 26px !important;
+  }
+  
+  .bonus-text {
+    font-size: 0.75rem;
+    padding: 0.2rem 0.6rem;
+  }
+  
+  .price-amount {
+    font-size: 1.8rem;
+  }
+  
+  .price-currency {
+    font-size: 1.2rem;
+  }
+  
+  .package-buy-btn {
+    padding: 0.75rem 1rem;
+    font-size: 0.85rem;
+  }
+  
+  .top-badge {
+    font-size: 0.7rem;
+    padding: 0.4rem 0.8rem;
+    top: -12px;
+  }
+  
+  .top-badge i {
+    width: 12px;
+    height: 12px;
+  }
+  
+  .badge-timer {
+    font-size: 0.6rem;
+    padding: 0.2rem 0.5rem;
+  }
+}
+
+/* ============================================================
+   PACKAGE CARD - DESIGN MODERNO
+   ============================================================ */
+
+.shop-package-card {
+  position: relative;
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.08) 0%,
+    rgba(255, 255, 255, 0.03) 100%
+  );
+  border: 2px solid rgba(255, 255, 255, 0.15);
+  border-radius: 24px;
+  overflow: visible;
+  transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+  backdrop-filter: blur(20px);
+  width: 100%;
+  max-width: 300px;
+  padding-top: 1rem;
+}
+
+.shop-package-card:hover {
+  transform: translateY(-6px);
+  border-color: rgba(6, 182, 212, 0.4);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4),
+              0 0 40px rgba(6, 182, 212, 0.2);
+}
+
+.shop-package-card.popular {
+  border-color: rgba(234, 179, 8, 0.5);
+}
+
+.shop-package-card.popular:hover {
+  border-color: rgba(234, 179, 8, 0.7);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5),
+              0 0 50px rgba(234, 179, 8, 0.3);
+}
+
+/* ============================================================
+   TOP BADGES - CENTRALIZADOS E MELHORADOS
+   ============================================================ */
+
+.top-badge {
+  position: absolute;
+  top: -14px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.6rem 1.2rem;
+  border-radius: 100px;
+  font-size: 0.85rem;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  z-index: 10;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+  border: 2px solid;
+  white-space: nowrap;
+}
+
+.top-badge i {
+  width: 16px;
+  height: 16px;
+}
+
+/* Popular Badge - TEXTO BRANCO */
+.top-badge.popular-badge {
+  background: linear-gradient(135deg, #eab308, #facc15);
+  color: #ffffff;
+  border-color: rgba(234, 179, 8, 0.4);
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+  animation: pulse-glow 2s ease-in-out infinite;
+}
+
+@keyframes pulse-glow {
+  0%, 100% {
+    box-shadow: 0 8px 24px rgba(234, 179, 8, 0.4);
+  }
+  50% {
+    box-shadow: 0 8px 32px rgba(234, 179, 8, 0.7);
+  }
+}
+
+/* First Purchase Badge */
+.top-badge.first-purchase-badge {
+  background: linear-gradient(135deg, #ec4899, #f43f5e);
+  color: #ffffff;
+  border-color: rgba(236, 72, 153, 0.4);
+  box-shadow: 0 8px 24px rgba(236, 72, 153, 0.4);
+}
+
+/* Timed Badge - DENTRO DO CARD */
+.top-badge.timed-badge {
+  background: linear-gradient(135deg, #f97316, #fb923c);
+  color: #ffffff;
+  border-color: rgba(249, 115, 22, 0.4);
+  box-shadow: 0 8px 24px rgba(249, 115, 22, 0.4);
+  gap: 0.5rem;
+  animation: fire-pulse 1.5s ease-in-out infinite;
+  max-width: calc(100% - 3rem);
+  overflow: visible;
+  padding: 0.5rem 1.2rem;
+}
+
+@keyframes fire-pulse {
+  0%, 100% {
+    box-shadow: 0 8px 24px rgba(249, 115, 22, 0.4);
+  }
+  50% {
+    box-shadow: 0 8px 32px rgba(249, 115, 22, 0.7);
+  }
+}
+
+.badge-timer {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.3rem 0.7rem;
+  background: rgba(0, 0, 0, 0.35);
+  border-radius: 8px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  margin-left: 0;
+  white-space: nowrap;
+}
+
+/* ============================================================
+   PACKAGE CONTENT - LAYOUT MELHORADO
+   ============================================================ */
+
+.package-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  text-align: center;
+  padding: 1.5rem 1.5rem 1.25rem;
+  gap: 0.75rem;
+  min-height: 440px;
+  width: 100%;
+}
+
+/* ============================================================
+   PACKAGE ICON - LUCIDE
+   ============================================================ */
+
+.package-icon-wrapper {
+  width: 90px;
+  height: 90px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, rgba(6, 182, 212, 0.2), rgba(59, 130, 246, 0.2));
+  border-radius: 50%;
+  border: 3px solid rgba(6, 182, 212, 0.3);
+  position: relative;
+  overflow: visible;
+  margin: 0 auto;
+  box-shadow: 0 0 30px rgba(6, 182, 212, 0.3);
+}
+
+.package-icon-wrapper .base-value {
+  position: absolute;
+  bottom: -8px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(6, 182, 212, 0.95);
+  color: #ffffff;
+  font-size: 0.7rem;
+  font-weight: 800;
+  padding: 0.2rem 0.6rem;
+  border-radius: 12px;
+  z-index: 2;
+  white-space: nowrap;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+  border: 2px solid rgba(255, 255, 255, 0.2);
+}
+
+@keyframes rotate {
+  100% { transform: rotate(360deg); }
+}
+
+.package-icon-lucide {
+  width: 48px !important;
+  height: 48px !important;
+  color: #06b6d4;
+  stroke-width: 2;
+  filter: drop-shadow(0 0 20px rgba(6, 182, 212, 0.5));
+  z-index: 1;
+  position: relative;
+}
+
+/* ============================================================
+   PACKAGE NAME
+   ============================================================ */
+
+.package-name {
+  font-size: 1.1rem;
+  font-weight: 800;
+  color: #ffffff;
+  margin: 0;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+  width: 100%;
+  text-align: center;
+}
+
+/* ============================================================
+   DIAMONDS ROW - UMA LINHA
+   ============================================================ */
+
+.package-diamonds-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  margin: 0;
+  width: 100%;
+}
+
+.diamonds-amount {
+  font-size: 2.5rem;
+  font-weight: 900;
+  background: linear-gradient(135deg, #06b6d4, #3b82f6);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  line-height: 1;
+  letter-spacing: -1px;
+}
+
+.diamonds-icon-lucide {
+  width: 32px !important;
+  height: 32px !important;
+  color: #06b6d4;
+  stroke-width: 2.5;
+  filter: drop-shadow(0 0 10px rgba(6, 182, 212, 0.6));
+}
+
+/* ============================================================
+   BONUS TEXT - TEXTO SIMPLES ABAIXO DO VALOR
+   ============================================================ */
+
+.bonus-text {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: #22c55e;
+  margin: 0;
+  text-shadow: 0 0 10px rgba(34, 197, 94, 0.5);
+  animation: bonus-glow 2s ease-in-out infinite;
+  padding: 0.25rem 0.75rem;
+  background: rgba(34, 197, 94, 0.1);
+  border-radius: 12px;
+  border: 1px solid rgba(34, 197, 94, 0.3);
+  width: fit-content;
+  margin: 0 auto;
+}
+
+@keyframes bonus-glow {
+  0%, 100% {
+    text-shadow: 0 0 10px rgba(34, 197, 94, 0.5);
+  }
+  50% {
+    text-shadow: 0 0 20px rgba(34, 197, 94, 0.8);
+  }
+}
+
+@keyframes bonus-glow {
+  0%, 100% {
+    box-shadow: 0 0 10px rgba(34, 197, 94, 0.3);
+  }
+  50% {
+    box-shadow: 0 0 20px rgba(34, 197, 94, 0.6);
+  }
+}
+
+.bonus-badge-label {
+  opacity: 0.9;
+  font-size: 0.7rem;
+}
+
+.bonus-badge-amount {
+  font-weight: 800;
+  font-size: 0.8rem;
+}
+
+/* ============================================================
+   DIVIDER
+   ============================================================ */
+
+.package-divider {
+  width: 100%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.15), transparent);
+  margin: 0.75rem 0;
+}
+
+/* ============================================================
+   PACKAGE PRICE
+   ============================================================ */
+
+.package-price {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 0.2rem;
+  margin: 0;
+  width: 100%;
+}
+
+.price-currency {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.price-amount {
+  font-size: 2.25rem;
+  font-weight: 900;
+  color: #ffffff;
+  letter-spacing: -1px;
+}
+
+/* ============================================================
+   BUY BUTTON - MELHORADO
+   ============================================================ */
+
+.package-buy-btn {
+  width: 100%;
+  padding: 0.9rem 1.5rem;
+  background: linear-gradient(135deg, #06b6d4, #3b82f6);
+  color: #ffffff;
+  border: none;
+  border-radius: 12px;
+  font-size: 0.95rem;
+  font-weight: 800;
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  box-shadow: 0 4px 20px rgba(6, 182, 212, 0.3);
+  margin: 0;
+}
+
+.package-buy-btn:hover {
+  background: linear-gradient(135deg, #0891b2, #2563eb);
+  box-shadow: 0 6px 30px rgba(6, 182, 212, 0.5);
+  transform: translateY(-2px);
+}
+
+.package-buy-btn:active {
+  transform: translateY(0);
+}
+
+.btn-icon-lucide {
+  width: 18px !important;
+  height: 18px !important;
+  stroke-width: 3;
+  transition: transform 0.3s;
+}
+
+.package-buy-btn:hover .btn-icon-lucide {
+  transform: translateX(4px);
+}
+
+/* Bonus Banners - Melhorado */
+.package-bonus {
+  position: absolute;
+  top: -12px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 0.45rem 1.2rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  font-size: 0.75rem;
+  font-weight: 800;
+  z-index: 5;
+  border-radius: 100px;
+  white-space: nowrap;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  border: 2px solid rgba(255, 255, 255, 0.2);
+  letter-spacing: 0.5px;
+}
+
+.package-bonus.first-purchase {
+  background: linear-gradient(135deg, #ec4899, #8b5cf6);
+  color: #ffffff;
+}
+
+.package-bonus.timed {
+  background: linear-gradient(135deg, #f97316, #dc2626);
+  color: #ffffff;
+  animation: pulse-glow 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse-glow {
+  0%, 100% {
+    box-shadow: 0 8px 24px rgba(220, 38, 38, 0.4);
+  }
+  50% {
+    box-shadow: 0 8px 32px rgba(220, 38, 38, 0.7);
+  }
+}
+
+.bonus-icon {
+  font-size: 0.9rem;
+}
+
+.bonus-timer {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  margin-left: 0.3rem;
+  padding-left: 0.5rem;
+  border-left: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+.timer-text {
+  font-family: 'Courier New', monospace;
+  font-weight: 800;
+  font-size: 0.75rem;
+}
+
+/* Package Icon - Menor e mais compacto */
+.package-icon {
+  width: 70px;
+  height: 70px;
+  margin: 0.75rem auto 0.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  filter: drop-shadow(0 6px 20px rgba(6, 182, 212, 0.5));
+}
+
+.package-icon svg {
+  width: 100%;
+  height: 100%;
+  animation: float 4s ease-in-out infinite;
+}
+
+@keyframes float {
+  0%, 100% {
+    transform: translateY(0) rotate(0deg);
+  }
+  50% {
+    transform: translateY(-8px) rotate(3deg);
+  }
+}
+
+/* Package Name - Compacto */
+.package-name {
+  font-size: 1rem;
+  font-weight: 800;
+  color: #ffffff;
+  margin-bottom: 0.5rem;
+  letter-spacing: 0.5px;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+/* Package Diamonds - Compacto com Bonus Badge */
+.package-diamonds {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+  padding: 0.75rem;
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 12px;
+  position: relative;
+}
+
+.diamonds-main-display {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.diamonds-amount {
+  font-size: 2rem;
+  font-weight: 900;
+  color: #06b6d4;
+  text-shadow: 0 2px 15px rgba(6, 182, 212, 0.4);
+  letter-spacing: -1px;
+}
+
+.diamonds-icon {
+  font-size: 1.3rem;
+  filter: drop-shadow(0 3px 10px rgba(6, 182, 212, 0.7));
+}
+
+/* NOVO: Badge de Bônus */
+.bonus-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  background: linear-gradient(135deg, #ec4899, #8b5cf6);
+  color: #ffffff;
+  padding: 0.3rem 0.75rem;
+  border-radius: 100px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  box-shadow: 0 4px 12px rgba(236, 72, 153, 0.3);
+  animation: pulse 2s ease-in-out infinite;
+}
+
+.bonus-badge-icon {
+  font-size: 0.8rem;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    transform: scale(1);
+    box-shadow: 0 4px 12px rgba(236, 72, 153, 0.3);
+  }
+  50% {
+    transform: scale(1.05);
+    box-shadow: 0 6px 16px rgba(236, 72, 153, 0.5);
+  }
+}
+
+/* Base Diamonds - Compacto */
+.package-base-diamonds {
+  font-size: 0.75rem;
+  color: rgba(255, 255, 255, 0.6);
+  margin-bottom: 0.5rem;
+  text-align: center;
+  font-weight: 600;
+}
+
+/* Package Price - Compacto */
+.package-price {
+  font-size: 1.75rem;
+  font-weight: 900;
+  color: #ffffff;
+  margin-bottom: 0.75rem;
+  text-align: center;
+  text-shadow: 0 2px 15px rgba(255, 255, 255, 0.25);
+}
+
+/* Buy Button - Compacto */
+.package-buy-btn {
+  width: 100%;
+  padding: 0.9rem;
+  background: linear-gradient(135deg, #06b6d4, #3b82f6);
+  color: #ffffff;
+  border: none;
+  border-radius: 12px;
+  font-size: 0.9rem;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 6px 20px rgba(6, 182, 212, 0.35);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.package-buy-btn:hover {
+  background: linear-gradient(135deg, #0891b2, #2563eb);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(6, 182, 212, 0.5);
+}
+
+.package-buy-btn:active {
+  transform: translateY(0);
+}
+
+.btn-icon {
+  font-size: 1rem;
+  transition: transform 0.3s ease;
+}
+
+.package-buy-btn:hover .btn-icon {
+  transform: translateX(4px);
+}
+
+/* ============================================================
+   SUBSCRIPTIONS GRID - TOTALMENTE CENTRALIZADO
+   ============================================================ */
+
+.shop-subscriptions-grid {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 2rem;
+  max-width: 1000px;
+  margin: 0 auto;
+  flex-wrap: wrap;
+}
+
+/* ============================================================
+   SUBSCRIPTION CARD - REDESENHADO E CENTRALIZADO
+   ============================================================ */
+
+.shop-subscription-card {
+  position: relative;
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.08) 0%,
+    rgba(255, 255, 255, 0.04) 100%
+  );
+  border: 2px solid rgba(234, 179, 8, 0.3);
+  border-radius: 24px;
+  padding: 2.5rem 2rem;
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  backdrop-filter: blur(20px);
+  text-align: center;
+  width: 100%;
+  max-width: 420px;
+}
+
+.shop-subscription-card:hover {
+  transform: translateY(-10px) scale(1.03);
+  border-color: rgba(234, 179, 8, 0.6);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.5),
+              0 0 60px rgba(234, 179, 8, 0.25);
+}
+
+.shop-subscription-card.popular {
+  border-color: rgba(234, 179, 8, 0.6);
+  background: linear-gradient(
+    180deg,
+    rgba(234, 179, 8, 0.12) 0%,
+    rgba(234, 179, 8, 0.04) 100%
+  );
+  box-shadow: 0 8px 32px rgba(234, 179, 8, 0.2);
+}
+
+/* Active Badge - Melhorado */
+.subscription-active-badge {
+  position: absolute;
+  top: -12px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: linear-gradient(135deg, #22c55e, #10b981);
+  color: #ffffff;
+  padding: 0.45rem 1.1rem;
+  border-radius: 100px;
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  z-index: 10;
+  box-shadow: 0 8px 24px rgba(34, 197, 94, 0.5);
+  border: 2px solid rgba(34, 197, 94, 0.3);
+}
+
+/* Most Popular Badge - COM GLOW AMARELO */
+.subscription-popular-badge {
+  position: absolute;
+  top: -14px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: linear-gradient(135deg, #eab308, #facc15);
+  color: #ffffff;
+  padding: 0.5rem 1.2rem;
+  border-radius: 100px;
+  font-size: 0.75rem;
+  font-weight: 900;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  z-index: 10;
+  box-shadow: 0 0 30px rgba(234, 179, 8, 0.8),
+              0 8px 24px rgba(234, 179, 8, 0.5);
+  border: 2px solid rgba(234, 179, 8, 0.6);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+  animation: subscription-glow 2s ease-in-out infinite;
+}
+
+.subscription-popular-badge i {
+  width: 16px;
+  height: 16px;
+}
+
+@keyframes subscription-glow {
+  0%, 100% {
+    box-shadow: 0 0 30px rgba(234, 179, 8, 0.8),
+                0 8px 24px rgba(234, 179, 8, 0.5);
+  }
+  50% {
+    box-shadow: 0 0 50px rgba(234, 179, 8, 1),
+                0 8px 40px rgba(234, 179, 8, 0.8);
+  }
+}
+
+/* Subscription Icon - Melhorado */
+.subscription-icon {
+  font-size: 4rem;
+  margin-bottom: 1.25rem;
+  filter: drop-shadow(0 8px 24px rgba(234, 179, 8, 0.6));
+}
+
+/* Subscription Name - Redesenhado */
+.subscription-name {
+  font-size: 1.5rem;
+  font-weight: 900;
+  color: #ffffff;
+  margin-bottom: 1.5rem;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  text-shadow: 0 2px 20px rgba(255, 255, 255, 0.2);
+}
+
+/* Subscription Price - Redesenhado */
+.subscription-price {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 0.5rem;
+  margin-bottom: 2rem;
+  padding: 1rem 1.5rem;
+  background: rgba(234, 179, 8, 0.1);
+  border-radius: 16px;
+  border: 1px solid rgba(234, 179, 8, 0.2);
+}
+
+.price-value {
+  font-size: 3rem;
+  font-weight: 900;
+  color: #facc15;
+  text-shadow: 0 4px 20px rgba(234, 179, 8, 0.6);
+  letter-spacing: -1px;
+}
+
+.price-period {
+  font-size: 1.1rem;
+  color: rgba(255, 255, 255, 0.8);
+  font-weight: 700;
+}
+
+/* Subscription Benefits - Redesenhado */
+.subscription-benefits {
+  margin-bottom: 2rem;
+}
+
+.subscription-benefits ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  text-align: left;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 16px;
+  padding: 1.5rem;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.subscription-benefits li {
+  padding: 0.9rem 0;
+  color: #ffffff;
+  font-size: 0.95rem;
+  font-weight: 600;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.subscription-benefits li:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.subscription-benefits li:first-child {
+  padding-top: 0;
+}
+
+/* Subscribe Button - TEXTO BRANCO */
+.subscription-buy-btn {
+  width: 100%;
+  padding: 1.3rem;
+  background: linear-gradient(135deg, #eab308, #facc15);
+  color: #ffffff;
+  border: none;
+  border-radius: 16px;
+  font-size: 1.1rem;
+  font-weight: 800;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.6rem;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 8px 24px rgba(234, 179, 8, 0.4);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  border: 2px solid rgba(234, 179, 8, 0.3);
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+.subscription-buy-btn:hover {
+  background: linear-gradient(135deg, #ca8a04, #eab308);
+  transform: translateY(-3px);
+  box-shadow: 0 12px 32px rgba(234, 179, 8, 0.6);
+}
+
+.subscription-buy-btn:active {
+  transform: translateY(0);
+}
+
+.subscription-buy-btn.active {
+  background: linear-gradient(135deg, #22c55e, #10b981);
+  color: #ffffff;
+  border-color: rgba(34, 197, 94, 0.3);
+}
+
+.subscription-buy-btn.active:hover {
+  background: linear-gradient(135deg, #16a34a, #059669);
+}
+
+/* ============================================================
+   PAYMENT MODAL - REDESIGNED
+   ============================================================ */
+
+.shop-payment-modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.9);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  z-index: 9999;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.4s ease;
+  backdrop-filter: blur(12px);
+  padding: 2rem 1rem;
+  overflow-y: auto;
+}
+
+.shop-payment-modal.active {
+  opacity: 1;
+  pointer-events: all;
+}
+
+.shop-payment-box {
+  background: linear-gradient(
+    180deg,
+    rgba(20, 20, 30, 0.98) 0%,
+    rgba(10, 10, 20, 0.98) 100%
+  );
+  border: 2px solid rgba(255, 255, 255, 0.15);
+  border-radius: 32px;
+  padding: 3rem;
+  max-width: 650px;
+  width: 100%;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 32px 80px rgba(0, 0, 0, 0.8);
+  position: relative;
+  transform: scale(0.95);
+  transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.shop-payment-modal.active .shop-payment-box {
+  transform: scale(1);
+}
+
+/* Close Button - Minimalist */
+.payment-close-btn {
+  position: absolute;
+  top: 1.5rem;
+  right: 1.5rem;
+  width: 48px;
+  height: 48px;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 50%;
+  color: #ffffff;
+  font-size: 1.5rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.3s ease;
+}
+
+.payment-close-btn:hover {
+  background: rgba(255, 255, 255, 0.2);
+  transform: rotate(90deg);
+  border-color: rgba(255, 255, 255, 0.4);
+}
+
+/* Payment Product Header */
+.payment-product-header {
+  display: flex;
+  align-items: center;
+  gap: 2rem;
+  padding: 2rem;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 20px;
+  margin-bottom: 2.5rem;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.payment-product-icon {
+  font-size: 5rem;
+  filter: drop-shadow(0 8px 24px rgba(6, 182, 212, 0.6));
+  flex-shrink: 0;
+}
+
+.payment-product-info {
+  flex: 1;
+}
+
+.payment-product-info h3 {
+  font-size: 1.75rem;
+  font-weight: 800;
+  color: #ffffff;
+  margin-bottom: 1rem;
+  letter-spacing: 0.5px;
+}
+
+.payment-diamonds-display {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.payment-diamonds-display .diamonds-amount {
+  font-size: 2.5rem;
+  font-weight: 900;
+  color: #06b6d4;
+}
+
+.payment-bonus-tag {
+  display: inline-block;
+  background: linear-gradient(135deg, #ec4899, #8b5cf6);
+  color: #ffffff;
+  padding: 0.4rem 1rem;
+  border-radius: 100px;
+  font-size: 0.85rem;
+  font-weight: 700;
+  margin-top: 0.75rem;
+}
+
+/* Subscription Header Variant */
+.payment-product-header.subscription-header {
+  flex-direction: column;
+  text-align: center;
+}
+
+.subscription-features {
+  margin-top: 1.5rem;
+  text-align: left;
+  width: 100%;
+}
+
+.feature-item {
+  padding: 0.75rem 0;
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 0.95rem;
+  font-weight: 500;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.feature-item:last-child {
+  border-bottom: none;
+}
+
+/* ============================================================
+   PAYMENT METHODS - CLEANER
+   ============================================================ */
+
+.payment-methods-section {
+  margin-bottom: 2.5rem;
+}
+
+.payment-methods-section h4 {
+  font-size: 1.3rem;
+  font-weight: 800;
+  color: #ffffff;
+  margin-bottom: 1.5rem;
+  text-align: center;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.payment-methods-grid {
+  display: grid;
+  gap: 1rem;
+}
+
+.payment-method-btn {
+  background: rgba(255, 255, 255, 0.05);
+  border: 2px solid rgba(255, 255, 255, 0.15);
+  border-radius: 16px;
+  padding: 1.25rem;
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  text-align: left;
+}
+
+.payment-method-btn:hover {
+  border-color: rgba(255, 255, 255, 0.3);
+  background: rgba(255, 255, 255, 0.08);
+  transform: translateX(4px);
+}
+
+.payment-method-btn.active {
+  border-color: #06b6d4;
+  background: rgba(6, 182, 212, 0.1);
+  box-shadow: 0 0 30px rgba(6, 182, 212, 0.3);
+}
+
+.method-icon {
+  font-size: 2.5rem;
+  min-width: 60px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.method-info {
+  flex: 1;
+}
+
+.method-name {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #ffffff;
+  margin-bottom: 0.25rem;
+}
+
+.method-desc {
+  font-size: 0.9rem;
+  color: rgba(255, 255, 255, 0.6);
+  font-weight: 500;
+}
+
+.method-price {
+  font-size: 1.5rem;
+  font-weight: 800;
+  color: #06b6d4;
+  flex-shrink: 0;
+}
+
+/* ============================================================
+   CONTINUE BUTTON - PROMINENT
+   ============================================================ */
+
+.payment-continue-btn {
+  width: 100%;
+  padding: 1.5rem;
+  background: linear-gradient(135deg, #06b6d4, #3b82f6);
+  color: #ffffff;
+  border: none;
+  border-radius: 16px;
+  font-size: 1.2rem;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 8px 24px rgba(6, 182, 212, 0.4);
+  margin-bottom: 1.5rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.payment-continue-btn:hover {
+  background: linear-gradient(135deg, #0891b2, #2563eb);
+  transform: translateY(-3px);
+  box-shadow: 0 12px 32px rgba(6, 182, 212, 0.6);
+}
+
+.payment-continue-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
+
+/* Loading Spinner */
+.loading-spinner {
+  width: 22px;
+  height: 22px;
+  border: 3px solid rgba(255, 255, 255, 0.3);
+  border-top-color: #ffffff;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ============================================================
+   SECURITY NOTE - VISIBLE
+   ============================================================ */
+
+.payment-security-note {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  font-size: 0.9rem;
+  color: rgba(255, 255, 255, 0.7);
+  text-align: center;
+  padding: 1.25rem;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  font-weight: 500;
+}
+
+.security-icon {
+  font-size: 1.3rem;
+}
+
+/* ============================================================
+   RESPONSIVIDADE - OTIMIZADA
+   ============================================================ */
+
+@media (max-width: 768px) {
+  .shop-header {
+    padding: 2rem 1.5rem;
+    margin-bottom: 3rem;
+  }
+
+  .shop-header h2 {
+    font-size: 2rem;
+  }
+
+  .shop-subtitle {
+    font-size: 0.95rem;
+  }
+
+  .shop-packages-container {
+    padding: 0 1rem;
+  }
+
+  .shop-section {
+    margin-bottom: 3rem;
+  }
+
+  .shop-section-header h3 {
+    font-size: 1.75rem;
+  }
+
+  .shop-packages-grid {
+    grid-template-columns: 1fr;
+    gap: 1.5rem;
+  }
+
+  .shop-subscriptions-grid {
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .shop-subscription-card {
+    max-width: 100%;
+  }
+
+  .price-value {
+    font-size: 2.5rem;
+  }
+
+  .subscription-name {
+    font-size: 1.3rem;
+  }
+
+  .subscription-icon {
+    font-size: 3.5rem;
+  }
+
+  .package-price {
+    font-size: 1.75rem;
+  }
+
+  .price-value {
+    font-size: 2rem;
+  }
+
+  .shop-payment-box {
+    padding: 2rem 1.5rem;
+    margin: 1rem;
+  }
+
+  .payment-product-header {
+    flex-direction: column;
+    text-align: center;
+    gap: 1.5rem;
+  }
+
+  .payment-product-info h3 {
+    font-size: 1.5rem;
+  }
+
+  .payment-method-btn {
+    flex-wrap: wrap;
+    gap: 1rem;
+  }
+
+  .method-price {
+    width: 100%;
+    text-align: center;
+  }
+}
+
+@media (max-width: 480px) {
+  .shop-header h2 {
+    font-size: 1.5rem;
+  }
+
+  .shop-section-header h3 {
+    font-size: 1.5rem;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .package-icon {
+    width: 60px;
+    height: 60px;
+  }
+
+  .payment-product-icon {
+    font-size: 4rem;
+  }
+
+  .subscription-icon {
+    font-size: 3rem;
+  }
+
+  .diamonds-amount {
+    font-size: 1.75rem;
+  }
+
+  .package-price {
+    font-size: 1.5rem;
+  }
+
+  .price-value {
+    font-size: 2rem;
+  }
+
+  .payment-continue-btn {
+    font-size: 1rem;
+    padding: 1.25rem;
+  }
+
+  .popular-badge,
+  .subscription-active-badge {
+    font-size: 0.65rem;
+    padding: 0.35rem 0.75rem;
+  }
+
+  .bonus-badge {
+    font-size: 0.65rem;
+    padding: 0.25rem 0.65rem;
+  }
+}
+
+/* ============================================================
+   SCROLL CUSTOMIZADO - MODERNO
+   ============================================================ */
+
+.shop-payment-box::-webkit-scrollbar {
+  width: 10px;
+}
+
+.shop-payment-box::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 10px;
+}
+
+.shop-payment-box::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, #06b6d4, #3b82f6);
+  border-radius: 10px;
+}
+
+.shop-payment-box::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, #0891b2, #2563eb);
+}
+
+/* ============================================================
+   ANIMAÇÕES SUAVES
+   ============================================================ */
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.shop-package-card,
+.shop-subscription-card {
+  animation: fadeInUp 0.6s ease-out;
+}
+
+.shop-package-card:nth-child(1) {
+  animation-delay: 0.1s;
+}
+
+.shop-package-card:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.shop-package-card:nth-child(3) {
+  animation-delay: 0.3s;
+}
+
+.shop-package-card:nth-child(4) {
+  animation-delay: 0.4s;
+}
