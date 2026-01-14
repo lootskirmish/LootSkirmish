@@ -368,14 +368,19 @@ async function handleUpdatePublicProfile(req, res) {
 async function handleCheckPublicProfile(req, res) {
   try {
     const { username } = req.body || {};
+    const identifier = getIdentifier(req);
 
     if (!username || typeof username !== 'string') {
+      console.warn(`[CHECK_PUBLIC_PROFILE] Invalid username format from ${identifier}:`, { type: typeof username, length: username?.length });
       return res.status(400).json({ error: 'Missing or invalid username' });
     }
 
     if (username.length > 256) {
+      console.warn(`[CHECK_PUBLIC_PROFILE] Username too long from ${identifier}:`, username.length);
       return res.status(400).json({ error: 'Invalid username' });
     }
+
+    console.log(`[CHECK_PUBLIC_PROFILE] Checking profile for: "${username}" from ${identifier}`);
 
     // Fetch profile without authentication - but only public field
     const { data: profile, error } = await supabase
@@ -384,24 +389,37 @@ async function handleCheckPublicProfile(req, res) {
       .ilike('username', username)
       .single();
 
-    if (error || !profile) {
+    if (error) {
+      console.error(`[CHECK_PUBLIC_PROFILE] Database error for "${username}":`, error.code, error.message);
       // Don't expose whether profile exists or not
+      return res.status(404).json({ error: 'Profile not found' });
+    }
+
+    if (!profile) {
+      console.warn(`[CHECK_PUBLIC_PROFILE] Profile not found for "${username}" from ${identifier}`);
       return res.status(404).json({ error: 'Profile not found' });
     }
 
     // Strict check: profile must be explicitly true
     const isPublic = profile.public === true || profile.public === 'true';
 
+    console.log(`[CHECK_PUBLIC_PROFILE] Profile "${profile.username}" (${profile.user_id}): public=${profile.public} (isPublic=${isPublic}) from ${identifier}`);
+
     // Audit access attempts
     if (!isPublic) {
-      logAudit(supabase, profile.user_id, 'PRIVATE_PROFILE_ACCESS_ATTEMPT', { attemptedBy: getIdentifier(req) }, req).catch(() => {});
+      console.warn(`[CHECK_PUBLIC_PROFILE] Access attempt to PRIVATE profile "${profile.username}" from ${identifier}`);
+      logAudit(supabase, profile.user_id, 'PRIVATE_PROFILE_ACCESS_ATTEMPT', { attemptedBy: identifier, username: profile.username }, req).catch(() => {});
     }
 
     return res.status(200).json({
       success: true,
       isPublic,
       username: profile.username,
-      userId: profile.user_id
+      userId: profile.user_id,
+      debug: {
+        publicField: profile.public,
+        checked: new Date().toISOString()
+      }
     });
   } catch (error) {
     console.error('💥 Check public profile error:', error?.message || error);

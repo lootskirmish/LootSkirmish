@@ -234,9 +234,14 @@ async function _loadProfileRoute() {
         });
 
         if (!checkResponse.ok) {
-          console.warn('Public profile check failed with status:', checkResponse.status);
+          const statusText = checkResponse.statusText || 'Unknown error';
+          console.warn(`[PROFILE_LOAD] Check failed - Status: ${checkResponse.status} (${statusText}), Username: "${publicUsername}"`);
+          const errorData = await checkResponse.json().catch(() => ({}));
+          console.warn(`[PROFILE_LOAD] Error response:`, errorData);
           // Return to safe state (menu)
-          if (window.showToast) window.showToast('Profile not found or is private. Returning to menu...', 'error');
+            if (window.showToast) {
+              window.showToast('Profile could not be accessed.', 'error');
+            }
           window.history.replaceState({}, '', '/');
           // Force re-route to menu
           await new Promise(resolve => setTimeout(resolve, 100));
@@ -250,10 +255,14 @@ async function _loadProfileRoute() {
         }
 
         const checkData = await checkResponse.json();
+        console.log(`[PROFILE_LOAD] Check response for "${publicUsername}":`, checkData);
+
         if (!checkData.success || !checkData.isPublic) {
-          console.warn('Profile visibility check: profile is private');
+          console.warn(`[PROFILE_LOAD] Profile "${publicUsername}" is PRIVATE (success=${checkData.success}, isPublic=${checkData.isPublic})`);
           // Return to safe state (menu)
-          if (window.showToast) window.showToast(`✖ ${checkData.username || 'User'} has a private profile.`, 'error');
+            if (window.showToast) {
+              window.showToast(`This profile is private.`, 'info');
+            }
           window.history.replaceState({}, '', '/');
           // Force re-route to menu
           await new Promise(resolve => setTimeout(resolve, 100));
@@ -266,9 +275,11 @@ async function _loadProfileRoute() {
           return;
         }
       } catch (err) {
-        console.error('Error checking public profile visibility:', err);
+        console.error(`[PROFILE_LOAD] Fetch error for "${publicUsername}":`, err.message || err);
         // Return to safe state (menu) on error
-        if (window.showToast) window.showToast('Error accessing profile. Please try again.', 'error');
+        if (window.showToast) {
+          window.showToast('Could not access profile. Please try again.', 'error');
+        }
         window.history.replaceState({}, '', '/');
         // Force re-route to menu
         await new Promise(resolve => setTimeout(resolve, 100));

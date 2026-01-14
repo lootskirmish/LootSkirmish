@@ -15,6 +15,18 @@ import { getActiveUser } from '../core/session.js';
 
 // Cache leve de DOM para reduzir query repetida (sem depender de telas sempre montadas)
 const _elCache = new Map();
+
+/**
+ * Helper to show contextual error messages
+ */
+function showProfileError(context, message, details = {}) {
+  console.error(`[PROFILE_ERROR] ${context}:`, { message, details });
+  // Don't show popup immediately - let toast show first
+  setTimeout(() => {
+    showToast(message, 'error');
+  }, 100);
+}
+
 function $(id) {
   if (_elCache.has(id)) return _elCache.get(id);
   const el = document.getElementById(id);
@@ -183,8 +195,10 @@ export async function loadPublicProfile(username, calculateLevel, applyTranslati
       });
 
       if (!profileCheckResponse.ok) {
-        console.error('Profile check failed:', profileCheckResponse.status);
-        showToast(`✖ Profile not found or is private.`, 'error');
+        console.error(`[LOAD_PUBLIC_PROFILE] Check failed - Status: ${profileCheckResponse.status}, Username: "${username}"`);
+        const errorData = await profileCheckResponse.json().catch(() => ({}));
+        console.error(`[LOAD_PUBLIC_PROFILE] Error response:`, errorData);
+        showToast(`Profile could not be accessed.`, 'error');
         // Return to safe state via router
         window.history.replaceState({}, '', '/');
         if (window.checkRouteAuth) window.checkRouteAuth();
@@ -192,17 +206,19 @@ export async function loadPublicProfile(username, calculateLevel, applyTranslati
       }
 
       const checkData = await profileCheckResponse.json();
+      console.log(`[LOAD_PUBLIC_PROFILE] Check passed for "${username}":`, checkData);
+
       if (!checkData.success || !checkData.isPublic) {
-        console.warn('Profile is not public');
-        showToast(`✖ ${checkData.username || 'User'} has a private profile.`, 'error');
+        console.warn(`[LOAD_PUBLIC_PROFILE] Profile is private (success=${checkData.success}, isPublic=${checkData.isPublic})`);
+        showToast(`This profile is private.`, 'info');
         // Return to safe state via router
         window.history.replaceState({}, '', '/');
         if (window.checkRouteAuth) window.checkRouteAuth();
         return;
       }
     } catch (err) {
-      console.error('Error checking profile visibility:', err);
-      showToast('Unable to access profile. Please try again.', 'error');
+      console.error(`[LOAD_PUBLIC_PROFILE] Fetch error for "${username}":`, err.message || err);
+      showToast('Could not access profile. Please try again.', 'error');
       // Return to safe state via router
       window.history.replaceState({}, '', '/');
       if (window.checkRouteAuth) window.checkRouteAuth();
@@ -217,8 +233,8 @@ export async function loadPublicProfile(username, calculateLevel, applyTranslati
       .single();
 
     if (error || !stats) {
-      console.error('Error loading public profile:', error);
-      showToast('Profile could not be loaded.', 'error');
+      console.error(`[LOAD_PUBLIC_PROFILE] DB fetch failed for "${username}":`, error?.message || error);
+      showToast('Profile could not be loaded. Please try again.', 'error');
       // Return to safe state via router
       window.history.replaceState({}, '', '/');
       if (window.checkRouteAuth) window.checkRouteAuth();
@@ -229,8 +245,8 @@ export async function loadPublicProfile(username, calculateLevel, applyTranslati
     // Must be explicitly true, not null/undefined
     const isPublic = stats.public === true || stats.public === 'true';
     if (!isPublic) {
-      console.warn('Profile privacy verification failed - profile is private');
-      showToast(`✖ ${stats.username} has a private profile.`, 'error');
+      console.warn(`[LOAD_PUBLIC_PROFILE] LOCAL verification failed: public field is "${stats.public}" (type: ${typeof stats.public})`);
+      showToast(`This profile is private.`, 'info');
       // Return to safe state via router
       window.history.replaceState({}, '', '/');
       if (window.checkRouteAuth) window.checkRouteAuth();
@@ -302,7 +318,7 @@ export async function loadPublicProfile(username, calculateLevel, applyTranslati
     }
   } catch (err) {
     console.error('Error loading public profile:', err);
-    showToast('An unexpected error occurred. Returning to menu...', 'error');
+    showToast('Could not load profile. Please try again.', 'error');
     // Return to safe state via router
     window.history.replaceState({}, '', '/');
     if (window.checkRouteAuth) window.checkRouteAuth();
