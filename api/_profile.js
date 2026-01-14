@@ -179,6 +179,9 @@ export default async function handler(req, res) {
     if (action === 'changeUsername') {
       return await handleChangeUsername(req, res);
     }
+    if (action === 'updatePublicProfile') {
+      return await handleUpdatePublicProfile(req, res);
+    }
     
     // Friends actions
     if (action === 'fetchState') return await handleFetchState(req, res, body);
@@ -291,6 +294,50 @@ async function handleChangeUsername(req, res) {
     });
   } catch (error) {
     console.error('💥 Change username error:', error?.message || error);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+}
+
+async function handleUpdatePublicProfile(req, res) {
+  try {
+    const { userId, authToken, publicProfile } = req.body || {};
+
+    if (!userId || !authToken || typeof publicProfile !== 'boolean') {
+      return res.status(400).json({ error: 'Missing or invalid required fields' });
+    }
+
+    if (typeof userId !== 'string' || userId.length > 128) {
+      return res.status(400).json({ error: 'Invalid userId' });
+    }
+
+    if (typeof authToken !== 'string' || authToken.length > 8192) {
+      return res.status(400).json({ error: 'Invalid authToken' });
+    }
+
+    const session = await validateSessionAndFetchPlayerStats(supabase, authToken, userId, { select: 'user_id, public_profile' });
+    const { valid, error: sessionError } = session;
+    if (!valid) {
+      return res.status(401).json({ error: sessionError || 'Invalid session' });
+    }
+
+    const { error: updErr } = await supabase
+      .from('player_stats')
+      .update({
+        public_profile: publicProfile,
+        updated_at: new Date().toISOString()
+      })
+      .eq('user_id', userId);
+
+    if (updErr) {
+      return res.status(500).json({ error: 'Failed to update public profile setting' });
+    }
+
+    // Audit (non-blocking)
+    logAudit(supabase, userId, 'PUBLIC_PROFILE_UPDATED', { publicProfile }, req).catch(() => {});
+
+    return res.status(200).json({ success: true, publicProfile });
+  } catch (error) {
+    console.error('💥 Update public profile error:', error?.message || error);
     return res.status(500).json({ error: 'Internal server error' });
   }
 }

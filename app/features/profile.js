@@ -173,6 +173,12 @@ export async function loadPublicProfile(username, calculateLevel, applyTranslati
       return;
     }
 
+    // Check if the profile is public (default to true if not set)
+    if (stats.public_profile === false) {
+      showToast('This profile is private.', 'error');
+      return;
+    }
+
     const user = { id: stats.user_id, email: stats.email, username: stats.username };
 
     syncPublicProfileFriendButton({ user_id: user.id, username: stats.username });

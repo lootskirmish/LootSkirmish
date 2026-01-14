@@ -39,6 +39,11 @@ export async function loadSettingsData() {
     usernameChangeCount = Number(stats.username_change_count) || 0;
     updateUsernameUI();
     
+    // Sync public profile from DB to localStorage
+    if (stats.public_profile != null) {
+      localStorage.setItem('publicProfile', String(stats.public_profile));
+    }
+    
     // Garantir que listeners sejam ligados uma única vez e refletir preferências no UI
     bindSettingsUIOnce();
     applySavedPreferencesToUI();
@@ -104,12 +109,45 @@ function bindSettingsUIOnce() {
     if (checkbox.dataset.bound === '1') continue;
     checkbox.dataset.bound = '1';
 
-    checkbox.addEventListener('change', function() {
+    checkbox.addEventListener('change', async function() {
       localStorage.setItem(storageKey, String(this.checked));
 
       if (storageKey === 'soundEffects') {
         setSoundEnabled(this.checked);
         updateSoundChannelEnabledState();
+      }
+
+      if (storageKey === 'publicProfile') {
+        // Save to database
+        try {
+          const user = getActiveUser({ sync: true, allowStored: true }) || window.currentUser;
+          const session = await supabase.auth.getSession();
+          if (user?.id && session?.data?.session?.access_token) {
+            const response = await fetch('/api/_profile', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                action: 'updatePublicProfile',
+                userId: user.id,
+                authToken: session.data.session.access_token,
+                publicProfile: this.checked
+              })
+            });
+            if (!response.ok) {
+              console.error('Failed to update public profile setting');
+              // Revert localStorage if failed
+              localStorage.setItem(storageKey, String(!this.checked));
+              this.checked = !this.checked;
+              showToast('Failed to update setting', 'error');
+            }
+          }
+        } catch (err) {
+          console.error('Error updating public profile:', err);
+          // Revert
+          localStorage.setItem(storageKey, String(!this.checked));
+          this.checked = !this.checked;
+          showToast('Failed to update setting', 'error');
+        }
       }
 
       if (storageKey === 'soundEffects' || storageKey === 'backgroundMusic') {
