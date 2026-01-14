@@ -200,6 +200,54 @@ async function _loadProfileRoute() {
     const user = getActiveUser({ sync: true, allowStored: true });
 
     if (publicUsername) {
+      // GUARD: Perform strict server-side validation before attempting to load public profile
+      try {
+        const checkResponse = await fetch('/api/_profile', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'checkPublicProfile',
+            username: publicUsername.trim()
+          })
+        });
+
+        if (!checkResponse.ok) {
+          console.warn('Public profile check failed with status:', checkResponse.status);
+          // Return to safe state (menu)
+          if (window.showToast) window.showToast('This profile is private.', 'error');
+          window.history.replaceState({}, '', '/');
+          if (skeleton) skeleton.style.display = 'none';
+          if (content) content.style.display = 'block';
+          store.dispatch(dataActions.setProfileLoading(false));
+          window.publicProfileUsername = null;
+          return;
+        }
+
+        const checkData = await checkResponse.json();
+        if (!checkData.success || !checkData.isPublic) {
+          console.warn('Profile visibility check: profile is private');
+          // Return to safe state (menu)
+          if (window.showToast) window.showToast('This profile is private.', 'error');
+          window.history.replaceState({}, '', '/');
+          if (skeleton) skeleton.style.display = 'none';
+          if (content) content.style.display = 'block';
+          store.dispatch(dataActions.setProfileLoading(false));
+          window.publicProfileUsername = null;
+          return;
+        }
+      } catch (err) {
+        console.error('Error checking public profile visibility:', err);
+        // Return to safe state (menu) on error
+        if (window.showToast) window.showToast('Error accessing profile.', 'error');
+        window.history.replaceState({}, '', '/');
+        if (skeleton) skeleton.style.display = 'none';
+        if (content) content.style.display = 'block';
+        store.dispatch(dataActions.setProfileLoading(false));
+        window.publicProfileUsername = null;
+        return;
+      }
+
+      // Only proceed to load profile if check passed
       if (window.loadPublicProfile) {
         await window.loadPublicProfile(publicUsername, window.calculateLevel, window.applyTranslations);
       } else {

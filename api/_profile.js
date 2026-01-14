@@ -182,6 +182,9 @@ export default async function handler(req, res) {
     if (action === 'updatePublicProfile') {
       return await handleUpdatePublicProfile(req, res);
     }
+    if (action === 'checkPublicProfile') {
+      return await handleCheckPublicProfile(req, res);
+    }
     
     // Friends actions
     if (action === 'fetchState') return await handleFetchState(req, res, body);
@@ -314,21 +317,36 @@ async function handleUpdatePublicProfile(req, res) {
       return res.status(400).json({ error: 'Invalid authToken' });
     }
 
-    const session = await validateSessionAndFetchPlayerStats(supabase, authToken, userId, { select: 'user_id, public_profile' });
+    // Strict validation: Verify the user owns this userId
+    const session = await validateSessionAndFetchPlayerStats(supabase, authToken, userId, { select: 'user_id, public' });
     const { valid, error: sessionError } = session;
     if (!valid) {
+      logAudit(supabase, userId, 'PUBLIC_PROFILE_UNAUTHORIZED_ATTEMPT', { publicProfile }, req).catch(() => {});
       return res.status(401).json({ error: sessionError || 'Invalid session' });
+    }
+
+    // Verify user still exists in DB
+    const { data: userExists } = await supabase
+      .from('player_stats')
+      .select('user_id')
+      .eq('user_id', userId)
+      .single();
+
+    if (!userExists) {
+      logAudit(supabase, userId, 'PUBLIC_PROFILE_USER_NOT_FOUND', { publicProfile }, req).catch(() => {});
+      return res.status(404).json({ error: 'User not found' });
     }
 
     const { error: updErr } = await supabase
       .from('player_stats')
       .update({
-        public_profile: publicProfile,
+        public: publicProfile,
         updated_at: new Date().toISOString()
       })
       .eq('user_id', userId);
 
     if (updErr) {
+      logAudit(supabase, userId, 'PUBLIC_PROFILE_UPDATE_FAILED', { publicProfile, error: updErr.message }, req).catch(() => {});
       return res.status(500).json({ error: 'Failed to update public profile setting' });
     }
 
@@ -338,6 +356,55 @@ async function handleUpdatePublicProfile(req, res) {
     return res.status(200).json({ success: true, publicProfile });
   } catch (error) {
     console.error('💥 Update public profile error:', error?.message || error);
+    logAudit(supabase, req.body?.userId || null, 'PUBLIC_PROFILE_ERROR', { error: error?.message }, req).catch(() => {});
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+}
+
+/**
+ * Strictly check if a profile is public before allowing access
+ * This endpoint is for rigorous verification
+ */
+async function handleCheckPublicProfile(req, res) {
+  try {
+    const { username } = req.body || {};
+
+    if (!username || typeof username !== 'string') {
+      return res.status(400).json({ error: 'Missing or invalid username' });
+    }
+
+    if (username.length > 256) {
+      return res.status(400).json({ error: 'Invalid username' });
+    }
+
+    // Fetch profile without authentication - but only public field
+    const { data: profile, error } = await supabase
+      .from('player_stats')
+      .select('user_id, username, public')
+      .ilike('username', username)
+      .single();
+
+    if (error || !profile) {
+      // Don't expose whether profile exists or not
+      return res.status(404).json({ error: 'Profile not found' });
+    }
+
+    // Strict check: profile must be explicitly true
+    const isPublic = profile.public === true || profile.public === 'true';
+
+    // Audit access attempts
+    if (!isPublic) {
+      logAudit(supabase, profile.user_id, 'PRIVATE_PROFILE_ACCESS_ATTEMPT', { attemptedBy: getIdentifier(req) }, req).catch(() => {});
+    }
+
+    return res.status(200).json({
+      success: true,
+      isPublic,
+      username: profile.username,
+      userId: profile.user_id
+    });
+  } catch (error) {
+    console.error('💥 Check public profile error:', error?.message || error);
     return res.status(500).json({ error: 'Internal server error' });
   }
 }

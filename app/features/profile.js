@@ -11,6 +11,7 @@ import {
   showAlert
 } from '../shared/effects.js';
 import { syncPublicProfileFriendButton } from './friends.js';
+import { getActiveUser } from '../core/session.js';
 
 // Cache leve de DOM para reduzir query repetida (sem depender de telas sempre montadas)
 const _elCache = new Map();
@@ -160,7 +161,51 @@ export async function loadProfileData(user, calculateLevel, applyTranslations) {
 
 export async function loadPublicProfile(username, calculateLevel, applyTranslations) {
   try {
-    if (!username) return;
+    if (!username || typeof username !== 'string') {
+      console.error('Invalid username provided');
+      showAlert('error', 'Invalid Profile', 'Profile could not be loaded.');
+      // Return to safe state
+      window.location.pathname = '/';
+      return;
+    }
+
+    // First, perform a STRICT server-side validation using the checkPublicProfile endpoint
+    let profileCheckResponse;
+    try {
+      profileCheckResponse = await fetch('/api/_profile', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'checkPublicProfile',
+          username: username.trim()
+        })
+      });
+
+      if (!profileCheckResponse.ok) {
+        console.error('Profile check failed:', profileCheckResponse.status);
+        showToast('This profile is private.', 'error');
+        // Return to safe state
+        window.location.pathname = '/';
+        return;
+      }
+
+      const checkData = await profileCheckResponse.json();
+      if (!checkData.success || !checkData.isPublic) {
+        console.warn('Profile is not public');
+        showToast('This profile is private.', 'error');
+        // Return to safe state
+        window.location.pathname = '/';
+        return;
+      }
+    } catch (err) {
+      console.error('Error checking profile visibility:', err);
+      showToast('Error accessing profile.', 'error');
+      // Return to safe state
+      window.location.pathname = '/';
+      return;
+    }
+
+    // Now load the profile data
     const { data: stats, error } = await supabase
       .from('player_stats')
       .select('*')
@@ -170,17 +215,32 @@ export async function loadPublicProfile(username, calculateLevel, applyTranslati
     if (error || !stats) {
       console.error('Error loading public profile:', error);
       showAlert('error', 'Profile Not Found', 'This profile could not be loaded.');
+      // Return to safe state
+      window.location.pathname = '/';
       return;
     }
 
-    // Check if the profile is public (default to true if not set)
-    if (stats.public_profile === false) {
+    // CRITICAL: Double-check privacy setting locally (defense in depth)
+    // Must be explicitly true, not null/undefined
+    const isPublic = stats.public === true || stats.public === 'true';
+    if (!isPublic) {
+      console.warn('Profile privacy verification failed - profile is private');
       showToast('This profile is private.', 'error');
+      // Return to safe state
+      window.location.pathname = '/';
+      return;
+    }
+
+    // CRITICAL: Verify it's not the current user's own profile being loaded in public mode
+    const currentUser = getActiveUser({ sync: true, allowStored: true });
+    if (currentUser && stats.user_id === currentUser.id) {
+      // Should load own profile, not public profile
+      console.warn('Redirecting to own profile');
+      window.location.pathname = '/profile';
       return;
     }
 
     const user = { id: stats.user_id, email: stats.email, username: stats.username };
-
     syncPublicProfileFriendButton({ user_id: user.id, username: stats.username });
 
     setText('profile-username', stats.username ?? '');
@@ -230,8 +290,13 @@ export async function loadPublicProfile(username, calculateLevel, applyTranslati
     }
 
     setProfileViewMode(true);
+    if (applyTranslations) {
+      await applyTranslations();
+    }
   } catch (err) {
     console.error('Error loading public profile:', err);
+    // Return to safe state
+    window.location.pathname = '/';
   }
 }
 

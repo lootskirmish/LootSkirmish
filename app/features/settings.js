@@ -40,8 +40,8 @@ export async function loadSettingsData() {
     updateUsernameUI();
     
     // Sync public profile from DB to localStorage
-    if (stats.public_profile != null) {
-      localStorage.setItem('publicProfile', String(stats.public_profile));
+    if (stats.public != null) {
+      localStorage.setItem('publicProfile', String(stats.public));
     }
     
     // Garantir que listeners sejam ligados uma única vez e refletir preferências no UI
@@ -110,44 +110,113 @@ function bindSettingsUIOnce() {
     checkbox.dataset.bound = '1';
 
     checkbox.addEventListener('change', async function() {
+      // For publicProfile, handle specially with rigorous validation
+      if (storageKey === 'publicProfile') {
+        const wasChecked = this.checked;
+        const previousState = localStorage.getItem(storageKey) === 'true';
+        
+        try {
+          const user = getActiveUser({ sync: true, allowStored: true }) || window.currentUser;
+          const session = await supabase.auth.getSession();
+          
+          if (!user?.id) {
+            console.error('No user found for public profile update');
+            this.checked = previousState;
+            showToast('Error: User not found', 'error');
+            return;
+          }
+
+          if (!session?.data?.session?.access_token) {
+            console.error('No valid session for public profile update');
+            this.checked = previousState;
+            showToast('Error: Session expired. Please refresh.', 'error');
+            return;
+          }
+
+          // Show loading state
+          const originalText = this.nextElementSibling?.textContent;
+          if (this.nextElementSibling) {
+            this.nextElementSibling.textContent = 'Saving...';
+          }
+
+          const response = await fetch('/api/_profile', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              action: 'updatePublicProfile',
+              userId: user.id,
+              authToken: session.data.session.access_token,
+              publicProfile: wasChecked
+            })
+          });
+
+          if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            console.error('Failed to update public profile setting:', response.status, errorData);
+            
+            // Revert all changes
+            this.checked = previousState;
+            localStorage.setItem(storageKey, String(previousState));
+            
+            if (this.nextElementSibling) {
+              this.nextElementSibling.textContent = originalText;
+            }
+            
+            const errorMsg = wasChecked 
+              ? 'Failed to make profile public'
+              : 'Failed to make profile private';
+            showToast(errorMsg, 'error');
+            return;
+          }
+
+          const data = await response.json();
+          if (!data.success) {
+            // Revert all changes
+            this.checked = previousState;
+            localStorage.setItem(storageKey, String(previousState));
+            
+            if (this.nextElementSibling) {
+              this.nextElementSibling.textContent = originalText;
+            }
+            
+            showToast('Failed to update profile privacy setting', 'error');
+            return;
+          }
+
+          // Success! Update localStorage
+          localStorage.setItem(storageKey, String(wasChecked));
+          
+          if (this.nextElementSibling) {
+            this.nextElementSibling.textContent = originalText;
+          }
+
+          // Show success message
+          const successMsg = wasChecked 
+            ? '✓ Your profile is now public' 
+            : '✓ Your profile is now private';
+          showToast(successMsg, 'success');
+
+          // Play feedback sound
+          playSound('switch', { volume: 0.3 });
+
+        } catch (err) {
+          console.error('Error updating public profile:', err);
+          
+          // Revert all changes
+          this.checked = previousState;
+          localStorage.setItem(storageKey, String(previousState));
+          
+          showToast('Error updating profile privacy setting', 'error');
+        }
+        return; // Exit early, don't do the general localStorage update below
+      }
+
+      // For other settings, do the regular update
       localStorage.setItem(storageKey, String(this.checked));
 
       if (storageKey === 'soundEffects') {
         setSoundEnabled(this.checked);
         updateSoundChannelEnabledState();
-      }
-
-      if (storageKey === 'publicProfile') {
-        // Save to database
-        try {
-          const user = getActiveUser({ sync: true, allowStored: true }) || window.currentUser;
-          const session = await supabase.auth.getSession();
-          if (user?.id && session?.data?.session?.access_token) {
-            const response = await fetch('/api/_profile', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                action: 'updatePublicProfile',
-                userId: user.id,
-                authToken: session.data.session.access_token,
-                publicProfile: this.checked
-              })
-            });
-            if (!response.ok) {
-              console.error('Failed to update public profile setting');
-              // Revert localStorage if failed
-              localStorage.setItem(storageKey, String(!this.checked));
-              this.checked = !this.checked;
-              showToast('Failed to update setting', 'error');
-            }
-          }
-        } catch (err) {
-          console.error('Error updating public profile:', err);
-          // Revert
-          localStorage.setItem(storageKey, String(!this.checked));
-          this.checked = !this.checked;
-          showToast('Failed to update setting', 'error');
-        }
       }
 
       if (storageKey === 'soundEffects' || storageKey === 'backgroundMusic') {
