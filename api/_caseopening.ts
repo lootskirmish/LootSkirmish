@@ -1,9 +1,8 @@
-// @ts-nocheck
 // ============================================================
-// API/CASEOPENING.JS - BACKEND (FIXED & COMPLETE)
+// API/CASEOPENING.TS - BACKEND (FIXED & COMPLETE)
 // ============================================================
 
-import { createClient } from '@supabase/supabase-js';
+import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import crypto from 'crypto';
 import { applyCors, validateSessionAndFetchPlayerStats, logMoneyTransactionAsync } from './_utils.js';
 import { applyReferralCommissionForSpend } from './_referrals.js';
@@ -11,16 +10,82 @@ import { applyReferralCommissionForSpend } from './_referrals.js';
 import dotenv from 'dotenv';
 dotenv.config();
 
-const supabase = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_KEY
+// ============================================================
+// TYPES
+// ============================================================
+
+interface ApiRequest {
+  method?: string;
+  body?: any;
+  headers?: Record<string, string | string[] | undefined>;
+  connection?: { remoteAddress?: string };
+}
+
+interface ApiResponse {
+  status: (code: number) => ApiResponse;
+  json: (data: any) => void;
+  end: (data?: any) => void;
+  setHeader: (key: string, value: string) => void;
+}
+
+interface Rarity {
+  name: string;
+  chance: number;
+  color: string;
+  icon: string;
+}
+
+interface CaseItem {
+  name: string;
+  icon: string;
+  minValue: number;
+  maxValue: number;
+  rarityIndex: number;
+}
+
+interface CaseDefinition {
+  id: string;
+  name: string;
+  icon: string;
+  price: number;
+  color: string;
+  items: CaseItem[];
+}
+
+interface PassConfig {
+  id: string;
+  name: string;
+  cost: number;
+  requires: string | null;
+}
+
+interface PassesConfig {
+  quick_roll: PassConfig;
+  multi_2x: PassConfig;
+  multi_3x: PassConfig;
+  multi_4x: PassConfig;
+}
+
+interface OpenedItem {
+  name: string;
+  icon: string;
+  value: number;
+  rarity: string;
+  rarityColor: string;
+  rarityIcon: string;
+  color?: string;
+}
+
+const supabase: SupabaseClient = createClient(
+  process.env.SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_KEY!
 );
 
 // ============================================================
 // CONSTANTS
 // ============================================================
 
-const RARITIES = [
+const RARITIES: Rarity[] = [
   { name: 'Common', chance: 55, color: '#9ca3af', icon: '⚪' },
   { name: 'Uncommon', chance: 25, color: '#22c55e', icon: '🟢' },
   { name: 'Rare', chance: 12, color: '#3b82f6', icon: '🔵' },
@@ -29,7 +94,7 @@ const RARITIES = [
   { name: 'Mythic', chance: 0.5, color: '#ef4444', icon: '🔴' }
 ];
 
-const OPENING_CASES = [
+const OPENING_CASES: CaseDefinition[] = [
   // Cases organizadas por valor crescente - sincronizado com o frontend
   {
     id: 'starter_box',
@@ -214,11 +279,11 @@ const OPENING_CASES = [
   }
 ];
 
-function getCaseById(caseId) {
+function getCaseById(caseId: string): CaseDefinition | undefined {
   return OPENING_CASES.find(c => c.id === caseId);
 }
 
-function getRarityByIndex(index) {
+function getRarityByIndex(index: number): Rarity {
   return RARITIES[Math.min(index, RARITIES.length - 1)];
 }
 
@@ -226,7 +291,7 @@ function getRarityByIndex(index) {
 // PASSES CONFIG (DUPLICADO DO FRONTEND)
 // ============================================================
 
-const PASSES_CONFIG = {
+const PASSES_CONFIG: PassesConfig = {
   quick_roll: {
     id: 'quick_roll',
     name: 'Quick Roll',
@@ -253,21 +318,21 @@ const PASSES_CONFIG = {
   }
 };
 
-function getPassConfig(passId) {
-  return PASSES_CONFIG[passId] || null;
+function getPassConfig(passId: string): PassConfig | null {
+  return (PASSES_CONFIG as any)[passId] || null;
 }
 
 // ============================================================
 // SECURE RNG
 // ============================================================
 
-function generateSecureSeed(userId, caseId, timestamp) {
+function generateSecureSeed(userId: string, caseId: string, timestamp: number): string {
   const randomBytes = crypto.randomBytes(32).toString('hex');
   const nonce = crypto.randomInt(0, 1000000);
   return `case-${userId}-${caseId}-${timestamp}-${nonce}-${randomBytes}`;
 }
 
-function seededRandom(seed) {
+function seededRandom(seed: string | number): number {
   let seedValue = 0;
   const seedStr = String(seed);
   
@@ -280,7 +345,7 @@ function seededRandom(seed) {
   return x - Math.floor(x);
 }
 
-function createSeededRNG(seed) {
+function createSeededRNG(seed: string | number): () => number {
   let seedValue = 0;
   const seedStr = String(seed);
   
@@ -299,12 +364,18 @@ function createSeededRNG(seed) {
 // ITEM GENERATION
 // ============================================================
 
-function buildAdjustedPools(caseData) {
-  const pools = [];
+interface AdjustedPool {
+  item: CaseItem;
+  rarity: Rarity;
+  cumulative: number;
+}
+
+function buildAdjustedPools(caseData: CaseDefinition): AdjustedPool[] {
+  const pools: AdjustedPool[] = [];
   const buckets = RARITIES.map((rarity, idx) => {
     const items = caseData.items.filter((it) => it.rarityIndex === idx);
     return items.length ? { rarity, items } : null;
-  }).filter(Boolean);
+  }).filter((b): b is { rarity: Rarity; items: CaseItem[] } => b !== null);
 
   if (!buckets.length) return pools;
 
@@ -324,7 +395,7 @@ function buildAdjustedPools(caseData) {
   return pools;
 }
 
-function generateItemSeeded(caseData, seed) {
+function generateItemSeeded(caseData: CaseDefinition, seed: string | number): OpenedItem | null {
   const rng = createSeededRNG(seed);
   const pools = buildAdjustedPools(caseData);
   if (!pools.length) {
@@ -337,7 +408,7 @@ function generateItemSeeded(caseData, seed) {
       icon: fallback.icon,
       rarity: rarity.name,
       rarityIcon: rarity.icon,
-      color: rarity.color,
+      rarityColor: rarity.color,
       value: parseFloat(mid.toFixed(2))
     };
   }
@@ -351,7 +422,7 @@ function generateItemSeeded(caseData, seed) {
     icon: hit.item.icon,
     rarity: hit.rarity.name,
     rarityIcon: hit.rarity.icon,
-    color: hit.rarity.color,
+    rarityColor: hit.rarity.color,
     value: parseFloat(itemValue.toFixed(2))
   };
 }
@@ -360,7 +431,7 @@ function generateItemSeeded(caseData, seed) {
 // BALANCE MANAGEMENT
 // ============================================================
 
-async function updatePlayerBalance(userId, amount, reason, casesOpened = 0) {
+async function updatePlayerBalance(userId: string, amount: number, reason: string, casesOpened: number = 0): Promise<number> {
   try {
     if (!userId || typeof userId !== 'string') {
       throw new Error('Invalid userId');
@@ -394,7 +465,7 @@ async function updatePlayerBalance(userId, amount, reason, casesOpened = 0) {
       throw new Error('RPC returned no data');
     }
 
-    const newBalance = rpcResult[0].new_money;
+    const newBalance = (rpcResult[0] as any).new_money;
     
     // Registrar transação na nova estrutura otimizada (non-blocking)
     logMoneyTransactionAsync(supabase, userId, amount, reason, newBalance);
@@ -412,7 +483,7 @@ async function updatePlayerBalance(userId, amount, reason, casesOpened = 0) {
     return newBalance;
     
   } catch (error) {
-    console.error('💥 updatePlayerBalance error:', error.message);
+    console.error('💥 updatePlayerBalance error:', error instanceof Error ? error.message : error);
     throw error;
   }
 }
@@ -421,7 +492,7 @@ async function updatePlayerBalance(userId, amount, reason, casesOpened = 0) {
 // SESSION VALIDATION
 // ============================================================
 
-async function validateSession(authToken, expectedUserId) {
+async function validateSession(authToken: string, expectedUserId: string): Promise<any> {
   return validateSessionAndFetchPlayerStats(supabase, authToken, expectedUserId, { select: 'user_id' });
 }
 
@@ -429,7 +500,7 @@ async function validateSession(authToken, expectedUserId) {
 // PREVIEW GENERATION (NOVO)
 // ============================================================
 
-export async function handleGeneratePreview(req, res) {
+export async function handleGeneratePreview(req: ApiRequest, res: ApiResponse) {
   try {
     const { caseId, quantity } = req.body;
     
@@ -472,15 +543,20 @@ export async function handleGeneratePreview(req, res) {
 // INVENTORY CAPACITY CHECK
 // ============================================================
 
-async function checkInventoryCapacity(userId, quantity) {
+interface CapacityCheckResult {
+  valid: boolean;
+  error?: string;
+  current?: number;
+  max?: number;
+  available?: number;
+}
+
+async function checkInventoryCapacity(userId: string, quantity: number, providedMax?: number): Promise<CapacityCheckResult> {
   try {
     // max_inventory can be passed in by caller to avoid extra query
     let maxCapacity = 15;
-    if (arguments.length >= 3) {
-      const providedMax = arguments[2];
-      if (typeof providedMax === 'number' && Number.isFinite(providedMax) && providedMax > 0) {
-        maxCapacity = providedMax;
-      }
+    if (providedMax !== undefined && typeof providedMax === 'number' && Number.isFinite(providedMax) && providedMax > 0) {
+      maxCapacity = providedMax;
     } else {
       const { data: stats, error: statsError } = await supabase
         .from('player_stats')
@@ -492,7 +568,7 @@ async function checkInventoryCapacity(userId, quantity) {
         return { valid: false, error: 'Failed to fetch inventory limit' };
       }
 
-      maxCapacity = stats.max_inventory || 15;
+      maxCapacity = (stats as any).max_inventory || 15;
     }
     
     // Contar itens atuais
@@ -531,7 +607,7 @@ async function checkInventoryCapacity(userId, quantity) {
 // MAIN HANDLER - OPEN CASES (ATUALIZADO)
 // ============================================================
 
-export async function handleOpenCases(req, res) {
+export async function handleOpenCases(req: ApiRequest, res: ApiResponse) {
   try {
     const { userId, authToken, caseId, quantity } = req.body;
 
@@ -545,7 +621,7 @@ export async function handleOpenCases(req, res) {
     }
 
     // Validar pass requerido para quantidade
-    const MULTI_REQUIREMENTS = {
+    const MULTI_REQUIREMENTS: Record<number, string | null> = {
       1: null,
       2: 'multi_2x',
       3: 'multi_3x',
@@ -558,7 +634,7 @@ export async function handleOpenCases(req, res) {
         select: 'unlocked_passes'
       });
       
-      const userPasses = session.stats?.unlocked_passes || [];
+      const userPasses = (session.stats as any)?.unlocked_passes || [];
       
       if (!userPasses.includes(requiredPass)) {
         const passConfig = getPassConfig(requiredPass);
@@ -618,14 +694,14 @@ export async function handleOpenCases(req, res) {
         qty
       );
     } catch (error) {
-      console.error('❌ Failed to deduct cost:', error.message);
-      if (error.message === 'Insufficient funds') {
+      console.error('❌ Failed to deduct cost:', error instanceof Error ? error.message : error);
+      if (error instanceof Error && error.message === 'Insufficient funds') {
         return res.status(400).json({ error: 'Insufficient funds' });
       }
-      if (error.message === 'Balance changed. Please try again.') {
+      if (error instanceof Error && error.message === 'Balance changed. Please try again.') {
         return res.status(409).json({ error: error.message });
       }
-      return res.status(500).json({ error: error.message || 'Failed to update balance' });
+      return res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to update balance' });
     }
     
     // 🔥 PASSO 2: GERAR 96 ITENS + ESCOLHER ÍNDICE VENCEDOR
@@ -659,17 +735,17 @@ export async function handleOpenCases(req, res) {
       winners.push(winner);
     }
     
-    const totalValue = parseFloat(winners.reduce((sum, item) => sum + item.value, 0).toFixed(2));
+    const totalValue = parseFloat(winners.reduce((sum, item) => sum + (item?.value || 0), 0).toFixed(2));
     
     // 🔥 PASSO 3: ADICIONAR ITENS AO INVENTÁRIO (ESTRUTURA CORRETA)
     // Se falhar aqui, reembolsa o usuário para evitar cobrar sem entregar itens.
     try {
       const inventoryItems = winners.map(item => ({
         user_id: userId,
-        item_name: item.name,
-        rarity: item.rarity,
-        color: item.color,
-        value: item.value,
+        item_name: item?.name || 'Unknown',
+        rarity: item?.rarity || 'Unknown',
+        color: item?.rarityColor || '#999999',
+        value: item?.value || 0,
         case_name: caseData.name,
         obtained_at: new Date().toISOString()
       }));
@@ -693,7 +769,7 @@ export async function handleOpenCases(req, res) {
             newBalance: refundedBalance
           });
         } catch (refundErr) {
-          console.error('💥 Refund failed after inventory insert failure:', refundErr?.message || refundErr);
+          console.error('💥 Refund failed after inventory insert failure:', refundErr instanceof Error ? refundErr.message : refundErr);
           return res.status(500).json({
             error: 'Failed to add items to inventory',
             refunded: false
@@ -716,7 +792,7 @@ export async function handleOpenCases(req, res) {
           newBalance: refundedBalance
         });
       } catch (refundErr) {
-        console.error('💥 Refund failed after inventory exception:', refundErr?.message || refundErr);
+        console.error('💥 Refund failed after inventory exception:', refundErr instanceof Error ? refundErr.message : refundErr);
         return res.status(500).json({
           error: 'Failed to add items to inventory',
           refunded: false
@@ -725,7 +801,7 @@ export async function handleOpenCases(req, res) {
     }
     
     // 🔥 PASSO 4: ATUALIZAR BEST_DROP
-    const bestDrop = Math.max(...winners.map(i => i.value), 0);
+    const bestDrop = Math.max(...winners.filter(i => i !== null).map(i => i!.value), 0);
     if (bestDrop > 0) {
       try {
         await supabase.rpc('update_best_drop', {
@@ -733,7 +809,7 @@ export async function handleOpenCases(req, res) {
           p_new_drop: bestDrop
         });
       } catch (err) {
-        console.error('⚠️ Failed to update best_drop:', err.message);
+        console.error('⚠️ Failed to update best_drop:', err instanceof Error ? err.message : err);
       }
     }
     
@@ -741,11 +817,11 @@ export async function handleOpenCases(req, res) {
     try {
       const rows = winners.map((item) => ({
         user_id: userId,
-        username: stats.username,
-        item_name: item.name,
-        rarity: item.rarity,
-        color: item.color,
-        value: parseFloat(item.value),
+        username: (stats as any).username,
+        item_name: item?.name || 'Unknown',
+        rarity: item?.rarity || 'Unknown',
+        color: item?.rarityColor || '#999999',
+        value: item?.value || 0,
         drop_type: 'case_opening',
         created_at: new Date().toISOString(),
       }));
@@ -758,11 +834,11 @@ export async function handleOpenCases(req, res) {
         const insertPromises = winners.map((item) =>
           supabase.rpc('insert_drop_history', {
             p_user_id: userId,
-            p_username: stats.username,
-            p_item_name: item.name,
-            p_rarity: item.rarity,
-            p_color: item.color,
-            p_value: parseFloat(item.value),
+            p_username: (stats as any).username,
+            p_item_name: item?.name || 'Unknown',
+            p_rarity: item?.rarity || 'Unknown',
+            p_color: item?.rarityColor || '#999999',
+            p_value: item?.value || 0,
             p_drop_type: 'case_opening',
           })
         );
@@ -774,24 +850,25 @@ export async function handleOpenCases(req, res) {
         }
       }
     } catch (err) {
-      console.error('💥 Drop insert exception:', err.message);
+      console.error('💥 Drop insert exception:', err instanceof Error ? err.message : err);
     }
 
     // 🔥 PASSO 6: NOTIFICAR NO CHAT SE HOUVER DROPS LEGENDARY+
     const legendaryOrBetter = winners.filter(item => 
-      ['Legendary', 'Mythic'].includes(item.rarity)
+      item && ['Legendary', 'Mythic'].includes(item.rarity)
     );
 
     if (legendaryOrBetter.length > 0) {
       try {
         const notifyPromises = legendaryOrBetter.map((item) => {
-          const message = `${stats.username} just dropped ${item.rarityIcon} ${item.name} ($${item.value}) from ${caseData.name}!`;
+          if (!item) return Promise.resolve(null);
+          const message = `${(stats as any).username} just dropped ${item.rarityIcon} ${item.name} ($${item.value}) from ${caseData.name}!`;
           return supabase.rpc('insert_chat_notification', {
             p_user_id: userId,
-            p_username: stats.username,
+            p_username: (stats as any).username,
             p_message: message,
-            p_user_level: stats.level || 1,
-            p_avatar_url: stats.avatar_url || null,
+            p_user_level: (stats as any).level || 1,
+            p_avatar_url: (stats as any).avatar_url || null,
           });
         });
 
@@ -801,7 +878,7 @@ export async function handleOpenCases(req, res) {
           console.error('❌ Failed to send drop notifications:', notifyErrors.length);
         }
       } catch (err) {
-        console.error('💥 Exception sending drop notification:', err.message);
+        console.error('💥 Exception sending drop notification:', err instanceof Error ? err.message : err);
       }
     }
     
@@ -829,7 +906,7 @@ export async function handleOpenCases(req, res) {
 // PURCHASE PASS HANDLER
 // ============================================================
 
-export async function handlePurchasePass(req, res) {
+export async function handlePurchasePass(req: ApiRequest, res: ApiResponse) {
   try {
     const { userId, authToken, passId, cost, requiredPass } = req.body;
 
@@ -925,7 +1002,7 @@ export async function handlePurchasePass(req, res) {
 // EXPORT
 // ============================================================
 
-export default async function handler(req, res) {
+export default async function handler(req: ApiRequest, res: ApiResponse) {
   applyCors(req, res);
   
   if (req.method === 'OPTIONS') {
@@ -961,12 +1038,12 @@ export default async function handler(req, res) {
 // CASE DISCOUNT UPGRADE (money-based, +1% por nível, máx 40%)
 // ============================================================
 
-function calcDiscountUpgradeCost(level) {
+function calcDiscountUpgradeCost(level: number): number {
   // level é o nível atual; custo do próximo upgrade
   return Math.round(100 * Math.pow(1.38, level));
 }
 
-export async function handleUpgradeCaseDiscount(req, res) {
+export async function handleUpgradeCaseDiscount(req: ApiRequest, res: ApiResponse) {
   try {
     const { userId, authToken } = req.body;
 
@@ -1005,14 +1082,14 @@ export async function handleUpgradeCaseDiscount(req, res) {
         0
       );
     } catch (err) {
-      console.error('❌ Failed to charge discount upgrade:', err.message);
-      if (err.message === 'Insufficient funds') {
+      console.error('❌ Failed to charge discount upgrade:', err instanceof Error ? err.message : err);
+      if (err instanceof Error && err.message === 'Insufficient funds') {
         return res.status(400).json({ error: 'INSUFFICIENT_FUNDS' });
       }
-      if (err.message === 'Balance changed. Please try again.') {
+      if (err instanceof Error && err.message === 'Balance changed. Please try again.') {
         return res.status(409).json({ error: err.message });
       }
-      return res.status(500).json({ error: err.message || 'Failed to update balance' });
+      return res.status(500).json({ error: err instanceof Error ? err.message : 'Failed to update balance' });
     }
 
     const newLevel = currentLevel + 1;
@@ -1035,7 +1112,7 @@ export async function handleUpgradeCaseDiscount(req, res) {
           0
         );
       } catch (refundErr) {
-        console.error('💥 Refund failed after upgrade persist error:', refundErr?.message || refundErr);
+        console.error('💥 Refund failed after upgrade persist error:', refundErr instanceof Error ? refundErr.message : refundErr);
       }
       return res.status(500).json({ error: 'Failed to save discount level' });
     }

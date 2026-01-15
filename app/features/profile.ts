@@ -135,6 +135,12 @@ function formatNumber(value: number | string, decimals: number = 2): string {
 export async function loadProfileData(user: User, calculateLevel?: (xp: number) => LevelInfo, applyTranslations?: () => void): Promise<void> {
   try {
     if (!user?.id) return;
+    
+    // CRÍTICO: Limpar contexto de perfil público ao carregar próprio perfil
+    if ((window as any).publicProfileUsername) {
+      (window as any).publicProfileUsername = null;
+    }
+    setProfileViewMode(false); // Garantir modo privado
     syncPublicProfileFriendButton(null);
     
     const { data: stats, error } = await supabase

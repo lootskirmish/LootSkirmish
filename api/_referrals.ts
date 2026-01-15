@@ -1,9 +1,8 @@
-// @ts-nocheck
 // ============================================================
-// API/_REFERRALS.JS - Referrals & Commission System
+// API/_REFERRALS.TS - Referrals & Commission System
 // ============================================================
 
-import { createClient } from '@supabase/supabase-js';
+import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import dotenv from 'dotenv';
 import {
   applyCors,
@@ -17,9 +16,61 @@ import {
 
 dotenv.config();
 
-const supabase = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_KEY
+// ============================================================
+// TYPES
+// ============================================================
+
+interface ApiRequest {
+  method?: string;
+  body?: Record<string, any>;
+  headers?: Record<string, string | string[] | undefined>;
+  connection?: { remoteAddress?: string };
+}
+
+interface ApiResponse {
+  status: (code: number) => ApiResponse;
+  json: (data: any) => void;
+  end: (data?: any) => void;
+  setHeader: (key: string, value: string) => void;
+}
+
+interface CommissionTier {
+  rate: number;
+  label: string;
+  min: number;
+  max: number;
+}
+
+interface RecordPayoutParams {
+  referrerId: string;
+  referredId?: string | null;
+  amount: number;
+  type: string;
+  source: string;
+  meta?: Record<string, any> | null;
+  req?: ApiRequest | null;
+}
+
+interface ApplyCommissionParams {
+  supabase: SupabaseClient;
+  spenderId: string;
+  amountSpent: number;
+  reason: string;
+  source?: string;
+  req?: ApiRequest | null;
+}
+
+interface ApplyDiamondBonusParams {
+  supabase: SupabaseClient;
+  buyerId: string;
+  diamondsBought: number;
+  source?: string;
+  req?: ApiRequest | null;
+}
+
+const supabase: SupabaseClient = createClient(
+  process.env.SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_KEY!
 );
 
 // ============================================================
@@ -52,13 +103,13 @@ export const REFERRAL_EVENT_TYPES = {
   DAILY_INTEREST: 'daily_interest'
 };
 
-function normalizeNumber(value, fallback = 0) {
+function normalizeNumber(value: any, fallback: number = 0): number {
   const num = Number(value);
   if (!Number.isFinite(num)) return fallback;
   return num;
 }
 
-export function getCommissionTier(referralCount = 0) {
+export function getCommissionTier(referralCount: number = 0): CommissionTier {
   const count = normalizeNumber(referralCount, 0);
   const tier = REFERRAL_TIERS.find(t => count >= t.min && count <= t.max) || REFERRAL_TIERS[0];
   return {
@@ -69,13 +120,13 @@ export function getCommissionTier(referralCount = 0) {
   };
 }
 
-export function getDiamondBonusForPackage(diamondsAmount = 0) {
+export function getDiamondBonusForPackage(diamondsAmount: number = 0): number {
   const amount = normalizeNumber(diamondsAmount, 0);
   const match = DIAMOND_BONUSES.find(entry => amount >= entry.min && amount <= entry.max);
   return match ? match.bonus : 0;
 }
 
-async function fetchReferrerId(referredId, sbInstance = null) {
+async function fetchReferrerId(referredId: string, sbInstance: SupabaseClient | null = null): Promise<string | null> {
   const sb = sbInstance || supabase;
   if (!referredId) return null;
   const { data, error } = await sb
@@ -93,7 +144,7 @@ async function fetchReferrerId(referredId, sbInstance = null) {
   return data?.referrer_id || null;
 }
 
-async function countReferrals(referrerId, sbInstance = null) {
+async function countReferrals(referrerId: string, sbInstance: SupabaseClient | null = null): Promise<number> {
   const sb = sbInstance || supabase;
   if (!referrerId) return 0;
   const { count, error } = await sb
@@ -116,7 +167,7 @@ async function recordReferralPayout({
   source,
   meta,
   req
-}) {
+}: RecordPayoutParams): Promise<any> {
   if (!referrerId || !amount || amount <= 0) return null;
 
   try {
@@ -131,11 +182,12 @@ async function recordReferralPayout({
       });
 
     if (!error) {
-      if (req) logAudit(supabase, referrerId, 'REFERRAL_PAYOUT', { amount, type, source }, req).catch(() => {});
+      if (req) logAudit(supabase, referrerId, 'REFERRAL_PAYOUT', { amount, type, source }, req as any).catch(() => {});
       return data;
     }
   } catch (err) {
-    console.warn('referral: RPC apply_referral_payout unavailable, using fallback', err?.message || err);
+    const error = err as any;
+    console.warn('referral: RPC apply_referral_payout unavailable, using fallback', error?.message || error);
   }
 
   const metadata = {
@@ -151,7 +203,7 @@ async function recordReferralPayout({
     metadata
   });
 
-  if (req) logAudit(supabase, referrerId, 'REFERRAL_PAYOUT_FALLBACK', { amount, type, source }, req).catch(() => {});
+  if (req) logAudit(supabase, referrerId, 'REFERRAL_PAYOUT_FALLBACK', { amount, type, source }, req as any).catch(() => {});
 
   return { pending_balance: null, total_earned: null };
 }
@@ -163,7 +215,7 @@ export async function applyReferralCommissionForSpend({
   reason,
   source = 'spend',
   req = null
-}) {
+}: ApplyCommissionParams): Promise<void> {
   if (!sb || !spenderId) return;
   const spent = normalizeNumber(amountSpent, 0);
   if (spent <= 0) return;
@@ -198,7 +250,7 @@ export async function applyReferralDiamondBonus({
   diamondsBought,
   source = 'diamond_purchase',
   req = null
-}) {
+}: ApplyDiamondBonusParams): Promise<void> {
   if (!sb || !buyerId) {
     console.warn('referral diamond bonus: missing supabase or buyerId');
     return;
@@ -233,15 +285,16 @@ export async function applyReferralDiamondBonus({
   });
 }
 
-export async function getReferralSnapshot(userId, { limit = 10, offset = 0 } = {}) {
+export async function getReferralSnapshot(userId: string, { limit = 10, offset = 0 }: { limit?: number; offset?: number } = {}): Promise<any> {
   // 🔥 VERDADE ABSOLUTA: referral_balances é a fonte única
-  const { data: balance, error: balanceError } = await supabase
+  const { data: balanceResult, error: balanceError } = await supabase
     .from('referral_balances')
     .select('*')
     .eq('referrer_id', userId)
     .single();
 
   // Se não existe, criar com zeros (trigger vai manter sincronizado)
+  let balance = balanceResult;
   if (balanceError || !balance) {
     const { data: newBalance, error: insertError } = await supabase
       .from('referral_balances')
@@ -302,32 +355,32 @@ export async function getReferralSnapshot(userId, { limit = 10, offset = 0 } = {
 // ============================================================
 
 const rateLimits = new Map();
-let lastRateLimitCleanupAt = 0;
+let lastRateLimitCleanupAt: number = 0;
 
-function maybeCleanupRateLimits() {
+function maybeCleanupRateLimits(): void {
   const now = Date.now();
   if (now - lastRateLimitCleanupAt < 5 * 60_000) return;
   lastRateLimitCleanupAt = now;
   cleanupOldEntries(rateLimits, { maxIdleMs: 15 * 60_000 });
 }
 
-async function validateSession(authToken, expectedUserId) {
+async function validateSession(authToken: string, expectedUserId: string): Promise<any> {
   return validateSessionAndFetchPlayerStats(supabase, authToken, expectedUserId, { select: 'user_id, username' });
 }
 
-function sanitizeCode(code) {
+function sanitizeCode(code: any): string | null {
   if (!code) return null;
   return String(code).trim();
 }
 
-function buildShareLink(username, req) {
+function buildShareLink(username: string, req: ApiRequest | null): string | null {
   const fallbackHost = req?.headers?.host ? `https://${req.headers.host}` : null;
   const base = (process.env.PUBLIC_SITE_URL || process.env.SITE_URL || fallbackHost || '').replace(/\/$/, '');
   if (!base) return null;
   return `${base}/auth?ref=${encodeURIComponent(username)}`;
 }
 
-async function grantDiamonds(userId, amount, reason = 'Referral bonus') {
+async function grantDiamonds(userId: string, amount: number, reason: string = 'Referral bonus'): Promise<any> {
   if (!userId || amount <= 0) return null;
 
   const { data: current, error: fetchError } = await supabase
@@ -362,7 +415,7 @@ async function grantDiamonds(userId, amount, reason = 'Referral bonus') {
   return nextDiamonds;
 }
 
-async function handleRegisterReferral(req, res, { userId, username }) {
+async function handleRegisterReferral(req: ApiRequest, res: ApiResponse, { userId, username }: { userId: string; username: string }): Promise<void> {
   const referralCodeRaw = req.body?.referralCode;
   const referralCode = sanitizeCode(referralCodeRaw);
 
@@ -419,16 +472,17 @@ async function handleRegisterReferral(req, res, { userId, username }) {
   try {
     await grantDiamonds(userId, bonusDiamonds, 'Referral signup bonus');
   } catch (err) {
-    console.warn('referral: grant diamonds failed', err.message);
+    const error = err as any;
+    console.warn('referral: grant diamonds failed', error.message);
   }
 
-  logAudit(supabase, userId, 'REFERRAL_LINKED', { referrerId: referrer.user_id }, req).catch(() => {});
-  logAudit(supabase, referrer.user_id, 'REFERRAL_NEW_USER', { referredId: userId }, req).catch(() => {});
+  logAudit(supabase, userId, 'REFERRAL_LINKED', { referrerId: referrer.user_id }, req as any).catch(() => {});
+  logAudit(supabase, referrer.user_id, 'REFERRAL_NEW_USER', { referredId: userId }, req as any).catch(() => {});
 
   return res.status(200).json({ success: true, referrerId: referrer.user_id, bonusDiamonds });
 }
 
-function getNextWithdrawInfo(lastWithdrawAt) {
+function getNextWithdrawInfo(lastWithdrawAt: string | null): { canWithdraw: boolean; nextWithdrawAt: string | null } {
   if (!lastWithdrawAt) return { canWithdraw: true, nextWithdrawAt: null };
   
   const now = new Date();
@@ -448,7 +502,7 @@ function getNextWithdrawInfo(lastWithdrawAt) {
   return { canWithdraw: true, nextWithdrawAt: null };
 }
 
-async function handleGetReferralStats(req, res, { userId, username }) {
+async function handleGetReferralStats(req: ApiRequest, res: ApiResponse, { userId, username }: { userId: string; username: string }): Promise<void> {
   const snapshot = await getReferralSnapshot(userId, { limit: 10, offset: 0 });
   const balance = snapshot.balance;
   const referredCount = snapshot.referredCount;
@@ -473,7 +527,7 @@ async function handleGetReferralStats(req, res, { userId, username }) {
   });
 }
 
-async function handleGetTransactionHistory(req, res, { userId }) {
+async function handleGetTransactionHistory(req: ApiRequest, res: ApiResponse, { userId }: { userId: string }): Promise<void> {
   const page = Math.max(1, Number(req.body?.page || 1));
   const pageSize = Math.min(50, Math.max(5, Number(req.body?.pageSize || 15)));
   const offset = (page - 1) * pageSize;
@@ -509,7 +563,7 @@ async function handleGetTransactionHistory(req, res, { userId }) {
   });
 }
 
-async function handleWithdrawEarnings(req, res, { userId }) {
+async function handleWithdrawEarnings(req: ApiRequest, res: ApiResponse, { userId }: { userId: string }): Promise<void> {
   const snapshot = await getReferralSnapshot(userId, { limit: 0, offset: 0 });
   const balance = snapshot.balance;
   const pending = Number(balance.pending_balance || 0);
@@ -555,7 +609,7 @@ async function handleWithdrawEarnings(req, res, { userId }) {
     return res.status(500).json({ error: 'Failed to record withdraw' });
   }
 
-  logAudit(supabase, userId, 'REFERRAL_WITHDRAW', { amount: pending }, req).catch(() => {});
+  logAudit(supabase, userId, 'REFERRAL_WITHDRAW', { amount: pending }, req as any).catch(() => {});
 
   const totalWithdrawn = Number(balance.total_withdrawn || 0) + pending;
 
@@ -568,8 +622,8 @@ async function handleWithdrawEarnings(req, res, { userId }) {
   });
 }
 
-export default async function handler(req, res) {
-  applyCors(req, res);
+export default async function handler(req: ApiRequest, res: ApiResponse): Promise<void> {
+  applyCors(req as any, res as any);
 
   if (req.method === 'OPTIONS') {
     return res.status(200).end();
@@ -579,12 +633,12 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  const { action, userId, authToken } = req.body;
+  const { action, userId, authToken } = req.body || {};
   maybeCleanupRateLimits();
 
-  const identifier = getIdentifier(req, userId);
+  const identifier = getIdentifier(req as any, userId);
   if (!checkRateLimit(rateLimits, identifier, { maxRequests: 30, windowMs: 60_000 })) {
-    logAudit(supabase, userId, 'REFERRAL_RATE_LIMIT', { action }, req).catch(() => {});
+    logAudit(supabase, userId || 'unknown', 'REFERRAL_RATE_LIMIT', { action }, req as any).catch(() => {});
     return res.status(429).json({ error: 'Too many requests. Please wait.' });
   }
 
@@ -600,7 +654,7 @@ export default async function handler(req, res) {
 
   const { valid, error: sessionError, stats } = await validateSession(authToken, userId);
   if (!valid) {
-    logAudit(supabase, userId, 'REFERRAL_AUTH_FAILED', { action, error: sessionError }, req).catch(() => {});
+    logAudit(supabase, userId, 'REFERRAL_AUTH_FAILED', { action, error: sessionError }, req as any).catch(() => {});
     return res.status(401).json({ error: sessionError });
   }
 
@@ -618,8 +672,9 @@ export default async function handler(req, res) {
         return res.status(400).json({ error: 'Invalid action' });
     }
   } catch (error) {
-    console.error('referral: unhandled error', error);
-    logAudit(supabase, userId, 'REFERRAL_ERROR', { action, error: error.message }, req).catch(() => {});
+    const err = error as Error;
+    console.error('referral: unhandled error', err);
+    logAudit(supabase, userId || 'unknown', 'REFERRAL_ERROR', { action, error: err.message }, req as any).catch(() => {});
     return res.status(500).json({ error: 'Internal server error' });
   }
 }

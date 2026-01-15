@@ -1,10 +1,10 @@
-// @ts-nocheck
 // ============================================================
-// API/_SUPPORT.JS - Support Tickets & Email Service
+// API/_SUPPORT.TS - Support Tickets & Email Service
 // ============================================================
 
+// @ts-ignore - nodemailer types not installed
 import nodemailer from 'nodemailer';
-import { createClient } from '@supabase/supabase-js';
+import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import {
   applyCors,
   validateSessionAndFetchPlayerStats,
@@ -12,9 +12,68 @@ import {
   checkRateLimit
 } from './_utils.js';
 
-const supabase = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_KEY
+// ============================================================
+// TYPES
+// ============================================================
+
+interface ApiRequest {
+  method?: string;
+  body?: {
+    action?: string;
+    userId?: string;
+    authToken?: string;
+    name?: string;
+    email?: string;
+    subject?: string;
+    message?: string;
+    ticketId?: string;
+    toEmail?: string;
+    resolutionCategory?: string;
+    [key: string]: any;
+  };
+  headers?: Record<string, string | string[] | undefined>;
+  connection?: { remoteAddress?: string };
+}
+
+interface ApiResponse {
+  status: (code: number) => ApiResponse;
+  json: (data: any) => void;
+  end: (data?: any) => void;
+  setHeader: (key: string, value: string) => void;
+}
+
+interface EmailTemplateData {
+  ticketId: string;
+  userName: string;
+  userEmail: string;
+  subject: string;
+  message: string;
+}
+
+interface SendEmailOptions {
+  to: string;
+  subject: string;
+  html: string;
+  fromName?: string;
+}
+
+interface SendEmailResult {
+  success: boolean;
+  messageId?: string;
+  error?: string;
+  code?: string;
+}
+
+interface QueueEmail {
+  tipo: string;
+  destinatario: string;
+  assunto: string;
+  mensagem: string;
+}
+
+const supabase: SupabaseClient = createClient(
+  process.env.SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_KEY!
 );
 
 // ============================================================
@@ -45,7 +104,7 @@ const transporter = nodemailer.createTransport({
 
 // Verify connection on startup (async to avoid blocking)
 setTimeout(() => {
-  transporter.verify((error, success) => {
+  transporter.verify((error: any, success: any) => {
     if (error) {
       console.error('❌ SMTP connection error at startup:', error.message);
       console.error('   Code:', error.code);
@@ -69,7 +128,7 @@ const supportRateLimits = new Map();
 // EMAIL HTML TEMPLATE
 // ============================================================
 
-function generateSupportEmailTemplate({ ticketId, userName, userEmail, subject, message }) {
+function generateSupportEmailTemplate({ ticketId, userName, userEmail, subject, message }: EmailTemplateData): string {
   return `
 <!DOCTYPE html>
 <html lang="en-US">
@@ -154,7 +213,7 @@ ${message}
 // DAILY COUNTER MANAGEMENT
 // ============================================================
 
-async function getEmailCounter() {
+async function getEmailCounter(): Promise<{ count: number; lastReset: Date }> {
   try {
     const { data, error } = await supabase.rpc('get_email_counter');
     
@@ -177,7 +236,7 @@ async function getEmailCounter() {
   }
 }
 
-async function incrementEmailCounter() {
+async function incrementEmailCounter(): Promise<any> {
   try {
     const { data, error } = await supabase.rpc('increment_email_counter');
     
@@ -193,7 +252,7 @@ async function incrementEmailCounter() {
   }
 }
 
-async function resetEmailCounter() {
+async function resetEmailCounter(): Promise<boolean> {
   try {
     const { error } = await supabase.rpc('reset_email_counter');
     
@@ -214,7 +273,7 @@ async function resetEmailCounter() {
 // QUEUE MANAGEMENT
 // ============================================================
 
-async function addToQueue({ tipo, destinatario, assunto, mensagem }) {
+async function addToQueue({ tipo, destinatario, assunto, mensagem }: QueueEmail): Promise<any> {
   try {
     const { data, error } = await supabase
       .from('email_queue')
@@ -242,7 +301,7 @@ async function addToQueue({ tipo, destinatario, assunto, mensagem }) {
   }
 }
 
-async function getPendingEmails(limit = 450) {
+async function getPendingEmails(limit: number = 450): Promise<any[]> {
   try {
     const { data, error } = await supabase
       .from('email_queue')
@@ -263,9 +322,9 @@ async function getPendingEmails(limit = 450) {
   }
 }
 
-async function updateEmailStatus(emailId, status, errorMessage = null) {
+async function updateEmailStatus(emailId: string, status: string, errorMessage: string | null = null): Promise<boolean> {
   try {
-    const updateData = {
+    const updateData: any = {
       status,
       sent_at: status === 'enviado' ? new Date().toISOString() : null
     };
@@ -291,7 +350,7 @@ async function updateEmailStatus(emailId, status, errorMessage = null) {
   }
 }
 
-async function incrementRetryCount(emailId) {
+async function incrementRetryCount(emailId: string): Promise<boolean> {
   try {
     const { error } = await supabase.rpc('increment', {
       row_id: emailId,
@@ -324,7 +383,7 @@ async function incrementRetryCount(emailId) {
 // EMAIL SENDING
 // ============================================================
 
-async function sendEmail({ to, subject, html, fromName = 'LootSkirmish Support' }) {
+async function sendEmail({ to, subject, html, fromName = 'LootSkirmish Support' }: SendEmailOptions): Promise<SendEmailResult> {
   try {
     // Check if credentials exist
     const gmailUser = process.env.GMAIL_USER || 'lootskirmish.official@gmail.com';
@@ -355,13 +414,14 @@ async function sendEmail({ to, subject, html, fromName = 'LootSkirmish Support' 
     return { success: true, messageId: info.messageId };
     
   } catch (error) {
-    console.error('❌ Error sending email:', error.message);
-    console.error('   Code:', error.code);
-    console.error('   Command:', error.command);
+    const err = error as any;
+    console.error('❌ Error sending email:', err.message);
+    console.error('   Code:', err.code);
+    console.error('   Command:', err.command);
     return { 
       success: false, 
-      error: error.message,
-      code: error.code 
+      error: err.message,
+      code: err.code 
     };
   }
 }
@@ -371,7 +431,7 @@ async function sendEmail({ to, subject, html, fromName = 'LootSkirmish Support' 
 // ============================================================
 
 // Save ticket to database (keep UUID id auto-generated, store our human code in ticket_code)
-async function saveSupportTicketToDatabase(ticketId, userId, userEmail, subject, message) {
+async function saveSupportTicketToDatabase(ticketId: string, userId: string | undefined, userEmail: string, subject: string, message: string): Promise<any> {
   try {
     const { data, error } = await supabase
       .from('support_tickets')
@@ -405,7 +465,14 @@ export async function sendOrQueueSupportEmail({
   userEmail, 
   subject, 
   message 
-}) {
+}: {
+  ticketId: string;
+  userId: string | undefined;
+  userName: string;
+  userEmail: string;
+  subject: string;
+  message: string;
+}): Promise<any> {
   try {
     const { count } = await getEmailCounter();
     
@@ -485,10 +552,11 @@ export async function sendOrQueueSupportEmail({
     }
     
   } catch (error) {
-    console.error('💥 Fatal error in sendOrQueueSupportEmail:', error);
+    const err = error as Error;
+    console.error('💥 Fatal error in sendOrQueueSupportEmail:', err);
     return {
       success: false,
-      error: error.message
+      error: err.message
     };
   }
 }
@@ -564,8 +632,9 @@ export async function processEmailQueue() {
     };
     
   } catch (error) {
-    console.error('💥 Fatal error processing queue:', error);
-    return { processed: 0, success: 0, failed: 0, error: error.message };
+    const err = error as Error;
+    console.error('💥 Fatal error processing queue:', err);
+    return { processed: 0, success: 0, failed: 0, error: err.message };
   }
 }
 
@@ -604,11 +673,11 @@ export async function getQueueStatus() {
 // SUPPORT API HANDLER
 // ============================================================
 
-async function generateTicketId() {
+async function generateTicketId(): Promise<string> {
   return `TSK-${Date.now()}-${Math.random().toString(36).substring(2, 9).toUpperCase()}`;
 }
 
-function mapResolutionToStatus(resolutionCategory) {
+function mapResolutionToStatus(resolutionCategory: string | undefined): string {
   const value = (resolutionCategory || '').toLowerCase();
 
   if (value === 'resolvable') return 'resolved';
@@ -618,8 +687,8 @@ function mapResolutionToStatus(resolutionCategory) {
   return 'resolved';
 }
 
-export default async function handler(req, res) {
-  applyCors(req, res);
+export default async function handler(req: ApiRequest, res: ApiResponse): Promise<void> {
+  applyCors(req as any, res as any);
   res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('X-Frame-Options', 'DENY');
@@ -633,7 +702,7 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  const contentType = (req.headers?.['content-type'] || '').toLowerCase();
+  const contentType = String(req.headers?.['content-type'] || '').toLowerCase();
   if (!contentType.includes('application/json')) {
     return res.status(415).json({ error: 'Unsupported Media Type' });
   }
@@ -659,14 +728,14 @@ export default async function handler(req, res) {
       console.log(`   GMAIL_APP_PASSWORD env: ${process.env.GMAIL_APP_PASSWORD ? '✅ SET' : '❌ NOT SET'}`);
 
       // Rate limiting by IP
-      const identifier = getIdentifier(req, null);
+      const identifier = getIdentifier(req as any, undefined);
       const allowed = checkRateLimit(supportRateLimits, identifier, {
         maxRequests: SUPPORT_RATE_LIMIT_MAX,
         windowMs: SUPPORT_RATE_LIMIT_WINDOW
       });
 
       if (!allowed) {
-        res.setHeader('Retry-After', Math.ceil(SUPPORT_RATE_LIMIT_WINDOW / 1000));
+        res.setHeader('Retry-After', String(Math.ceil(SUPPORT_RATE_LIMIT_WINDOW / 1000)));
         return res.status(429).json({ error: 'Too many support requests. Please wait before submitting another ticket.' });
       }
 

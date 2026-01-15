@@ -391,6 +391,10 @@ async function handleRouteChange(options: RouteChangeOptions = {}): Promise<void
       if (seq !== routeChangeSeq) return;
       await loadRouteData(route.screen);
     } else if (activeUser && activeUser.id) {
+      // Limpar publicProfileUsername quando for perfil próprio
+      if (route.screen === 'profile') {
+        (window as WindowWithRouter).publicProfileUsername = null;
+      }
       if (!(window as WindowWithRouter).currentUser) {
         setActiveUser(activeUser, { persist: false });
       }

@@ -1,9 +1,8 @@
-// @ts-nocheck
 // ============================================================
-// API/INVENTORY.JS - BACKEND SEGURO PARA INVENTÁRIO
+// API/INVENTORY.TS - BACKEND SEGURO PARA INVENTÁRIO
 // ============================================================
 
-import { createClient } from '@supabase/supabase-js';
+import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import {
   applyCors,
   checkRateLimit,
@@ -18,10 +17,46 @@ import { applyReferralCommissionForSpend } from './_referrals.js';
 import dotenv from 'dotenv';
 dotenv.config();
 
+// ============================================================
+// TYPES
+// ============================================================
+
+interface ApiRequest {
+  method?: string;
+  body?: {
+    action?: string;
+    userId?: string;
+    authToken?: string;
+    itemId?: string;
+    itemIds?: string[];
+    [key: string]: any;
+  };
+  headers?: Record<string, string | string[] | undefined>;
+  connection?: { remoteAddress?: string };
+}
+
+interface ApiResponse {
+  status: (code: number) => ApiResponse;
+  json: (data: any) => void;
+  end: (data?: any) => void;
+  setHeader: (key: string, value: string) => void;
+}
+
+interface InventoryItem {
+  id: string;
+  user_id: string;
+  item_name: string;
+  rarity: string;
+  color: string;
+  value: number;
+  case_name: string;
+  obtained_at: string;
+}
+
 // Inicializar Supabase com Service Key (bypass RLS)
-const supabase = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_KEY,
+const supabase: SupabaseClient = createClient(
+  process.env.SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_KEY!,
   {
     auth: {
       autoRefreshToken: false,
@@ -35,8 +70,8 @@ const supabase = createClient(
 // ============================================================
 const rateLimits = new Map();
 
-let lastRateLimitCleanupAt = 0;
-function maybeCleanupRateLimits() {
+let lastRateLimitCleanupAt: number = 0;
+function maybeCleanupRateLimits(): void {
   const now = Date.now();
   if (now - lastRateLimitCleanupAt < 5 * 60_000) return;
   lastRateLimitCleanupAt = now;
@@ -46,14 +81,14 @@ function maybeCleanupRateLimits() {
 // ============================================================
 // 📝 LOGGING
 // ============================================================
-async function logAction(userId, action, details, req) {
-  return logAudit(supabase, userId, action, details, req);
+async function logAction(userId: string, action: string, details: any, req: ApiRequest): Promise<void> {
+  return logAudit(supabase, userId, action, details, req as any);
 }
 
 // ============================================================
 // 💰 ATUALIZAR SALDO
 // ============================================================
-async function updatePlayerBalance(userId, amount, reason, casesOpened = 0, req = null) {
+async function updatePlayerBalance(userId: string, amount: number, reason: string, casesOpened: number = 0, req: ApiRequest | null = null): Promise<number> {
   try {
     const { data: rpcResult, error: updateError } = await supabase
       .rpc('update_player_money', {
@@ -93,14 +128,15 @@ async function updatePlayerBalance(userId, amount, reason, casesOpened = 0, req 
         amountSpent: amount,
         reason,
         source: 'inventory',
-        req
+        req: req as any
       });
     }
     
     return newBalance;
     
   } catch (error) {
-    console.error('💥 updatePlayerBalance error:', error.message);
+    const err = error as Error;
+    console.error('💥 updatePlayerBalance error:', err.message);
     throw error;
   }
 }
@@ -108,14 +144,14 @@ async function updatePlayerBalance(userId, amount, reason, casesOpened = 0, req 
 // ============================================================
 // 🔐 VALIDAÇÃO DE SESSÃO
 // ============================================================
-async function validateSession(authToken, expectedUserId) {
+async function validateSession(authToken: string, expectedUserId: string): Promise<any> {
   return validateSessionAndFetchPlayerStats(supabase, authToken, expectedUserId, { select: 'user_id' });
 }
 
 // ============================================================
 // 🔍 VALIDAÇÃO DE OWNERSHIP
 // ============================================================
-async function validateItemOwnership(itemId, userId) {
+async function validateItemOwnership(itemId: string, userId: string): Promise<InventoryItem | null> {
   try {
     const { data: item, error } = await supabase
       .from('inventory')
@@ -148,8 +184,8 @@ async function validateItemOwnership(itemId, userId) {
 // ============================================================
 // HANDLER PRINCIPAL
 // ============================================================
-export default async function handler(req, res) {
-  applyCors(req, res);
+export default async function handler(req: ApiRequest, res: ApiResponse): Promise<void> {
+  applyCors(req as any, res as any);
   
   if (req.method === 'OPTIONS') {
     return res.status(200).end();
@@ -159,13 +195,13 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
   
-  const { action, userId, authToken } = req.body;
+  const { action, userId, authToken } = req.body || {};
 
   maybeCleanupRateLimits();
 
-  const identifier = getIdentifier(req, userId);
+  const identifier = getIdentifier(req as any, userId);
   if (!checkRateLimit(rateLimits, identifier, { maxRequests: 50, windowMs: 60_000 })) {
-    logAction(userId, 'RATE_LIMIT_EXCEEDED', { action }, req).catch(() => {});
+    logAction(userId || 'unknown', 'RATE_LIMIT_EXCEEDED', { action }, req).catch(() => {});
     return res.status(429).json({ error: 'Too many requests. Please wait.' });
   }
   
@@ -201,8 +237,9 @@ export default async function handler(req, res) {
         return res.status(400).json({ error: 'Invalid action' });
     }
   } catch (error) {
-    console.error('Unhandled error:', error.message);
-    logAction(userId, 'ERROR', { action, error: error.message }, req).catch(() => {});
+    const err = error as Error;
+    console.error('Unhandled error:', err.message);
+    logAction(userId || 'unknown', 'ERROR', { action, error: err.message }, req).catch(() => {});
     return res.status(500).json({ error: 'Internal server error' });
   }
 }
@@ -210,9 +247,9 @@ export default async function handler(req, res) {
 // ============================================================
 // HANDLER 1: VENDER ITEM INDIVIDUAL
 // ============================================================
-async function handleSellItem(req, res, userId, authToken) {
+async function handleSellItem(req: ApiRequest, res: ApiResponse, userId: string, authToken: string): Promise<void> {
   try {
-    const { itemId } = req.body;
+    const { itemId } = req.body || {};
     
     if (!itemId || typeof itemId !== 'string') {
       return res.status(400).json({ error: 'Invalid item ID' });
@@ -249,7 +286,8 @@ async function handleSellItem(req, res, userId, authToken) {
         req
       );
     } catch (error) {
-      console.error('💥 Balance update failed after delete:', error.message);
+      const err = error as Error;
+      console.error('💥 Balance update failed after delete:', err.message);
       
       await supabase.from('inventory').insert({
         id: item.id,
@@ -262,7 +300,7 @@ async function handleSellItem(req, res, userId, authToken) {
         obtained_at: item.obtained_at
       });
       
-      logAction(userId, 'SELL_ITEM_BALANCE_FAILED_ROLLBACK', { itemId, error: error.message }, req).catch(() => {});
+      logAction(userId, 'SELL_ITEM_BALANCE_FAILED_ROLLBACK', { itemId, error: err.message }, req).catch(() => {});
       return res.status(500).json({ error: 'Transaction failed. Item restored.' });
     }
     
@@ -281,7 +319,8 @@ async function handleSellItem(req, res, userId, authToken) {
     });
     
   } catch (error) {
-    console.error('💥 Error in handleSellItem:', error.message);
+    const err = error as Error;
+    console.error('💥 Error in handleSellItem:', err.message);
     return res.status(500).json({ error: 'Internal server error' });
   }
 }
@@ -289,9 +328,9 @@ async function handleSellItem(req, res, userId, authToken) {
 // ============================================================
 // HANDLER 2: VENDER MÚLTIPLOS ITENS
 // ============================================================
-async function handleSellSelected(req, res, userId, authToken) {
+async function handleSellSelected(req: ApiRequest, res: ApiResponse, userId: string, authToken: string): Promise<void> {
   try {
-    const { itemIds } = req.body;
+    const { itemIds } = req.body || {};
     
     if (!Array.isArray(itemIds) || itemIds.length === 0) {
       return res.status(400).json({ error: 'Invalid item IDs' });
@@ -356,7 +395,8 @@ async function handleSellSelected(req, res, userId, authToken) {
         req
       );
     } catch (error) {
-      console.error('💥 Balance update failed after delete:', error.message);
+      const err = error as Error;
+      console.error('💥 Balance update failed after delete:', err.message);
       
       await supabase.from('inventory').insert(
         validItems.map(item => ({
@@ -373,7 +413,7 @@ async function handleSellSelected(req, res, userId, authToken) {
       
       logAction(userId, 'SELL_SELECTED_BALANCE_FAILED_ROLLBACK', { 
         count: validItems.length, 
-        error: error.message 
+        error: err.message 
       }, req).catch(() => {});
       return res.status(500).json({ error: 'Transaction failed. Items restored.' });
     }
@@ -392,7 +432,8 @@ async function handleSellSelected(req, res, userId, authToken) {
     });
     
   } catch (error) {
-    console.error('💥 Error in handleSellSelected:', error.message);
+    const err = error as Error;
+    console.error('💥 Error in handleSellSelected:', err.message);
     return res.status(500).json({ error: 'Internal server error' });
   }
 }
@@ -400,9 +441,9 @@ async function handleSellSelected(req, res, userId, authToken) {
 // ============================================================
 // HANDLER 3: VENDER POR RARIDADE
 // ============================================================
-async function handleSellAll(req, res, userId, authToken) {
+async function handleSellAll(req: ApiRequest, res: ApiResponse, userId: string, authToken: string): Promise<void> {
   try {
-    const { rarities } = req.body;
+    const { rarities } = req.body || {};
     
     if (!Array.isArray(rarities) || rarities.length === 0) {
       return res.status(400).json({ error: 'Invalid rarities' });
@@ -470,7 +511,8 @@ async function handleSellAll(req, res, userId, authToken) {
         req
       );
     } catch (error) {
-      console.error('💥 Balance update failed after delete:', error.message);
+      const err = error as Error;
+      console.error('💥 Balance update failed after delete:', err.message);
       
       await supabase.from('inventory').insert(
         validItems.map(item => ({
@@ -487,7 +529,7 @@ async function handleSellAll(req, res, userId, authToken) {
       
       logAction(userId, 'SELL_ALL_BALANCE_FAILED_ROLLBACK', { 
         count: validItems.length, 
-        error: error.message 
+        error: err.message 
       }, req).catch(() => {});
       return res.status(500).json({ error: 'Transaction failed. Items restored.' });
     }
@@ -507,7 +549,8 @@ async function handleSellAll(req, res, userId, authToken) {
     });
     
   } catch (error) {
-    console.error('💥 Error in handleSellAll:', error.message);
+    const err = error as Error;
+    console.error('💥 Error in handleSellAll:', err.message);
     return res.status(500).json({ error: 'Internal server error' });
   }
 }
@@ -515,7 +558,7 @@ async function handleSellAll(req, res, userId, authToken) {
 // ============================================================
 // HANDLER 4: UPGRADE INVENTORY CAPACITY
 // ============================================================
-async function handleUpgradeInventory(req, res, userId, authToken) {
+async function handleUpgradeInventory(req: ApiRequest, res: ApiResponse, userId: string, authToken: string): Promise<void> {
   try {
     const session = await validateSessionAndFetchPlayerStats(supabase, authToken, userId, {
       select: 'diamonds, max_inventory'
@@ -566,7 +609,8 @@ async function handleUpgradeInventory(req, res, userId, authToken) {
 
     return res.status(200).json(payload);
   } catch (error) {
-    console.error('handleUpgradeInventory error:', error.message);
+    const err = error as Error;
+    console.error('handleUpgradeInventory error:', err.message);
     return res.status(500).json({ error: 'Internal server error' });
   }
 }

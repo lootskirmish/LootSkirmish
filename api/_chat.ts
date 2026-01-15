@@ -1,32 +1,69 @@
-// @ts-nocheck
 // ============================================================
-// API/CHAT.JS - BACKEND SEGURO PARA CHAT (FIXED)
+// API/CHAT.TS - BACKEND SEGURO PARA CHAT
 // ============================================================
 
-import { createClient } from '@supabase/supabase-js';
+import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { applyCors, validateSessionAndFetchPlayerStats, validateSupabaseSession } from './_utils.js';
 
 import dotenv from 'dotenv';
 dotenv.config();
 
-const supabase = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_KEY
+// ============================================================
+// TYPES
+// ============================================================
+
+interface ApiRequest {
+  method?: string;
+  body?: {
+    action?: string;
+    userId?: string;
+    authToken?: string;
+    message?: string;
+    [key: string]: any;
+  };
+  headers?: Record<string, string | string[] | undefined>;
+  connection?: { remoteAddress?: string };
+}
+
+interface ApiResponse {
+  status: (code: number) => ApiResponse;
+  json: (data: any) => void;
+  end: (data?: any) => void;
+  setHeader: (key: string, value: string) => void;
+}
+
+interface RateLimitResult {
+  allowed: boolean;
+  remainingSeconds?: number;
+}
+
+interface PlayerStats {
+  username: string;
+  level: number;
+  avatar_url?: string;
+}
+
+const supabase: SupabaseClient = createClient(
+  process.env.SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_KEY!
 );
 
 // ============================================================
 // RATE LIMITING (Usando banco de dados ao invés de memória)
 // ============================================================
-async function checkRateLimit(userId) {
+async function checkRateLimit(userId: string): Promise<RateLimitResult> {
   try {
+    if (!userId) {
+      return { allowed: true };
+    }
     const now = Date.now();
-    const chatRateLimit = parseInt(process.env.CHAT_RATE_LIMIT_MS) || 5000;
+    const chatRateLimit = parseInt(process.env.CHAT_RATE_LIMIT_MS || '5000') || 5000;
     const rateLimitAgo = new Date(now - chatRateLimit).toISOString();
     
     const { data: recentMessages, error } = await supabase
       .from('chat_messages')
       .select('created_at')
-      .eq('user_id', userId)
+      .eq('user_id', userId as string)
       .gte('created_at', rateLimitAgo) 
       .order('created_at', { ascending: false })
       .limit(1);
@@ -60,16 +97,16 @@ async function checkRateLimit(userId) {
 // ============================================================
 // SESSION VALIDATION
 // ============================================================
-async function validateSession(authToken, expectedUserId) {
+async function validateSession(authToken: string, expectedUserId: string): Promise<any> {
   return validateSupabaseSession(supabase, authToken, expectedUserId);
 }
 
 // ============================================================
 // SEND MESSAGE HANDLER
 // ============================================================
-async function handleSendMessage(req, res) {
+async function handleSendMessage(req: ApiRequest, res: ApiResponse): Promise<void> {
   try {
-    const { userId, authToken, message } = req.body;
+    const { userId, authToken, message } = req.body || {};
     
     // 1. Validação básica
     if (!userId || !message || !authToken) {
@@ -101,6 +138,10 @@ async function handleSendMessage(req, res) {
       return res.status(401).json({ error: sessionError || 'Invalid session' });
     }
     
+    if (!stats) {
+      return res.status(401).json({ error: 'Invalid session' });
+    }
+    
     // 3. Rate limiting
     const rateCheck = await checkRateLimit(userId);
     if (!rateCheck.allowed) {
@@ -126,9 +167,9 @@ async function handleSendMessage(req, res) {
         p_user_id: userId,
         p_username: stats.username,
         p_message: trimmedMessage,
-        p_user_level: stats.level,
+        p_user_level: (stats as any).level,
         p_user_rank: userRank,
-        p_avatar_url: stats.avatar_url
+        p_avatar_url: (stats as any).avatar_url
       });
     
     if (insertError) {
@@ -156,12 +197,12 @@ async function handleSendMessage(req, res) {
 // ============================================================
 // GET RECENT MESSAGES HANDLER
 // ============================================================
-async function handleGetMessages(req, res) {
+async function handleGetMessages(req: ApiRequest, res: ApiResponse): Promise<void> {
   try {
-    const { userId, authToken } = req.body;
+    const { userId, authToken } = req.body || {};
     
     // 1. Validar sessão
-    const { valid, error: sessionError } = await validateSession(authToken, userId);
+    const { valid, error: sessionError } = await validateSession(authToken || '', userId || '');
     if (!valid) {
       return res.status(401).json({ error: sessionError });
     }
@@ -192,9 +233,9 @@ async function handleGetMessages(req, res) {
 // ============================================================
 // MAIN HANDLER
 // ============================================================
-export default async function handler(req, res) {
+export default async function handler(req: ApiRequest, res: ApiResponse): Promise<void> {
   // CORS Headers (safe when env missing)
-  applyCors(req, res, { credentials: true });
+  applyCors(req as any, res as any, { credentials: true });
   
   if (req.method === 'OPTIONS') {
     return res.status(200).end();
@@ -204,7 +245,7 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
   
-  const { action } = req.body;
+  const { action } = req.body || {};
   
   if (action === 'sendMessage') {
     return await handleSendMessage(req, res);

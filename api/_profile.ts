@@ -1,9 +1,8 @@
-// @ts-nocheck
 // ============================================================
-// API/_PROFILE.JS - Profile & Friends Management  
+// API/_PROFILE.TS - Profile & Friends Management  
 // ============================================================
 
-import { createClient } from '@supabase/supabase-js';
+import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import {
   applyCors,
   validateSessionAndFetchPlayerStats,
@@ -16,22 +15,46 @@ import {
 import dotenv from 'dotenv';
 dotenv.config();
 
-const supabase = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_KEY
+// ============================================================
+// TYPES
+// ============================================================
+
+interface ApiRequest {
+  method?: string;
+  body?: any;
+  headers?: Record<string, string | string[] | undefined>;
+  connection?: { remoteAddress?: string };
+}
+
+interface ApiResponse {
+  status: (code: number) => ApiResponse;
+  json: (data: any) => void;
+  end: (data?: any) => void;
+  setHeader: (key: string, value: string) => void;
+}
+
+interface RateLimitEntry {
+  count: number;
+  resetAt: number;
+  lastSeenAt: number;
+}
+
+const supabase: SupabaseClient = createClient(
+  process.env.SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_KEY!
 );
 
 // ============================================================
 // PROFILE SECTION - Username & Diamonds
 // ============================================================
 
-const RENAME_COST = 100;
-const profileRateLimits = new Map();
-let lastProfileCleanupAt = 0;
+const RENAME_COST: number = 100;
+const profileRateLimits: Map<string, RateLimitEntry> = new Map();
+let lastProfileCleanupAt: number = 0;
 
-function getProfileRateLimitConfig() {
-  const maxRequests = parseInt(process.env.RATE_LIMIT_PROFILE_MAX_REQUESTS || process.env.RATE_LIMIT_MAX_REQUESTS) || 20;
-  const windowMs = parseInt(process.env.RATE_LIMIT_PROFILE_WINDOW_MS || process.env.RATE_LIMIT_WINDOW_MS) || 60_000;
+function getProfileRateLimitConfig(): { maxRequests: number; windowMs: number } {
+  const maxRequests = parseInt(process.env.RATE_LIMIT_PROFILE_MAX_REQUESTS || process.env.RATE_LIMIT_MAX_REQUESTS || '') || 20;
+  const windowMs = parseInt(process.env.RATE_LIMIT_PROFILE_WINDOW_MS || process.env.RATE_LIMIT_WINDOW_MS || '') || 60_000;
   return { maxRequests, windowMs };
 }
 
@@ -39,12 +62,12 @@ function getProfileRateLimitConfig() {
 // Helpers
 // ============================================================
 
-function normalizeUsername(raw) {
+function normalizeUsername(raw: string): string {
   if (!raw) return '';
   return raw.trim();
 }
 
-function isValidUsername(username) {
+function isValidUsername(username: string): boolean {
   // 3-16 chars, letters/numbers/._- only (no spaces), must start with letter/number
   return typeof username === 'string'
     && username.length >= 3
@@ -52,7 +75,7 @@ function isValidUsername(username) {
     && /^[a-zA-Z0-9][a-zA-Z0-9._-]{2,15}$/.test(username);
 }
 
-async function usernameExists(username, excludeUserId) {
+async function usernameExists(username: string, excludeUserId: string): Promise<boolean> {
   const escaped = username.replace(/([_%])/g, '\\$1');
 
   const { data, error } = await supabase
@@ -69,7 +92,7 @@ async function usernameExists(username, excludeUserId) {
   return Array.isArray(data) && data.length > 0;
 }
 
-async function updatePlayerDiamonds(userId, amount, reason, req = null) {
+async function updatePlayerDiamonds(userId: string, amount: number, reason: string, req?: ApiRequest): Promise<number> {
   // Based on _admin.js but without role requirements
   const { data: currentStats, error: fetchError } = await supabase
     .from('player_stats')
@@ -81,7 +104,7 @@ async function updatePlayerDiamonds(userId, amount, reason, req = null) {
     throw new Error('Failed to fetch player stats');
   }
 
-  const currentDiamonds = currentStats.diamonds || 0;
+  const currentDiamonds = (currentStats as any).diamonds || 0;
   const newDiamonds = currentDiamonds + amount;
 
   if (newDiamonds < 0) {
@@ -106,7 +129,7 @@ async function updatePlayerDiamonds(userId, amount, reason, req = null) {
     throw new Error('Concurrent modification detected');
   }
 
-  const finalDiamonds = updateResult[0].diamonds;
+  const finalDiamonds = (updateResult[0] as any).diamonds;
 
   // Non-blocking log
   Promise.all([
@@ -118,7 +141,7 @@ async function updatePlayerDiamonds(userId, amount, reason, req = null) {
       created_at: new Date().toISOString()
     }),
     req ? logAudit(supabase, userId, 'DIAMONDS_UPDATED', { amount, reason, newBalance: finalDiamonds }, req) : Promise.resolve()
-  ]).catch((err) => console.error('⚠️ Transaction logging error:', err?.message || err));
+  ]).catch((err) => console.error('⚠️ Transaction logging error:', err instanceof Error ? err.message : err));
 
   return finalDiamonds;
 }
@@ -127,7 +150,7 @@ async function updatePlayerDiamonds(userId, amount, reason, req = null) {
 // Handler
 // ============================================================
 
-export default async function handler(req, res) {
+export default async function handler(req: ApiRequest, res: ApiResponse) {
   applyCors(req, res);
   res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
   res.setHeader('X-Content-Type-Options', 'nosniff');
@@ -142,7 +165,7 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  const contentType = (req.headers?.['content-type'] || '').toLowerCase();
+  const contentType = ((req.headers?.['content-type'] as string) || '').toLowerCase();
   if (!contentType.includes('application/json')) {
     return res.status(415).json({ error: 'Unsupported Media Type' });
   }
@@ -168,7 +191,7 @@ export default async function handler(req, res) {
 
   const allowed = checkRateLimit(profileRateLimits, identifier, { maxRequests, windowMs });
   if (!allowed) {
-    res.setHeader('Retry-After', Math.ceil(windowMs / 1000));
+    res.setHeader('Retry-After', String(Math.ceil(windowMs / 1000)));
     logAudit(supabase, body?.userId || null, 'RATE_LIMIT_EXCEEDED', { identifier, maxRequests, windowMs }, req).catch(() => {});
     return res.status(429).json({ error: 'RATE_LIMITED' });
   }
@@ -196,14 +219,14 @@ export default async function handler(req, res) {
     if (action === 'cancelRequest') return await handleCancel(req, res, body);
     if (action === 'removeFriend') return await handleRemoveFriend(req, res, body);
   } catch (err) {
-    console.error('Profile API error:', err?.message || err);
-    return respondError(res, 500, err?.message || 'Internal server error');
+    console.error('Profile API error:', err instanceof Error ? err.message : err);
+    return respondError(res, 500, err instanceof Error ? err.message : 'Internal server error');
   }
 
   return res.status(400).json({ error: 'Invalid action' });
 }
 
-async function handleChangeUsername(req, res) {
+async function handleChangeUsername(req: ApiRequest, res: ApiResponse): Promise<void> {
   try {
     const { userId, authToken, newUsername } = req.body || {};
 
@@ -254,7 +277,7 @@ async function handleChangeUsername(req, res) {
       try {
         await updatePlayerDiamonds(userId, -cost, 'Username change', req);
       } catch (err) {
-        if (err.message === 'Insufficient diamonds') {
+        if (err instanceof Error && err.message === 'Insufficient diamonds') {
           return res.status(400).json({ error: 'INSUFFICIENT_DIAMONDS', needed: cost });
         }
         return res.status(500).json({ error: 'Failed to charge diamonds' });
@@ -280,7 +303,7 @@ async function handleChangeUsername(req, res) {
         try {
           await updatePlayerDiamonds(userId, cost, 'Refund: username change failed', req);
         } catch (refundErr) {
-          console.error('Refund after username change failure failed:', refundErr?.message || refundErr);
+          console.error('Refund after username change failure failed:', refundErr instanceof Error ? refundErr.message : refundErr);
         }
       }
       return res.status(500).json({ error: 'Failed to update username' });
@@ -291,18 +314,18 @@ async function handleChangeUsername(req, res) {
 
     return res.status(200).json({
       success: true,
-      username: updData?.username || normalized,
-      diamonds: updData?.diamonds ?? (stats.diamonds || 0) - cost,
-      changeCount: updData?.username_change_count ?? newCount,
+      username: (updData as any)?.username || normalized,
+      diamonds: (updData as any)?.diamonds ?? ((stats as any).diamonds || 0) - cost,
+      changeCount: (updData as any)?.username_change_count ?? newCount,
       costApplied: cost
     });
   } catch (error) {
-    console.error('💥 Change username error:', error?.message || error);
+    console.error('💥 Change username error:', error instanceof Error ? error.message : error);
     return res.status(500).json({ error: 'Internal server error' });
   }
 }
 
-async function handleUpdatePublicProfile(req, res) {
+async function handleUpdatePublicProfile(req: ApiRequest, res: ApiResponse): Promise<void> {
   try {
     const { userId, authToken, publicProfile } = req.body || {};
 
@@ -356,8 +379,8 @@ async function handleUpdatePublicProfile(req, res) {
 
     return res.status(200).json({ success: true, publicProfile });
   } catch (error) {
-    console.error('💥 Update public profile error:', error?.message || error);
-    logAudit(supabase, req.body?.userId || null, 'PUBLIC_PROFILE_ERROR', { error: error?.message }, req).catch(() => {});
+    console.error('💳 Update public profile error:', error instanceof Error ? error.message : error);
+    logAudit(supabase, req.body?.userId || null, 'PUBLIC_PROFILE_ERROR', { error: error instanceof Error ? error.message : String(error) }, req).catch(() => {});
     return res.status(500).json({ error: 'Internal server error' });
   }
 }
@@ -366,7 +389,7 @@ async function handleUpdatePublicProfile(req, res) {
  * Strictly check if a profile is public before allowing access
  * This endpoint is for rigorous verification
  */
-async function handleCheckPublicProfile(req, res) {
+async function handleCheckPublicProfile(req: ApiRequest, res: ApiResponse): Promise<void> {
   try {
     const { username } = req.body || {};
     const identifier = getIdentifier(req);
@@ -423,7 +446,7 @@ async function handleCheckPublicProfile(req, res) {
       }
     });
   } catch (error) {
-    console.error('💥 Check public profile error:', error?.message || error);
+    console.error('💳 Check public profile error:', error instanceof Error ? error.message : error);
     return res.status(500).json({ error: 'Internal server error' });
   }
 }
@@ -437,7 +460,7 @@ const friendsRateLimits = new Map();
 const FRIENDS_RATE_LIMIT_MAX = 30;
 const FRIENDS_RATE_LIMIT_WINDOW = 60_000;
 
-function sanitizeEntry(entry) {
+function sanitizeEntry(entry: any): { user_id: string; username: string; created_at: string } | null {
   if (!entry || typeof entry !== 'object') return null;
   const userId = typeof entry.user_id === 'string' ? entry.user_id : null;
   const username = typeof entry.username === 'string' ? entry.username : null;
@@ -449,10 +472,10 @@ function sanitizeEntry(entry) {
   };
 }
 
-function normalizeList(list) {
+function normalizeList(list: any): any[] {
   if (!Array.isArray(list)) return [];
   const seen = new Set();
-  const cleaned = [];
+  const cleaned: any[] = [];
   for (const item of list) {
     const entry = sanitizeEntry(item);
     if (entry && !seen.has(entry.user_id)) {
@@ -463,7 +486,7 @@ function normalizeList(list) {
   return cleaned;
 }
 
-function coerceRawState(raw) {
+function coerceRawState(raw: any): any {
   if (!raw) return DEFAULT_STATE;
   if (typeof raw === 'string') {
     try {
@@ -476,7 +499,7 @@ function coerceRawState(raw) {
   return DEFAULT_STATE;
 }
 
-function normalizeState(rawState) {
+function normalizeState(rawState: any): any {
   const state = coerceRawState(rawState?.state || rawState || {});
   return {
     friends: normalizeList(state.friends),
@@ -485,7 +508,7 @@ function normalizeState(rawState) {
   };
 }
 
-async function loadState(userId) {
+async function loadState(userId: string): Promise<any> {
   const { data, error } = await supabase
     .from('player_stats')
     .select('friends')
@@ -506,7 +529,7 @@ async function loadState(userId) {
   return normalizeState(rawState);
 }
 
-async function saveState(userId, state) {
+async function saveState(userId: string, state: any): Promise<void> {
   const normalized = normalizeState(state);
   const { error } = await supabase
     .from('player_stats')
@@ -529,15 +552,15 @@ async function saveState(userId, state) {
   return normalized;
 }
 
-function relationship(state, targetId) {
+function relationship(state: any, targetId: string): string {
   if (!targetId) return 'none';
-  if (state.friends.some((f) => f.user_id === targetId)) return 'friend';
-  if (state.incoming.some((f) => f.user_id === targetId)) return 'incoming';
-  if (state.outgoing.some((f) => f.user_id === targetId)) return 'outgoing';
+  if (state.friends.some((f: any) => f.user_id === targetId)) return 'friend';
+  if (state.incoming.some((f: any) => f.user_id === targetId)) return 'incoming';
+  if (state.outgoing.some((f: any) => f.user_id === targetId)) return 'outgoing';
   return 'none';
 }
 
-async function fetchUserSummary(userId) {
+async function fetchUserSummary(userId: string): Promise<any> {
   const { data, error } = await supabase
     .from('player_stats')
     .select('user_id, username, avatar_url, level')
@@ -548,7 +571,7 @@ async function fetchUserSummary(userId) {
   return data;
 }
 
-async function fetchUsersSummaries(userIds = []) {
+async function fetchUsersSummaries(userIds: string[] = []): Promise<any> {
   const unique = Array.from(new Set(userIds.filter(Boolean)));
   if (unique.length === 0) return {};
 
@@ -559,14 +582,14 @@ async function fetchUsersSummaries(userIds = []) {
 
   if (error) return {};
 
-  const map = {};
-  for (const row of data || []) {
-    map[row.user_id] = row;
+  const map: Record<string, any> = {};
+  for (const row of (data || [])) {
+    map[(row as any).user_id] = row;
   }
   return map;
 }
 
-async function getTargetByUserIdOrUsername({ targetUserId, targetUsername }) {
+async function getTargetByUserIdOrUsername({ targetUserId, targetUsername }: { targetUserId?: string; targetUsername?: string }): Promise<any> {
   if (!targetUserId && !targetUsername) return null;
 
   let query = supabase
@@ -576,8 +599,10 @@ async function getTargetByUserIdOrUsername({ targetUserId, targetUsername }) {
 
   if (targetUserId) {
     query = query.eq('user_id', targetUserId);
-  } else {
+  } else if (targetUsername) {
     query = query.ilike('username', targetUsername);
+  } else {
+    return null;
   }
 
   const { data, error } = await query.maybeSingle();
@@ -585,16 +610,16 @@ async function getTargetByUserIdOrUsername({ targetUserId, targetUsername }) {
   return data;
 }
 
-function respondError(res, status, message, meta = {}) {
+function respondError(res: ApiResponse, status: number, message: string, meta: Record<string, any> = {}): void {
   try {
-    return res.status(status).json({ error: message, ...meta });
+    res.status(status).json({ error: message, ...meta });
   } catch (_) {
-    return res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ error: 'Internal server error' });
   }
 }
 
 // Friends handlers
-async function handleFetchState(req, res, body) {
+async function handleFetchState(req: ApiRequest, res: ApiResponse, body: any): Promise<void> {
   const { userId, authToken } = body;
   const identifier = getIdentifier(req, userId);
   const allowed = checkRateLimit(friendsRateLimits, identifier, {
@@ -602,7 +627,7 @@ async function handleFetchState(req, res, body) {
     windowMs: FRIENDS_RATE_LIMIT_WINDOW
   });
   if (!allowed) {
-    res.setHeader('Retry-After', Math.ceil(FRIENDS_RATE_LIMIT_WINDOW / 1000));
+    res.setHeader('Retry-After', String(Math.ceil(FRIENDS_RATE_LIMIT_WINDOW / 1000)));
     return respondError(res, 429, 'Too many requests');
   }
   const session = await validateSessionAndFetchPlayerStats(
@@ -618,9 +643,9 @@ async function handleFetchState(req, res, body) {
 
   const state = await loadState(userId);
   const ids = [
-    ...state.friends.map((f) => f.user_id),
-    ...state.incoming.map((f) => f.user_id),
-    ...state.outgoing.map((f) => f.user_id)
+    ...state.friends.map((f: any) => f.user_id),
+    ...state.incoming.map((f: any) => f.user_id),
+    ...state.outgoing.map((f: any) => f.user_id)
   ];
   const profiles = await fetchUsersSummaries(ids);
 
@@ -631,7 +656,7 @@ async function handleFetchState(req, res, body) {
   });
 }
 
-async function handleSearch(req, res, body) {
+async function handleSearch(req: ApiRequest, res: ApiResponse, body: any): Promise<void> {
   const { userId, authToken, query } = body;
   if (!query || typeof query !== 'string' || query.trim().length < 2) {
     return respondError(res, 400, 'Query must have at least 2 characters');
@@ -668,7 +693,7 @@ async function handleSearch(req, res, body) {
   return res.status(200).json({ success: true, results });
 }
 
-async function handleSendRequest(req, res, body) {
+async function handleSendRequest(req: ApiRequest, res: ApiResponse, body: any) {
   const { userId, authToken, targetUserId, targetUsername } = body;
   if (!userId || !authToken) {
     return respondError(res, 400, 'Missing required fields');
@@ -679,7 +704,7 @@ async function handleSendRequest(req, res, body) {
     windowMs: FRIENDS_RATE_LIMIT_WINDOW
   });
   if (!allowed) {
-    res.setHeader('Retry-After', Math.ceil(FRIENDS_RATE_LIMIT_WINDOW / 1000));
+    res.setHeader('Retry-After', String(Math.ceil(FRIENDS_RATE_LIMIT_WINDOW / 1000)));
     return respondError(res, 429, 'Too many requests');
   }
 
@@ -703,8 +728,8 @@ async function handleSendRequest(req, res, body) {
     return respondError(res, 400, 'Cannot add yourself');
   }
 
-  const requesterState = await loadState(userId);
-  const targetState = await loadState(target.user_id);
+  const requesterState: any = await loadState(userId);
+  const targetState: any = await loadState(target.user_id);
 
   const currentRelation = relationship(requesterState, target.user_id);
   if (currentRelation === 'friend') {
@@ -714,8 +739,8 @@ async function handleSendRequest(req, res, body) {
     return res.status(200).json({ success: true, state: requesterState, info: 'Request already sent' });
   }
   if (currentRelation === 'incoming') {
-    requesterState.incoming = requesterState.incoming.filter((r) => r.user_id !== target.user_id);
-    targetState.outgoing = targetState.outgoing.filter((r) => r.user_id !== userId);
+    requesterState.incoming = requesterState.incoming.filter((r: any) => r.user_id !== target.user_id);
+    targetState.outgoing = targetState.outgoing.filter((r: any) => r.user_id !== userId);
     requesterState.friends.push({ user_id: target.user_id, username: target.username, created_at: new Date().toISOString() });
     targetState.friends.push({ user_id: userId, username: requesterUsername, created_at: new Date().toISOString() });
     await Promise.all([
@@ -736,7 +761,7 @@ async function handleSendRequest(req, res, body) {
   return res.status(200).json({ success: true, state: requesterState });
 }
 
-async function handleAccept(req, res, body) {
+async function handleAccept(req: ApiRequest, res: ApiResponse, body: any) {
   const { userId, authToken, fromUserId } = body;
   if (!userId || !authToken || !fromUserId) {
     return respondError(res, 400, 'Missing required fields');
@@ -760,13 +785,13 @@ async function handleAccept(req, res, body) {
   const meState = await loadState(userId);
   const otherState = await loadState(fromUserId);
 
-  const hasRequest = meState.incoming.some((r) => r.user_id === fromUserId);
+  const hasRequest = meState.incoming.some((r: any) => r.user_id === fromUserId);
   if (!hasRequest) {
     return respondError(res, 400, 'No pending request');
   }
 
-  meState.incoming = meState.incoming.filter((r) => r.user_id !== fromUserId);
-  otherState.outgoing = otherState.outgoing.filter((r) => r.user_id !== userId);
+  meState.incoming = meState.incoming.filter((r: any) => r.user_id !== fromUserId);
+  otherState.outgoing = otherState.outgoing.filter((r: any) => r.user_id !== userId);
 
   meState.friends.push({ user_id: fromUserId, username: fromUser.username, created_at: new Date().toISOString() });
   otherState.friends.push({ user_id: userId, username: session.stats?.username || 'Player', created_at: new Date().toISOString() });
@@ -779,7 +804,7 @@ async function handleAccept(req, res, body) {
   return res.status(200).json({ success: true, state: meState });
 }
 
-async function handleReject(req, res, body) {
+async function handleReject(req: ApiRequest, res: ApiResponse, body: any) {
   const { userId, authToken, fromUserId } = body;
   if (!userId || !authToken || !fromUserId) {
     return respondError(res, 400, 'Missing required fields');
@@ -798,8 +823,8 @@ async function handleReject(req, res, body) {
   const meState = await loadState(userId);
   const otherState = await loadState(fromUserId);
 
-  meState.incoming = meState.incoming.filter((r) => r.user_id !== fromUserId);
-  otherState.outgoing = otherState.outgoing.filter((r) => r.user_id !== userId);
+  meState.incoming = meState.incoming.filter((r: any) => r.user_id !== fromUserId);
+  otherState.outgoing = otherState.outgoing.filter((r: any) => r.user_id !== userId);
 
   await Promise.all([
     saveState(userId, meState),
@@ -809,7 +834,7 @@ async function handleReject(req, res, body) {
   return res.status(200).json({ success: true, state: meState });
 }
 
-async function handleCancel(req, res, body) {
+async function handleCancel(req: ApiRequest, res: ApiResponse, body: any) {
   const { userId, authToken, targetUserId } = body;
   if (!userId || !authToken || !targetUserId) {
     return respondError(res, 400, 'Missing required fields');
@@ -828,8 +853,8 @@ async function handleCancel(req, res, body) {
   const meState = await loadState(userId);
   const otherState = await loadState(targetUserId);
 
-  meState.outgoing = meState.outgoing.filter((r) => r.user_id !== targetUserId);
-  otherState.incoming = otherState.incoming.filter((r) => r.user_id !== userId);
+  meState.outgoing = meState.outgoing.filter((r: any) => r.user_id !== targetUserId);
+  otherState.incoming = otherState.incoming.filter((r: any) => r.user_id !== userId);
 
   await Promise.all([
     saveState(userId, meState),
@@ -839,7 +864,7 @@ async function handleCancel(req, res, body) {
   return res.status(200).json({ success: true, state: meState });
 }
 
-async function handleRemoveFriend(req, res, body) {
+async function handleRemoveFriend(req: ApiRequest, res: ApiResponse, body: any) {
   const { userId, authToken, targetUserId } = body;
   if (!userId || !authToken || !targetUserId) {
     return respondError(res, 400, 'Missing required fields');
@@ -858,8 +883,8 @@ async function handleRemoveFriend(req, res, body) {
   const meState = await loadState(userId);
   const otherState = await loadState(targetUserId);
 
-  meState.friends = meState.friends.filter((r) => r.user_id !== targetUserId);
-  otherState.friends = otherState.friends.filter((r) => r.user_id !== userId);
+  meState.friends = meState.friends.filter((r: any) => r.user_id !== targetUserId);
+  otherState.friends = otherState.friends.filter((r: any) => r.user_id !== userId);
 
   await Promise.all([
     saveState(userId, meState),

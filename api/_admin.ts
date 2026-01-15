@@ -1,9 +1,8 @@
-// @ts-nocheck
 // ============================================================
-// API/ADMIN.JS - BACKEND ULTRA SEGURO
+// API/ADMIN.TS - BACKEND ULTRA SEGURO
 // ============================================================
 
-import { createClient } from '@supabase/supabase-js';
+import { createClient, type User as SupabaseUser, type SupabaseClient } from '@supabase/supabase-js';
 import dotenv from 'dotenv';
 import {
   applyCors,
@@ -17,20 +16,73 @@ import {
 import { applyReferralDiamondBonus } from './_referrals.js';
 dotenv.config();
 
+// ============================================================
+// TYPES
+// ============================================================
+
+interface RateLimitEntry {
+  count: number;
+  resetAt: number;
+  lastSeenAt: number;
+}
+
+interface ValidationResult {
+  valid: boolean;
+  error?: string;
+  user?: SupabaseUser;
+  role?: string;
+  userId?: string;
+}
+
+interface PurchaseOrder {
+  id: string;
+  status: 'pending' | 'approved' | 'rejected';
+  user_id: string;
+  user_email: string;
+  diamonds_base: number | string;
+  diamonds_bonus: number | string;
+}
+
+interface PlayerStats {
+  diamonds: number;
+  username: string;
+  user_id: string;
+}
+
+interface ApiRequest {
+  method?: string;
+  body?: {
+    action?: string;
+    userId?: string;
+    authToken?: string;
+    orderId?: string;
+    [key: string]: any;
+  };
+  headers?: Record<string, string | string[] | undefined>;
+  connection?: { remoteAddress?: string };
+}
+
+interface ApiResponse {
+  status: (code: number) => ApiResponse;
+  json: (data: any) => void;
+  end: (data?: any) => void;
+  setHeader: (key: string, value: string) => void;
+}
+
 // Inicializar Supabase com Service Key (bypass RLS)
-const supabase = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_KEY
+const supabase: SupabaseClient = createClient(
+  process.env.SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_KEY!
 );
 
 // ============================================================
 // 🛡️ RATE LIMITING MELHORADO
 // ============================================================
-const rateLimits = new Map();
-const failedAttempts = new Map();
+const rateLimits = new Map<string, RateLimitEntry>();
+const failedAttempts = new Map<string, RateLimitEntry>();
 
-let lastRateLimitCleanupAt = 0;
-function maybeCleanupRateLimits() {
+let lastRateLimitCleanupAt: number = 0;
+function maybeCleanupRateLimits(): void {
   const now = Date.now();
   if (now - lastRateLimitCleanupAt < 60_000) return;
   lastRateLimitCleanupAt = now;
@@ -41,14 +93,14 @@ function maybeCleanupRateLimits() {
 // ============================================================
 // 📝 LOGGING E AUDITORIA
 // ============================================================
-async function logAction(userId, action, details, req) {
+async function logAction(userId: string, action: string, details: Record<string, any>, req: ApiRequest): Promise<void> {
   return logAudit(supabase, userId, action, details, req);
 }
 
 // ============================================================
 // 🔐 VALIDAÇÃO DE SESSÃO E ADMIN (CRÍTICO)
 // ============================================================
-async function validateAdminSession(authToken, expectedUserId, ipAddress) {
+async function validateAdminSession(authToken: string, expectedUserId: string, ipAddress: string): Promise<ValidationResult> {
   try {
     // 1. Validar formato do token
     if (!authToken || typeof authToken !== 'string' || authToken.length < 20) {
@@ -95,7 +147,8 @@ async function validateAdminSession(authToken, expectedUserId, ipAddress) {
     };
     
   } catch (err) {
-    console.error('Admin validation error:', err.message);
+    const error = err as Error;
+    console.error('Admin validation error:', error.message);
     return { valid: false, error: 'Validation failed' };
   }
 }
@@ -103,7 +156,7 @@ async function validateAdminSession(authToken, expectedUserId, ipAddress) {
 // ============================================================
 // 💎 FUNÇÃO PARA ATUALIZAR DIAMANTES (COM TRANSAÇÃO)
 // ============================================================
-async function updatePlayerDiamonds(userId, amount, reason, req = null) {
+async function updatePlayerDiamonds(userId: string, amount: number, reason: string, req: ApiRequest | null = null): Promise<number> {
   try {
     // Validar entrada
     if (!userId || typeof userId !== 'string') {
@@ -174,15 +227,16 @@ async function updatePlayerDiamonds(userId, amount, reason, req = null) {
     return finalDiamonds;
     
   } catch (error) {
-    console.error('💥 updatePlayerDiamonds error:', error.message);
-    throw error;
+    const err = error as Error;
+    console.error('💥 updatePlayerDiamonds error:', err.message);
+    throw err;
   }
 }
 
 // ============================================================
 // MAIN HANDLER
 // ============================================================
-export default async function handler(req, res) {
+export default async function handler(req: ApiRequest, res: ApiResponse): Promise<void> {
   const startTime = Date.now();
   
   // 1. CORS RESTRITO
@@ -198,7 +252,7 @@ export default async function handler(req, res) {
   }
   
   // 2. EXTRAIR IP
-  const ipAddress = getIdentifier(req, null);
+  const ipAddress = getIdentifier(req, undefined);
   
   // 3. VALIDAR BODY
   let body;
@@ -211,7 +265,7 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: 'Invalid JSON' });
   }
   
-  const { action, userId, authToken } = body;
+  const { action, userId, authToken } = body || {};
   maybeCleanupRateLimits();
   
   // 4. VALIDAÇÃO BÁSICA
@@ -276,10 +330,12 @@ export default async function handler(req, res) {
     return result;
     
   } catch (error) {
-    console.error('Unhandled error:', error.message);
-    logAction(userId, 'ADMIN_ERROR', { 
+    const err = error as Error;
+    const userIdSafe = userId || 'unknown';
+    console.error('Unhandled error:', err.message);
+    logAction(userIdSafe, 'ADMIN_ERROR', { 
       action, 
-      error: error.message,
+      error: err.message,
       ipAddress 
     }, req).catch(() => {});
     return res.status(500).json({ error: 'Internal server error' });
@@ -289,14 +345,18 @@ export default async function handler(req, res) {
 // ============================================================
 // HANDLER 1: APROVAR PEDIDO
 // ============================================================
-async function handleApproveOrder(req, res, validation) {
+async function handleApproveOrder(req: ApiRequest, res: ApiResponse, validation: ValidationResult): Promise<void> {
   const { userId, role, user } = validation;
-  const { orderId } = req.body;
+  const { orderId } = req.body || {};
   
   try {
     // 1. Validar orderId
     if (!orderId || typeof orderId !== 'string' || orderId.length > 100) {
       return res.status(400).json({ error: 'Invalid orderId' });
+    }
+    
+    if (!userId) {
+      return res.status(401).json({ error: 'Unauthorized' });
     }
     
     // 2. BUSCAR PEDIDO COM LOCK
@@ -408,7 +468,8 @@ async function handleApproveOrder(req, res, validation) {
         req
       );
     } catch (error) {
-      console.error('Failed to add diamonds:', error);
+      const err = error as Error;
+      console.error('Failed to add diamonds:', err);
       
       // ROLLBACK: Reverter status do pedido
       await supabase
@@ -422,7 +483,7 @@ async function handleApproveOrder(req, res, validation) {
       
       logAction(userId, 'APPROVE_ORDER_DIAMONDS_FAILED', { 
         orderId, 
-        error: error.message 
+        error: err.message 
       }, req).catch(() => {});
       return res.status(500).json({ 
         error: 'Failed to add diamonds (order reverted)' 
@@ -435,11 +496,12 @@ async function handleApproveOrder(req, res, validation) {
         buyerId: order.user_id,
         diamondsBought: diamondsBase,
         source: 'shop_order',
-        req
+        req: req as any
       });
       console.log('✅ Referral diamond bonus applied for order', orderId, 'diamonds:', diamondsBase);
     } catch (err) {
-      console.error('❌ Referral diamond bonus failed:', err?.message || err, { orderId, buyerId: order.user_id, diamonds: diamondsBase });
+      const error = err as Error;
+      console.error('❌ Referral diamond bonus failed:', error?.message || error, { orderId, buyerId: order.user_id, diamonds: diamondsBase });
     }
     
     // 8. LOG DE SUCESSO
@@ -462,9 +524,11 @@ async function handleApproveOrder(req, res, validation) {
     });
     
   } catch (error) {
-    console.error('💥 Error in handleApproveOrder:', error.message);
+    const err = error as Error;
+    const userId = validation.userId || 'unknown';
+    console.error('💥 Error in handleApproveOrder:', err.message);
     logAction(userId, 'APPROVE_ORDER_ERROR', { 
-      error: error.message 
+      error: err.message 
     }, req).catch(() => {});
     return res.status(500).json({ error: 'Internal server error' });
   }
@@ -473,14 +537,18 @@ async function handleApproveOrder(req, res, validation) {
 // ============================================================
 // HANDLER 2: REJEITAR PEDIDO
 // ============================================================
-async function handleRejectOrder(req, res, validation) {
+async function handleRejectOrder(req: ApiRequest, res: ApiResponse, validation: ValidationResult): Promise<void> {
   const { userId, role } = validation;
-  const { orderId } = req.body;
+  const { orderId } = req.body || {};
   
   try {
     // 1. Validar orderId
     if (!orderId || typeof orderId !== 'string' || orderId.length > 100) {
       return res.status(400).json({ error: 'Invalid orderId' });
+    }
+    
+    if (!userId) {
+      return res.status(401).json({ error: 'Unauthorized' });
     }
     
     // 2. BUSCAR PEDIDO
@@ -555,9 +623,11 @@ async function handleRejectOrder(req, res, validation) {
     });
     
   } catch (error) {
-    console.error('💥 Error in handleRejectOrder:', error.message);
+    const err = error as Error;
+    const userId = validation.userId || 'unknown';
+    console.error('💥 Error in handleRejectOrder:', err.message);
     logAction(userId, 'REJECT_ORDER_ERROR', { 
-      error: error.message 
+      error: err.message 
     }, req).catch(() => {});
     return res.status(500).json({ error: 'Internal server error' });
   }

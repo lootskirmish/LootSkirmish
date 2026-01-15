@@ -1,9 +1,8 @@
-// @ts-nocheck
 // ============================================================
-// API/_SHOP.JS - Shop & Payments Management
+// API/_SHOP.TS - Shop & Payments Management
 // ============================================================
 
-import { createClient } from '@supabase/supabase-js';
+import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import Stripe from 'stripe';
 import fetch from 'node-fetch';
 import dotenv from 'dotenv';
@@ -22,6 +21,57 @@ import {
 
 dotenv.config();
 
+// ============================================================
+// TYPES
+// ============================================================
+
+interface ApiRequest {
+  method?: string;
+  body?: any;
+  rawBody?: Buffer | string;
+  readable?: boolean;
+  headers?: Record<string, string | string[] | undefined>;
+  connection?: { remoteAddress?: string };
+  query?: Record<string, string | string[] | undefined>;
+  path?: string;
+  url?: string;
+}
+
+interface ApiResponse {
+  status: (code: number) => ApiResponse;
+  json: (data: any) => void;
+  end: (data?: any) => void;
+  setHeader: (key: string, value: string) => void;
+}
+
+interface Package {
+  id: string;
+  name: string;
+  diamonds: number;
+  price: number;
+  priceBRL: number;
+  priceId: string;
+  firstPurchaseBonus?: {
+    type: string;
+    value: number;
+  };
+  timedBonus?: {
+    percentage: number;
+    endsAt: string;
+  };
+}
+
+interface Subscription {
+  id: string;
+  name: string;
+  price: number;
+  priceBRL: number;
+  priceId: string;
+  duration: number;
+  diamonds: number;
+  dailyDiamonds: number;
+}
+
 // Vercel webhook endpoints (Stripe) need raw body to validate signatures.
 export const config = {
   api: {
@@ -33,12 +83,12 @@ export const config = {
 // INICIALIZAÇÃO
 // ============================================================
 
-const supabase = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_KEY
+const supabase: SupabaseClient = createClient(
+  process.env.SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_KEY!
 );
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
   apiVersion: '2023-10-16'
 });
 
@@ -54,7 +104,7 @@ const STRIPE_PRICE_IDS = {
   PREMIUM_SUB: 'price_1SpERfC4sph1j0MSbo6OCl7J'
 };
 
-const PACKAGES = [
+const PACKAGES: Package[] = [
   {
     id: 'pkg_150',
     name: 'STARTER PACK',
@@ -97,7 +147,7 @@ const PACKAGES = [
   }
 ];
 
-const SUBSCRIPTIONS = [
+const SUBSCRIPTIONS: Subscription[] = [
   {
     id: 'sub_premium',
     name: 'PREMIUM SUBSCRIPTION',
@@ -115,9 +165,9 @@ const SUBSCRIPTIONS = [
 // ============================================================
 
 const shopRateLimits = new Map();
-let lastShopCleanupAt = 0;
+let lastShopCleanupAt: number = 0;
 
-function getShopRateLimitConfig() {
+function getShopRateLimitConfig(): { maxRequests: number; windowMs: number } {
   const maxRequests = parseInt(process.env.SHOP_RATE_LIMIT_MAX || '2');
   const windowMs = parseInt(process.env.SHOP_RATE_LIMIT_WINDOW || '60000');
   return { maxRequests, windowMs };
@@ -127,13 +177,13 @@ function getShopRateLimitConfig() {
 // HELPERS
 // ============================================================
 
-function normalizeNumber(value, fallback = 0) {
+function normalizeNumber(value: any, fallback: number = 0): number {
   const num = Number(value);
   if (!Number.isFinite(num)) return fallback;
   return num;
 }
 
-async function getRawBody(req) {
+async function getRawBody(req: ApiRequest): Promise<Buffer | null> {
   if (req.rawBody) {
     return Buffer.isBuffer(req.rawBody) ? req.rawBody : Buffer.from(req.rawBody);
   }
@@ -146,14 +196,15 @@ async function getRawBody(req) {
     try {
       return Buffer.from(JSON.stringify(req.body));
     } catch (err) {
-      console.warn('⚠️ Failed to stringify parsed body:', err.message);
+      const error = err as any;
+      console.warn('⚠️ Failed to stringify parsed body:', error.message);
     }
   }
 
   if (!req.readable) return null;
 
-  const chunks = [];
-  for await (const chunk of req) {
+  const chunks: Buffer[] = [];
+  for await (const chunk of req as any) {
     chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
   }
 
@@ -162,7 +213,7 @@ async function getRawBody(req) {
   return raw;
 }
 
-async function getJsonBody(req, rawBody) {
+async function getJsonBody(req: ApiRequest, rawBody?: Buffer | null): Promise<any> {
   if (req.body && typeof req.body === 'object' && Object.keys(req.body).length) {
     return req.body;
   }
@@ -173,17 +224,18 @@ async function getJsonBody(req, rawBody) {
   try {
     return JSON.parse(source.toString('utf8'));
   } catch (err) {
-    console.warn('⚠️ Failed to parse JSON body:', err.message);
+    const error = err as any;
+    console.warn('⚠️ Failed to parse JSON body:', error.message);
     return {};
   }
 }
 
-function calculateBonus(product, isFirstPurchase) {
+function calculateBonus(product: Package | Subscription, isFirstPurchase: boolean): { bonus: number; type: string | null; total: number } {
   let bonus = 0;
-  let bonusType = null;
+  let bonusType: string | null = null;
 
   // Bônus de primeira compra
-  if (isFirstPurchase && product.firstPurchaseBonus) {
+  if (isFirstPurchase && 'firstPurchaseBonus' in product && product.firstPurchaseBonus) {
     if (product.firstPurchaseBonus.type === 'percentage') {
       bonus = Math.floor(product.diamonds * (product.firstPurchaseBonus.value / 100));
     } else {
@@ -193,7 +245,7 @@ function calculateBonus(product, isFirstPurchase) {
   }
 
   // Bônus temporário (substitui o de primeira compra se maior)
-  if (product.timedBonus && new Date(product.timedBonus.endsAt) > new Date()) {
+  if ('timedBonus' in product && product.timedBonus && new Date(product.timedBonus.endsAt) > new Date()) {
     const timedBonus = Math.floor(product.diamonds * (product.timedBonus.percentage / 100));
     if (timedBonus > bonus) {
       bonus = timedBonus;
@@ -208,11 +260,11 @@ function calculateBonus(product, isFirstPurchase) {
   };
 }
 
-function getProduct(productId, productType) {
+function getProduct(productId: string, productType: string): Package | Subscription | null {
   if (productType === 'package') {
-    return PACKAGES.find(p => p.id === productId);
+    return PACKAGES.find(p => p.id === productId) || null;
   } else if (productType === 'subscription') {
-    return SUBSCRIPTIONS.find(s => s.id === productId);
+    return SUBSCRIPTIONS.find(s => s.id === productId) || null;
   }
   return null;
 }
@@ -221,7 +273,7 @@ function getProduct(productId, productType) {
 // STRIPE CHECKOUT
 // ============================================================
 
-async function createStripeCheckout(order, product, userId) {
+async function createStripeCheckout(order: any, product: Package | Subscription, userId: string): Promise<string | null> {
   try {
     console.log('🔄 [Stripe] Iniciando checkout para pedido:', order.id);
     
@@ -260,8 +312,9 @@ async function createStripeCheckout(order, product, userId) {
 
     return session.url;
   } catch (error) {
-    console.error('❌ [Stripe] Erro:', error);
-    throw new Error(`Stripe error: ${error.message}`);
+    const err = error as any;
+    console.error('❌ [Stripe] Erro:', err);
+    throw new Error(`Stripe error: ${err.message}`);
   }
 }
 
@@ -269,7 +322,7 @@ async function createStripeCheckout(order, product, userId) {
 // MERCADOPAGO CHECKOUT
 // ============================================================
 
-async function createMercadoPagoCheckout(order, product, userId) {
+async function createMercadoPagoCheckout(order: any, product: Package | Subscription, userId: string): Promise<string | null> {
   try {
     console.log('🔄 [MercadoPago] Iniciando checkout para pedido:', order.id);
     
@@ -287,7 +340,7 @@ async function createMercadoPagoCheckout(order, product, userId) {
           title: product.name,
           description: order.order_type === 'package' 
             ? `${order.quantity} 💎 Diamonds` 
-            : `${product.duration} days subscription`,
+            : `${'duration' in product ? product.duration : 30} days subscription`,
           quantity: 1,
           currency_id: 'BRL',
           unit_price: product.priceBRL, // ← Agora você define o preço em BRL direto no produto
@@ -329,7 +382,7 @@ async function createMercadoPagoCheckout(order, product, userId) {
       throw new Error(`MercadoPago error: ${JSON.stringify(errorData)}`);
     }
 
-    const data = await response.json();
+    const data: any = await response.json();
     console.log('✅ [MercadoPago] Preferência criada:', data.id);
 
     await supabase
@@ -341,8 +394,9 @@ async function createMercadoPagoCheckout(order, product, userId) {
 
     return data.init_point;
   } catch (error) {
-    console.error('❌ [MercadoPago] Erro:', error);
-    throw new Error(`MercadoPago error: ${error.message}`);
+    const err = error as any;
+    console.error('❌ [MercadoPago] Erro:', err);
+    throw new Error(`MercadoPago error: ${err.message}`);
   }
 }
 
@@ -350,7 +404,7 @@ async function createMercadoPagoCheckout(order, product, userId) {
 // NOWPAYMENTS CHECKOUT
 // ============================================================
 
-async function createNOWPaymentsCheckout(order, product, userId) {
+async function createNOWPaymentsCheckout(order: any, product: Package | Subscription, userId: string): Promise<string | null> {
   try {
     console.log('🔄 [NOWPayments] Iniciando checkout para pedido:', order.id);
     
@@ -367,7 +421,7 @@ async function createNOWPaymentsCheckout(order, product, userId) {
       pay_currency: 'ltc', // Litecoin recomendado
       ipn_callback_url: `${process.env.WEBHOOK_BASE_URL}/api/webhooks/shop?gateway=nowpayments`,
       order_id: order.id,
-      order_description: `${product.name} - ${order.order_type === 'package' ? `${order.quantity} Diamonds` : `${product.duration} days`}`,
+      order_description: `${product.name} - ${order.order_type === 'package' ? `${order.quantity} Diamonds` : `${'duration' in product ? product.duration : 30} days`}`,
       success_url: `${process.env.WEBHOOK_BASE_URL}/shop?payment=success&order_id=${order.id}`,
       cancel_url: `${process.env.WEBHOOK_BASE_URL}/shop?payment=cancelled`
     };
@@ -389,7 +443,7 @@ async function createNOWPaymentsCheckout(order, product, userId) {
       throw new Error(`NOWPayments error: ${JSON.stringify(errorData)}`);
     }
 
-    const data = await response.json();
+    const data: any = await response.json();
     console.log('✅ [NOWPayments] Pagamento criado:', data.payment_id);
 
     // Atualizar order com payment_id
@@ -402,8 +456,9 @@ async function createNOWPaymentsCheckout(order, product, userId) {
 
     return data.payment_url;
   } catch (error) {
-    console.error('❌ [NOWPayments] Erro:', error);
-    throw new Error(`NOWPayments error: ${error.message}`);
+    const err = error as any;
+    console.error('❌ [NOWPayments] Erro:', err);
+    throw new Error(`NOWPayments error: ${err.message}`);
   }
 }
 
@@ -411,8 +466,8 @@ async function createNOWPaymentsCheckout(order, product, userId) {
 // PROCESSAR PAGAMENTO APROVADO
 // ============================================================
 
-async function processSuccessfulPayment(orderId, { gateway = 'unknown', paymentDetails = null } = {}) {
-  let order = null;
+async function processSuccessfulPayment(orderId: string, { gateway = 'unknown', paymentDetails = null }: { gateway?: string; paymentDetails?: any } = {}): Promise<any> {
+  let order: any = null;
   try {
     console.log('🔄 Processing payment for order:', orderId);
 
@@ -502,18 +557,18 @@ async function processSuccessfulPayment(orderId, { gateway = 'unknown', paymentD
 
       if (gateway === 'stripe') {
         // Stripe retorna amount_total em centavos
-        paidAmount = normalizeNumber(paymentDetails.amount_total, 0) / 100;
-        paidCurrency = (paymentDetails.currency || 'USD').toUpperCase();
+        paidAmount = normalizeNumber((paymentDetails as any).amount_total, 0) / 100;
+        paidCurrency = ((paymentDetails as any).currency || 'USD').toUpperCase();
       } else if (gateway === 'mercadopago') {
-        paidAmount = normalizeNumber(paymentDetails.transaction_amount, 0);
-        paidCurrency = (paymentDetails.currency_id || '').toUpperCase();
+        paidAmount = normalizeNumber((paymentDetails as any).transaction_amount, 0);
+        paidCurrency = ((paymentDetails as any).currency_id || '').toUpperCase();
       } else if (gateway === 'nowpayments') {
-        paidAmount = normalizeNumber(paymentDetails.amount, 0);
-        paidCurrency = (paymentDetails.pay_currency || '').toUpperCase();
+        paidAmount = normalizeNumber((paymentDetails as any).amount, 0);
+        paidCurrency = ((paymentDetails as any).pay_currency || '').toUpperCase();
       }
 
       if (paidAmount > 0 && expectedAmount > 0 && Math.abs(paidAmount - expectedAmount) > 1) {
-        console.error('❌ Payment amount mismatch for order', orderId, { expectedAmount, paidAmount, gateway, rawAmount: paymentDetails.amount_total || paymentDetails.transaction_amount });
+        console.error('❌ Payment amount mismatch for order', orderId, { expectedAmount, paidAmount, gateway, rawAmount: (paymentDetails as any).amount_total || (paymentDetails as any).transaction_amount });
         await supabase
           .from('shop_orders')
           .update({
@@ -599,7 +654,7 @@ async function processSuccessfulPayment(orderId, { gateway = 'unknown', paymentD
           source: 'diamond_purchase'
         });
       } catch (refError) {
-        console.warn('⚠️ Referral bonus failed (non-blocking):', refError.message);
+        console.warn('⚠️ Referral bonus failed (non-blocking):', refError instanceof Error ? refError.message : refError);
       }
 
     } else if (productType === 'subscription') {
@@ -705,7 +760,7 @@ async function processSuccessfulPayment(orderId, { gateway = 'unknown', paymentD
     return { success: true };
 
   } catch (error) {
-    console.error('❌ Process payment error:', error?.message || error);
+    console.error('❌ Process payment error:', error instanceof Error ? error.message : error);
     
     // Marcar ordem como erro para investigação manual
     if (order?.id) {
@@ -715,16 +770,16 @@ async function processSuccessfulPayment(orderId, { gateway = 'unknown', paymentD
           status: 'error',
           metadata: { 
             ...(order?.metadata || {}),
-            error: error?.message || String(error),
+            error: error instanceof Error ? error.message : String(error),
             error_timestamp: new Date().toISOString()
           },
           updated_at: new Date().toISOString()
         })
-        .eq('id', order.id)
-        .catch(e => console.error('Failed to update order status to error:', e?.message || e));
+        .eq('id', order.id);
+      // Note: Supabase doesn't have .catch, errors handled by try-catch block
     }
     
-    return { success: false, error: error?.message || String(error) };
+    return { success: false, error: error instanceof Error ? error.message : String(error) };
   }
 }
 
@@ -732,7 +787,7 @@ async function processSuccessfulPayment(orderId, { gateway = 'unknown', paymentD
 // HANDLERS
 // ============================================================
 
-async function handleCreateOrder(req, res, body) {
+async function handleCreateOrder(req: ApiRequest, res: ApiResponse, body: any): Promise<void> {
   try {
     const { userId, authToken, productId, productType, paymentMethod } = body || {};
 
@@ -768,8 +823,8 @@ async function handleCreateOrder(req, res, body) {
       : normalizeNumber(product.price, 0);
 
     // Calcular quantidade final (com bônus se for pacote)
-    let finalQuantity = product.diamonds || product.duration;
-    let metadata = {
+    let finalQuantity = product.diamonds || ('duration' in product ? product.duration : 30);
+    let metadata: Record<string, any> = {
       payment_currency: paymentCurrency,
       expected_amount: expectedAmount,
       price_usd: product.price,
@@ -858,7 +913,7 @@ async function handleCreateOrder(req, res, body) {
         .update({ status: 'cancelled' })
         .eq('id', order.id);
 
-      const errorMessage = checkoutError?.message || checkoutError?.error || 'Unknown error';
+      const errorMessage = (checkoutError as any)?.message || (checkoutError as any)?.error || 'Unknown error';
       console.error('❌ Erro final de checkout:', errorMessage);
       return res.status(500).json({ error: `Checkout error: ${errorMessage}` });
     }
@@ -892,7 +947,7 @@ async function handleCreateOrder(req, res, body) {
 // WEBHOOK HANDLER - VERSÃO CORRIGIDA
 // ============================================================
 
-async function handleWebhook(req, res, { rawBody, parsedBody } = {}) {
+async function handleWebhook(req: ApiRequest, res: ApiResponse, { rawBody, parsedBody }: { rawBody?: Buffer | null; parsedBody?: any } = {}): Promise<void> {
   try {
     const gateway = req.query?.gateway || 'stripe';
 
@@ -904,12 +959,17 @@ async function handleWebhook(req, res, { rawBody, parsedBody } = {}) {
     // STRIPE WEBHOOK
     // ============================================================
     if (gateway === 'stripe') {
-      const sig = req.headers['stripe-signature'];
+      const sig = req.headers?.['stripe-signature'];
       const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
 
       if (!webhookSecret) {
         console.error('❌ Stripe webhook secret not configured');
         return res.status(500).json({ error: 'Webhook secret not configured' });
+      }
+
+      if (!sig) {
+        console.error('❌ [Stripe] Missing signature header');
+        return res.status(400).json({ error: 'Missing signature header' });
       }
 
       let event;
@@ -921,9 +981,10 @@ async function handleWebhook(req, res, { rawBody, parsedBody } = {}) {
           return res.status(400).json({ error: 'Missing payload' });
         }
 
-        event = stripe.webhooks.constructEvent(payload, sig, webhookSecret);
+        event = stripe.webhooks.constructEvent(payload, sig as string, webhookSecret);
       } catch (err) {
-        console.error('❌ Webhook signature verification failed:', err.message);
+        const error = err as any;
+        console.error('❌ Webhook signature verification failed:', error.message);
         return res.status(400).json({ error: 'Invalid signature' });
       }
 
@@ -1000,7 +1061,7 @@ async function handleWebhook(req, res, { rawBody, parsedBody } = {}) {
           return res.status(500).json({ error: 'Failed to fetch payment' });
         }
 
-        const payment = await paymentResponse.json();
+        const payment: any = await paymentResponse.json();
         
         console.log('💳 Payment details:', {
           id: payment.id,
@@ -1036,13 +1097,16 @@ async function handleWebhook(req, res, { rawBody, parsedBody } = {}) {
 
             if (payerEmail && candidates.length > 1) {
               try {
-                const { data: emailLookup, error: emailErr } = await supabase.auth.admin.getUserByEmail(payerEmail);
-                if (!emailErr && emailLookup?.user?.id) {
-                  const emailUserId = emailLookup.user.id;
-                  matched = candidates.find(c => c.user_id === emailUserId) || matched;
+                const { data: emailUsers, error: emailErr } = await supabase.auth.admin.listUsers();
+                if (!emailErr && emailUsers?.users) {
+                  const emailUser = emailUsers.users.find(u => u.email === payerEmail);
+                  if (emailUser?.id) {
+                    const emailUserId = emailUser.id;
+                    matched = candidates.find(c => c.user_id === emailUserId) || matched;
+                  }
                 }
               } catch (e) {
-                console.warn('⚠️ Falha ao consultar usuário por email:', e?.message || e);
+                console.warn('⚠️ Falha ao consultar usuário por email:', e instanceof Error ? e.message : e);
               }
             }
 
@@ -1128,10 +1192,10 @@ async function handleWebhook(req, res, { rawBody, parsedBody } = {}) {
           return res.status(200).json({ received: true });
         }
 
-        const merchantOrder = await merchantOrderResponse.json();
+        const merchantOrder: any = await merchantOrderResponse.json();
 
         const orderId = merchantOrder.external_reference;
-        const approvedPayment = merchantOrder.payments?.find(p => p.status === 'approved');
+        const approvedPayment = merchantOrder.payments?.find((p: any) => p.status === 'approved');
 
         if (orderId && approvedPayment?.id) {
           console.log('✅ Merchant order aprovado, processando ordem:', orderId);
@@ -1174,7 +1238,7 @@ async function handleWebhook(req, res, { rawBody, parsedBody } = {}) {
     // O erro já foi logado, então podemos investigar depois
     return res.status(200).json({ 
       received: true, 
-      error: error.message 
+      error: error instanceof Error ? error.message : String(error)
     });
   }
 }
@@ -1183,8 +1247,8 @@ async function handleWebhook(req, res, { rawBody, parsedBody } = {}) {
 // MAIN HANDLER
 // ============================================================
 
-export default async function handler(req, res) {
-  applyCors(req, res);
+export default async function handler(req: ApiRequest, res: ApiResponse): Promise<void> {
+  applyCors(req as any, res as any);
 
   if (req.method === 'OPTIONS') {
     return res.status(200).end();
@@ -1220,8 +1284,8 @@ export default async function handler(req, res) {
 
   const allowed = checkRateLimit(shopRateLimits, identifier, { maxRequests, windowMs });
   if (!allowed) {
-    res.setHeader('Retry-After', Math.ceil(windowMs / 1000));
-    logAudit(supabase, userId, 'SHOP_RATE_LIMIT', { action }, req).catch(() => {});
+    res.setHeader('Retry-After', String(Math.ceil(windowMs / 1000)));
+    logAudit(supabase, userId, 'SHOP_RATE_LIMIT', { action }, req as any).catch(() => {});
     return res.status(429).json({ error: 'Too many requests. Please wait.' });
   }
 
@@ -1233,8 +1297,9 @@ export default async function handler(req, res) {
         return res.status(400).json({ error: 'Invalid action' });
     }
   } catch (error) {
-    console.error('❌ Shop API error:', error);
-    logAudit(supabase, userId, 'SHOP_ERROR', { action, error: error.message }, req).catch(() => {});
+    const err = error as Error;
+    console.error('❌ Shop API error:', err);
+    logAudit(supabase, userId, 'SHOP_ERROR', { action, error: err.message }, req as any).catch(() => {});
     return res.status(500).json({ error: 'Internal server error' });
   }
 }

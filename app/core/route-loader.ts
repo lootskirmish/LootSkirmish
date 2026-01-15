@@ -247,6 +247,12 @@ async function _loadProfileRoute(): Promise<void> {
     const publicUsername = windowExt.publicProfileUsername;
     const user = getActiveUser({ sync: true, allowStored: true });
 
+    // GUARD: Se não tem publicUsername, limpar qualquer valor residual
+    if (!publicUsername && windowExt.publicProfileUsername !== null) {
+      windowExt.publicProfileUsername = null;
+      currentLoadingPublicProfile = null;
+    }
+
     if (publicUsername) {
       // GUARD: Prevent concurrent loads of the same profile
       if (currentLoadingPublicProfile === publicUsername) {
