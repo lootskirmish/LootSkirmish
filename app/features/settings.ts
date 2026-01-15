@@ -8,13 +8,29 @@ import { playSound, setMasterVolume, setSoundEnabled, setSoundPreference, setAll
 import { showToast, showAlert } from '../shared/effects';
 
 // ============================================================
+// TYPE DEFINITIONS
+// ============================================================
+
+interface CheckboxBinding {
+  id: string;
+  storageKey: string;
+  defaultChecked: boolean;
+}
+
+declare global {
+  interface Window {
+    currentUser?: any;
+  }
+}
+
+// ============================================================
 // SETTINGS DATA LOADING
 // ============================================================
 
 /**
  * Carrega os dados de configurações do usuário
  */
-export async function loadSettingsData() {
+export async function loadSettingsData(): Promise<void> {
   try {
     const user = getActiveUser({ sync: true, allowStored: true }) || window.currentUser;
     if (!user?.id) return;
@@ -56,7 +72,7 @@ export async function loadSettingsData() {
 /**
  * Carrega preferências salvas do localStorage
  */
-const checkboxBindings = [
+const checkboxBindings: CheckboxBinding[] = [
   { id: 'sound-effects', storageKey: 'soundEffects', defaultChecked: true },
   { id: 'background-music', storageKey: 'backgroundMusic', defaultChecked: false },
   { id: 'public-profile', storageKey: 'publicProfile', defaultChecked: true },
@@ -65,10 +81,10 @@ const checkboxBindings = [
   { id: 'daily-notifications', storageKey: 'dailyNotifications', defaultChecked: true }
 ];
 
-let settingsUIBound = false;
-let usernameChangeCount = 0;
+let settingsUIBound: boolean = false;
+let usernameChangeCount: number = 0;
 
-function applySavedPreferencesToUI() {
+function applySavedPreferencesToUI(): void {
   for (const { id, storageKey, defaultChecked } of checkboxBindings) {
     const checkbox = document.getElementById(id);
     if (!checkbox) continue;
@@ -99,7 +115,7 @@ function applySavedPreferencesToUI() {
   updateSoundChannelEnabledState();
 }
 
-function bindSettingsUIOnce() {
+function bindSettingsUIOnce(): void {
   if (settingsUIBound) return;
   settingsUIBound = true;
 
@@ -270,7 +286,7 @@ function bindSettingsUIOnce() {
   bindSoundModal();
 }
 
-function updateUsernameUI() {
+function updateUsernameUI(): void {
   const input = document.getElementById('settings-username');
   const button = document.getElementById('edit-username-btn');
   const cancelBtn = document.getElementById('cancel-username-btn');
@@ -320,7 +336,7 @@ const SOUND_TOGGLE_IDS = [
   { id: 'sound-toggle-win', key: 'win' }
 ];
 
-function syncSoundModalCheckboxes() {
+function syncSoundModalCheckboxes(): void {
   for (const { id, key } of SOUND_TOGGLE_IDS) {
     const el = document.getElementById(id);
     if (!el) continue;
@@ -340,7 +356,7 @@ function syncSoundModalCheckboxes() {
   }
 }
 
-function updateSoundChannelEnabledState() {
+function updateSoundChannelEnabledState(): void {
   const master = document.getElementById('sound-effects');
   const masterOn = master ? master.checked : true;
   for (const { id } of SOUND_TOGGLE_IDS) {
@@ -350,7 +366,7 @@ function updateSoundChannelEnabledState() {
   }
 }
 
-function bindSoundModal() {
+function bindSoundModal(): void {
   const openBtn = document.getElementById('sound-config-btn');
   const modal = document.getElementById('sound-config-modal');
   const closeBtn = document.getElementById('sound-config-close');
@@ -433,7 +449,7 @@ function bindSoundModal() {
 /**
  * Habilita/salva edição do username
  */
-export async function enableUsernameEdit() {
+export async function enableUsernameEdit(): Promise<void> {
   const input = document.getElementById('settings-username');
   const button = document.getElementById('edit-username-btn');
   const cancelBtn = document.getElementById('cancel-username-btn');
@@ -541,7 +557,7 @@ export async function enableUsernameEdit() {
   }
 }
 
-export function cancelUsernameEdit() {
+export function cancelUsernameEdit(): void {
   const input = document.getElementById('settings-username');
   const button = document.getElementById('edit-username-btn');
   const cancelBtn = document.getElementById('cancel-username-btn');
@@ -568,7 +584,7 @@ export function cancelUsernameEdit() {
 /**
  * Muda a senha do usuário
  */
-export async function changePassword() {
+export async function changePassword(): Promise<void> {
   const newPassword = prompt('Enter your new password (minimum 6 characters):');
   
   if (!newPassword) return;
@@ -602,7 +618,7 @@ export async function changePassword() {
 /**
  * Navega para a tela de configurações
  */
-export function goToSettings() {
+export function goToSettings(): void {
   const dropdown = document.getElementById('profile-dropdown');
   if (dropdown) dropdown.classList.remove('active');
   

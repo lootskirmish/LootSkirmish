@@ -3,45 +3,90 @@
 // ============================================================
 
 import { supabase } from './auth';
+import type { RealtimeChannel } from '@supabase/supabase-js';
 import { navigateTo } from '../core/router';
 import { requestFriendFromContext } from './friends';
 import { showToast } from '../shared/effects';
 
 // ============================================================
+// TYPE DEFINITIONS
+// ============================================================
+
+interface ChatMessage {
+  id: string;
+  user_id: string;
+  username: string;
+  message: string;
+  created_at: string;
+  avatar_url?: string;
+}
+
+interface User {
+  id: string;
+  username?: string;
+  avatar_url?: string;
+}
+
+interface ChatElements {
+  chatPanel: HTMLElement | null;
+  chatBtn: HTMLElement | null;
+  chatContainer: HTMLElement | null;
+  input: HTMLInputElement | null;
+  sendBtn: HTMLElement | null;
+}
+
+interface IconConfig {
+  icon?: string;
+  showCount?: boolean;
+}
+
+declare global {
+  interface Window {
+    refreshLucideIcons?: () => void;
+    chatIconMarkup: typeof chatIconMarkup;
+    setChatToggleIcon: typeof setChatToggleIcon;
+    initializeChat: typeof initializeChat;
+    sendChatMessage: typeof sendChatMessage;
+    toggleChat: typeof toggleChat;
+    cleanupChat: typeof cleanupChat;
+  }
+}
+
+// ============================================================
 // STATE
 // ============================================================
-let chatSubscription = null;
-let isChatOpen = false;
-let currentUserId = null;
-let lastMessageTime = 0;
-let onlineUsersCount = 0;
-const RATE_LIMIT_MS = 5000; // 5 segundos
+let chatSubscription: RealtimeChannel | null = null;
+let isChatOpen: boolean = false;
+let currentUserId: string | null = null;
+let lastMessageTime: number = 0;
+let onlineUsersCount: number = 0;
+const RATE_LIMIT_MS: number = 5000; // 5 segundos
 
 // ✅ ADICIONAR ESTAS LINHAS:
-let presenceChannel = null;
-let onlineUsers = new Set();
+let presenceChannel: RealtimeChannel | null = null;
+let onlineUsers: Set<string> = new Set();
 
 // ✅ ADICIONAR CACHE DE AVATARES
-const avatarCache = new Map();
+const avatarCache: Map<string, string> = new Map();
 
 // ============================================================
 // DOM HELPERS / ONE-TIME BINDING
 // ============================================================
 
-let chatDomBound = false;
-let resizeTimeout = null;
+let chatDomBound: boolean = false;
+let resizeTimeout: ReturnType<typeof setTimeout> | null = null;
 
-let chatPanelEl = null;
-let chatBtnEl = null;
-let chatContainerEl = null;
-let chatInputEl = null;
-let chatSendBtnEl = null;
+let chatPanelEl: HTMLElement | null = null;
+let chatBtnEl: HTMLElement | null = null;
+let chatContainerEl: HTMLElement | null = null;
+let chatInputEl: HTMLInputElement | null = null;
+let chatSendBtnEl: HTMLElement | null = null;
 
 // Dropdown de ações do usuário
-let userActionMenuEl = null;
-let closeMenuListenersBound = false;
+let userActionMenuEl: HTMLElement | null = null;
+let closeMenuListenersBound: boolean = false;
 
-function getChatEls() {
+function getChatEls(): ChatElements {
   chatPanelEl ||= document.getElementById('chat-panel');
   chatBtnEl ||= document.getElementById('chat-toggle-icon');
   chatContainerEl ||= document.getElementById('chat-messages-container');
@@ -57,7 +102,7 @@ function getChatEls() {
   };
 }
 
-function chatIconMarkup(count = '0', { icon = 'messages-square', showCount = true } = {}) {
+function chatIconMarkup(count: string | number = '0', { icon = 'messages-square', showCount = true }: IconConfig = {}): string {
   const safeCount = typeof count === 'number' ? String(count) : (count || '0');
   const badge = showCount
     ? `<span class="chat-online-count" id="chat-online-count">${safeCount}</span>`
@@ -66,7 +111,7 @@ function chatIconMarkup(count = '0', { icon = 'messages-square', showCount = tru
   return `<span class="header-icon" data-lucide="${icon}"></span>${badge}`;
 }
 
-function setChatToggleIcon({ count = '0', icon = 'messages-square', showCount = true } = {}) {
+function setChatToggleIcon({ count = '0', icon = 'messages-square', showCount = true }: { count?: string | number } & IconConfig = {}): void {
   const { chatBtn } = getChatEls();
   if (!chatBtn) return;
 
@@ -79,7 +124,7 @@ function setChatToggleIcon({ count = '0', icon = 'messages-square', showCount = 
 window.chatIconMarkup = chatIconMarkup;
 window.setChatToggleIcon = setChatToggleIcon;
 
-function forceChatClosedUI({ showCount = true } = {}) {
+function forceChatClosedUI({ showCount = true }: { showCount?: boolean } = {}): void {
   const { chatPanel, chatBtn } = getChatEls();
 
   if (chatPanel) {
@@ -97,7 +142,7 @@ function forceChatClosedUI({ showCount = true } = {}) {
   isChatOpen = false;
 }
 
-function cleanupChatConnections() {
+function cleanupChatConnections(): void {
   if (chatSubscription) {
     chatSubscription.unsubscribe();
     chatSubscription = null;
@@ -108,7 +153,7 @@ function cleanupChatConnections() {
 // ============================================================
 // REALTIME PRESENCE - RASTREAMENTO DE USUÁRIOS ONLINE
 // ============================================================
-function initializePresence(user) {
+function initializePresence(user: User): void {
   if (!user?.id) return;
 
   // Evitar múltiplos canais se initializeChat rodar mais de uma vez
@@ -152,7 +197,7 @@ function initializePresence(user) {
     });
 }
 
-function cleanupPresence() {
+function cleanupPresence(): void {
   if (presenceChannel) {
     presenceChannel.unsubscribe();
     presenceChannel = null;
@@ -163,7 +208,7 @@ function cleanupPresence() {
 // ============================================================
 // USER ACTION DROPDOWN
 // ============================================================
-function getUserActionMenu() {
+function getUserActionMenu(): HTMLElement {
   if (userActionMenuEl) return userActionMenuEl;
 
   const menu = document.createElement('div');
@@ -193,19 +238,19 @@ function getUserActionMenu() {
   return menu;
 }
 
-function hideUserActionMenu() {
+function hideUserActionMenu(): void {
   if (!userActionMenuEl) return;
   userActionMenuEl.classList.remove('visible');
   userActionMenuEl.style.display = 'none';
 }
 
 // Minimal helpers for friends API usage from chat
-async function getSessionToken() {
+async function getSessionToken(): Promise<string | null> {
   const { data } = await supabase.auth.getSession();
   return data?.session?.access_token || null;
 }
 
-async function callFriendsApi(action, payload = {}) {
+async function callFriendsApi(action: string, payload: Record<string, any> = {}): Promise<any> {
   const token = await getSessionToken();
   if (!currentUserId || !token) throw new Error('Not authenticated');
   const res = await fetch('/api/_profile', {
@@ -218,7 +263,7 @@ async function callFriendsApi(action, payload = {}) {
   return data;
 }
 
-async function relationToUser(targetUserId) {
+async function relationToUser(targetUserId: string): Promise<string> {
   try {
     const data = await callFriendsApi('fetchState');
     const st = data?.state || { friends: [], incoming: [], outgoing: [] };
@@ -231,7 +276,7 @@ async function relationToUser(targetUserId) {
   }
 }
 
-function handleUserAction(action, { userId, username }) {
+function handleUserAction(action: string, { userId, username }: { userId: string; username: string }): void {
   if (!userId || !username) return;
 
   if (action === 'profile') {
@@ -270,7 +315,7 @@ function handleUserAction(action, { userId, username }) {
   }
 }
 
-function showUserActionMenu(targetEl, { userId, username }) {
+function showUserActionMenu(targetEl: HTMLElement, { userId, username }: { userId: string; username: string }): void {
   if (!targetEl || !userId) return;
 
   const menu = getUserActionMenu();
@@ -330,7 +375,7 @@ function showUserActionMenu(targetEl, { userId, username }) {
 // ============================================================
 // INITIALIZE CHAT
 // ============================================================
-export async function initializeChat(user) {
+export async function initializeChat(user: User): Promise<void> {
   // Sempre limpar conexões antigas antes de iniciar novamente
   cleanupChatConnections();
 
@@ -353,7 +398,7 @@ export async function initializeChat(user) {
 // ============================================================
 // LOAD INITIAL MESSAGES
 // ============================================================
-async function loadInitialMessages() {
+async function loadInitialMessages(): Promise<void> {
   try {
     const { data: messages, error } = await supabase
       .from('chat_messages')
@@ -398,7 +443,7 @@ async function loadInitialMessages() {
 // ============================================================
 // REALTIME SUBSCRIPTION
 // ============================================================
-function subscribeToChat() {
+function subscribeToChat(): void {
   if (chatSubscription) {
     chatSubscription.unsubscribe();
   }
@@ -432,7 +477,7 @@ function subscribeToChat() {
 // ============================================================
 
 // Modificar renderMessage() para buscar avatar do Supabase:
-async function renderMessage(msg) {
+async function renderMessage(msg: ChatMessage): Promise<void> {
   const { chatContainer } = getChatEls();
   if (!chatContainer) return;
   
@@ -513,7 +558,7 @@ async function renderMessage(msg) {
 }
 
 // Adicionar função para atualizar contador online:
-function updateOnlineCount() {
+function updateOnlineCount(): void {
   const count = Math.max(onlineUsers.size, 1);
   
   const onlineCountEl = document.getElementById('chat-online-count');
@@ -531,7 +576,7 @@ function updateOnlineCount() {
 // ============================================================
 // SEND MESSAGE
 // ============================================================
-export async function sendChatMessage() {
+export async function sendChatMessage(): Promise<void> {
   const input = document.getElementById('chat-input');
   if (!input) return;
   
@@ -612,7 +657,7 @@ export async function sendChatMessage() {
 // ============================================================
 // TOGGLE CHAT
 // ============================================================
-export function toggleChat() {
+export function toggleChat(): void {
   const chatPanel = document.getElementById('chat-panel');
   const chatBtn = document.getElementById('chat-toggle-icon');
   
@@ -693,7 +738,7 @@ function scrollToBottom() {
   }
 }
 
-function showChatError(message) {
+function showChatError(message: string): void {
   const errorDiv = document.getElementById('chat-error');
   if (!errorDiv) return;
   
@@ -705,13 +750,13 @@ function showChatError(message) {
   }, 3000);
 }
 
-function escapeHtml(text) {
+function escapeHtml(text: string): string {
   const div = document.createElement('div');
   div.textContent = text;
   return div.innerHTML;
 }
 
-function formatTime(timestamp) {
+function formatTime(timestamp: string): string {
   const date = new Date(timestamp);
   const now = new Date();
   
@@ -733,7 +778,7 @@ function formatTime(timestamp) {
 // ============================================================
 // CLEANUP
 // ============================================================
-export function cleanupChat() {
+export function cleanupChat(): void {
   cleanupChatConnections();
 
   // ✅ FORÇAR FECHAMENTO DO CHAT
@@ -747,7 +792,7 @@ export function cleanupChat() {
 // ============================================================
 // EVENT LISTENERS
 // ============================================================
-function bindChatDomOnce() {
+function bindChatDomOnce(): void {
   if (chatDomBound) return;
   chatDomBound = true;
 

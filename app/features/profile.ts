@@ -13,13 +13,62 @@ import {
 import { syncPublicProfileFriendButton } from './friends';
 import { getActiveUser } from '../core/session';
 
+// ============================================================
+// TYPE DEFINITIONS
+// ============================================================
+
+interface User {
+  id: string;
+  username?: string;
+  email?: string;
+  avatar_url?: string;
+}
+
+interface PlayerStats {
+  user_id: string;
+  username: string;
+  avatar_url?: string;
+  banner_url?: string;
+  level: number;
+  xp: number;
+  money: number;
+  diamonds: number;
+  total_wins: number;
+  total_battles: number;
+  total_cases_opened?: number;
+  best_drop?: number;
+  total_spent?: number;
+  total_gains?: number;
+  [key: string]: any;
+}
+
+interface LevelInfo {
+  level: number;
+  currentXP: number;
+  nextLevelXP: number;
+}
+
+declare global {
+  interface Window {
+    goTo?: (screen: string) => void;
+    loadProfileData: typeof loadProfileData;
+    updateAvatar: typeof updateAvatar;
+    updateBanner: typeof updateBanner;
+    loadUserImages: typeof loadUserImages;
+    loadPublicProfile: typeof loadPublicProfile;
+    toggleProfilePanel: typeof toggleProfilePanel;
+    toggleProfileDropdown: typeof toggleProfileDropdown;
+    goToProfile: typeof goToProfile;
+  }
+}
+
 // Cache leve de DOM para reduzir query repetida (sem depender de telas sempre montadas)
-const _elCache = new Map();
+const _elCache: Map<string, HTMLElement | null> = new Map();
 
 /**
  * Helper to show contextual error messages
  */
-function showProfileError(context, message, details = {}) {
+function showProfileError(context: string, message: string, details: Record<string, any> = {}): void {
   console.error(`[PROFILE_ERROR] ${context}:`, { message, details });
   // Don't show popup immediately - let toast show first
   setTimeout(() => {
@@ -27,19 +76,19 @@ function showProfileError(context, message, details = {}) {
   }, 100);
 }
 
-function $(id) {
+function $(id: string): HTMLElement | null {
   if (_elCache.has(id)) return _elCache.get(id);
   const el = document.getElementById(id);
   _elCache.set(id, el);
   return el;
 }
 
-function setText(id, value) {
+function setText(id: string, value: string | number): void {
   const el = $(id);
   if (el) el.textContent = value;
 }
 
-function formatNumber(value, decimals = 2) {
+function formatNumber(value: number | string, decimals: number = 2): string {
   const num = Number(value) || 0;
   
   // Números negativos (improvável mas seguro)
@@ -83,7 +132,7 @@ function formatNumber(value, decimals = 2) {
  * @param {Function} calculateLevel - Função para calcular level
  * @param {Function} applyTranslations - Função para aplicar traduções
  */
-export async function loadProfileData(user, calculateLevel, applyTranslations) {
+export async function loadProfileData(user: User, calculateLevel?: (xp: number) => LevelInfo, applyTranslations?: () => void): Promise<void> {
   try {
     if (!user?.id) return;
     syncPublicProfileFriendButton(null);
@@ -171,7 +220,7 @@ export async function loadProfileData(user, calculateLevel, applyTranslations) {
   }
 }
 
-export async function loadPublicProfile(username, calculateLevel, applyTranslations) {
+export async function loadPublicProfile(username: string, calculateLevel?: (xp: number) => LevelInfo, applyTranslations?: () => void): Promise<void> {
   try {
     if (!username || typeof username !== 'string') {
       console.error('Invalid username provided');
@@ -325,7 +374,7 @@ export async function loadPublicProfile(username, calculateLevel, applyTranslati
   }
 }
 
-function setProfileViewMode(isPublic) {
+function setProfileViewMode(isPublic: boolean): void {
   const profileScreen = document.getElementById('profile');
   if (profileScreen) {
     profileScreen.classList.toggle('profile-public', !!isPublic);
@@ -368,7 +417,7 @@ function setProfileViewMode(isPublic) {
  * @param {boolean} isCircle - Se deve criar máscara circular
  * @returns {Promise<Blob>} Blob da imagem redimensionada
  */
-export async function resizeImage(file, maxWidth, maxHeight, isCircle = false) {
+export async function resizeImage(file: File, maxWidth: number, maxHeight: number, isCircle: boolean = false): Promise<Blob> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     
@@ -431,7 +480,7 @@ export async function resizeImage(file, maxWidth, maxHeight, isCircle = false) {
  * @param {string} userId - ID do usuário
  * @returns {Promise<string>} URL pública da imagem
  */
-export async function uploadToSupabase(file, folder, userId) {
+export async function uploadToSupabase(file: File, folder: string, userId: string): Promise<string> {
   try {
     const fileExt = file.name.split('.').pop();
     const fileName = `${userId}/${folder}-${Date.now()}.${fileExt}`;
@@ -462,7 +511,7 @@ export async function uploadToSupabase(file, folder, userId) {
  * @param {File} file - Arquivo de imagem
  * @param {string} userId - ID do usuário
  */
-export async function updateAvatar(file, userId) {
+export async function updateAvatar(file: File, userId: string): Promise<void> {
   try {
     if (!userId) {
       showUploadNotification('Error: User not authenticated', true);
@@ -527,7 +576,7 @@ export async function updateAvatar(file, userId) {
  * @param {File} file - Arquivo de imagem
  * @param {string} userId - ID do usuário
  */
-export async function updateBanner(file, userId) {
+export async function updateBanner(file: File, userId: string): Promise<void> {
   try {
     if (!userId) {
       showUploadNotification('Error: User not authenticated', true);
@@ -587,7 +636,7 @@ export async function updateBanner(file, userId) {
  * Carrega imagens salvas (avatar e banner)
  * @param {string} userId - ID do usuário
  */
-export async function loadUserImages(userId) {
+export async function loadUserImages(userId: string): Promise<void> {
   try {
     if (!userId) return;
     
@@ -636,7 +685,7 @@ export async function loadUserImages(userId) {
  * @param {string} panelType - Tipo do painel ('history', etc)
  * @param {Function} loadDebitHistory - Callback para carregar histórico
  */
-export function toggleProfilePanel(panelType, loadDebitHistory) {
+export function toggleProfilePanel(panelType: string, loadDebitHistory?: () => void): void {
   const historyPanel = document.getElementById('history-panel');
   
   if (!historyPanel) {
@@ -657,7 +706,7 @@ export function toggleProfilePanel(panelType, loadDebitHistory) {
 /**
  * Alterna dropdown do profile no header
  */
-export function toggleProfileDropdown() {
+export function toggleProfileDropdown(): void {
   const dropdown = document.getElementById('profile-dropdown');
   if (!dropdown) return;
   
@@ -679,7 +728,7 @@ export function toggleProfileDropdown() {
 /**
  * Fecha dropdown ao clicar fora
  */
-export function setupProfileDropdownClose() {
+export function setupProfileDropdownClose(): void {
   if (setupProfileDropdownClose._bound) return;
   setupProfileDropdownClose._bound = true;
 
@@ -715,7 +764,7 @@ setupProfileDropdownClose._bound = false;
  * Configura event listeners para upload de avatar e banner
  * @param {string} userId - ID do usuário
  */
-export function setupProfileUploadListeners(userId) {
+export function setupProfileUploadListeners(userId: string): void {
   const avatarUploadInput = document.getElementById('avatar-upload');
   const bannerUploadInput = document.getElementById('banner-upload');
   const avatarContainer = document.querySelector('.profile-avatar-container');
@@ -773,7 +822,7 @@ export function setupProfileUploadListeners(userId) {
 /**
  * Navega para a tela de perfil
  */
-export function goToProfile() {
+export function goToProfile(): void {
   const dropdown = document.getElementById('profile-dropdown');
   if (dropdown) dropdown.classList.remove('active');
   

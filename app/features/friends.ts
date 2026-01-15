@@ -7,41 +7,93 @@ import { showToast } from '../shared/effects';
 import { navigateTo } from '../core/router';
 
 // ============================================================
+// TYPE DEFINITIONS
+// ============================================================
+
+interface User {
+  id: string;
+  username?: string;
+  avatar_url?: string;
+}
+
+interface FriendItem {
+  user_id: string;
+  username?: string;
+  avatar_url?: string;
+  created_at?: string;
+}
+
+interface FriendState {
+  friends: FriendItem[];
+  incoming: FriendItem[];
+  outgoing: FriendItem[];
+}
+
+interface ProfileData {
+  user_id: string;
+  username: string;
+  avatar_url?: string;
+  level?: number;
+  [key: string]: any;
+}
+
+interface SearchResult {
+  user_id: string;
+  username: string;
+  avatar_url?: string;
+  level?: number;
+}
+
+declare global {
+  interface Window {
+    publicProfileUsername?: string;
+    setChatToggleIcon?: (config: any) => void;
+    refreshLucideIcons?: () => void;
+    initializeFriends: typeof initializeFriends;
+    cleanupFriends: typeof cleanupFriends;
+    openFriendsPanel: typeof openFriendsPanel;
+    closeFriendsPanel: typeof closeFriendsPanel;
+    requestFriendFromContext: typeof requestFriendFromContext;
+    syncPublicProfileFriendButton: typeof syncPublicProfileFriendButton;
+  }
+}
+
+// ============================================================
 // STATE
 // ============================================================
-let currentUser = null;
-let friendState = { friends: [], incoming: [], outgoing: [] };
-let profileCache = new Map();
-let panelBound = false;
-let isPanelOpen = false;
-let activeTab = 'friends';
-let notificationsPopoverBound = false;
-let publicProfileTarget = null;
+let currentUser: User | null = null;
+let friendState: FriendState = { friends: [], incoming: [], outgoing: [] };
+let profileCache: Map<string, ProfileData> = new Map();
+let panelBound: boolean = false;
+let isPanelOpen: boolean = false;
+let activeTab: string = 'friends';
+let notificationsPopoverBound: boolean = false;
+let publicProfileTarget: User | null = null;
 
 // Elements
-let friendsPanelEl = null;
-let friendsBtnEl = null;
-let notificationsBtnEl = null;
-let friendsListEl = null;
-let incomingListEl = null;
-let outgoingListEl = null;
-let searchInputEl = null;
-let searchResultsEl = null;
-let notificationsPopoverEl = null;
-let notificationsListEl = null;
-let notificationsLinkBtn = null;
-let tabButtons = null;
+let friendsPanelEl: HTMLElement | null = null;
+let friendsBtnEl: HTMLElement | null = null;
+let notificationsBtnEl: HTMLElement | null = null;
+let friendsListEl: HTMLElement | null = null;
+let incomingListEl: HTMLElement | null = null;
+let outgoingListEl: HTMLElement | null = null;
+let searchInputEl: HTMLInputElement | null = null;
+let searchResultsEl: HTMLElement | null = null;
+let notificationsPopoverEl: HTMLElement | null = null;
+let notificationsListEl: HTMLElement | null = null;
+let notificationsLinkBtn: HTMLElement | null = null;
+let tabButtons: HTMLElement[] | null = null;
 
-const EMPTY_STATE = { friends: [], incoming: [], outgoing: [] };
+const EMPTY_STATE: FriendState = { friends: [], incoming: [], outgoing: [] };
 
 // ============================================================
 // HELPERS
 // ============================================================
-function getSessionToken() {
+function getSessionToken(): Promise<string | null> {
   return supabase.auth.getSession().then(({ data }) => data?.session?.access_token || null);
 }
 
-function normalizeState(raw) {
+function normalizeState(raw: any): FriendState {
   if (!raw || typeof raw !== 'object') return { ...EMPTY_STATE };
   const safe = (arr) => Array.isArray(arr) ? arr.filter((x) => x && x.user_id) : [];
   return {
@@ -51,7 +103,7 @@ function normalizeState(raw) {
   };
 }
 
-function relationTo(userId) {
+function relationTo(userId: string): 'friend' | 'incoming' | 'outgoing' | 'none' {
   if (!userId) return 'none';
   if (friendState.friends.some((f) => f.user_id === userId)) return 'friend';
   if (friendState.incoming.some((f) => f.user_id === userId)) return 'incoming';
@@ -59,7 +111,7 @@ function relationTo(userId) {
   return 'none';
 }
 
-function ensureEls() {
+function ensureEls(): void {
   friendsPanelEl ||= document.getElementById('friends-panel');
   friendsBtnEl ||= document.getElementById('friends-toggle-icon');
   notificationsBtnEl ||= document.getElementById('notifications-toggle-icon');
@@ -74,7 +126,7 @@ function ensureEls() {
   tabButtons ||= Array.from(document.querySelectorAll('[data-friends-tab]'));
 }
 
-function openPublicProfile(username) {
+function openPublicProfile(username: string): void {
   const target = (username || '').trim();
   if (!target) return;
   // Keep chat/friends overlays closed before routing to a profile
@@ -84,7 +136,7 @@ function openPublicProfile(username) {
   navigateTo(`/u/${encodeURIComponent(target)}`);
 }
 
-function closeChatIfOpen() {
+function closeChatIfOpen(): void {
   const chatPanel = document.getElementById('chat-panel');
   const chatBtn = document.getElementById('chat-toggle-icon');
   if (chatPanel) chatPanel.classList.remove('active');
@@ -104,7 +156,7 @@ function closeChatIfOpen() {
   document.body.classList.remove('chat-open-mobile');
 }
 
-async function callFriendsApi(action, payload = {}) {
+async function callFriendsApi(action: string, payload: Record<string, any> = {}): Promise<any> {
   if (!currentUser?.id) throw new Error('Not authenticated');
   const token = await getSessionToken();
   if (!token) throw new Error('Not authenticated');
@@ -136,7 +188,7 @@ async function callFriendsApi(action, payload = {}) {
   return data;
 }
 
-function setState(nextState, profiles = {}) {
+function setState(nextState: any, profiles: Record<string, ProfileData> = {}): void {
   friendState = normalizeState(nextState);
   profileCache = new Map(Object.entries(profiles || {}));
   renderAll();
@@ -145,7 +197,7 @@ function setState(nextState, profiles = {}) {
 // ============================================================
 // RENDERING
 // ============================================================
-function renderAll() {
+function renderAll(): void {
   ensureEls();
   renderFriendsList();
   renderIncoming();
@@ -155,7 +207,7 @@ function renderAll() {
   updatePublicProfileCta();
 }
 
-function renderFriendsList() {
+function renderFriendsList(): void {
   if (!friendsListEl) return;
   friendsListEl.innerHTML = '';
   if (!friendState.friends.length) {
@@ -208,7 +260,7 @@ function renderFriendsList() {
   friendsListEl.appendChild(fragment);
 }
 
-function renderIncoming() {
+function renderIncoming(): void {
   if (!incomingListEl) return;
   incomingListEl.innerHTML = '';
   if (!friendState.incoming.length) {
@@ -269,7 +321,7 @@ function renderIncoming() {
   incomingListEl.appendChild(frag);
 }
 
-function renderOutgoing() {
+function renderOutgoing(): void {
   if (!outgoingListEl) return;
   outgoingListEl.innerHTML = '';
   if (!friendState.outgoing.length) {
@@ -319,7 +371,7 @@ function renderOutgoing() {
   outgoingListEl.appendChild(frag);
 }
 
-function renderSearchResults(results = []) {
+function renderSearchResults(results: SearchResult[] = []): void {
   if (!searchResultsEl) return;
   searchResultsEl.innerHTML = '';
   if (!results.length) {
@@ -403,7 +455,7 @@ function renderSearchResults(results = []) {
   searchResultsEl.appendChild(frag);
 }
 
-function renderBadges() {
+function renderBadges(): void {
   ensureEls();
   const pendingCount = friendState.incoming.length;
   const friendCount = friendState.friends.length;
@@ -421,7 +473,7 @@ function renderBadges() {
   }
 }
 
-function renderNotificationsPopover() {
+function renderNotificationsPopover(): void {
   ensureEls();
   if (!notificationsPopoverEl || !notificationsListEl) return;
   notificationsListEl.innerHTML = '';
@@ -476,7 +528,7 @@ function renderNotificationsPopover() {
   notificationsListEl.appendChild(frag);
 }
 
-function updatePublicProfileCta() {
+function updatePublicProfileCta(): void {
   const btn = document.getElementById('public-profile-add-friend');
   if (!btn) return;
   if (!publicProfileTarget || !publicProfileTarget.user_id) {
@@ -531,7 +583,7 @@ function updatePublicProfileCta() {
 // ============================================================
 // ACTIONS
 // ============================================================
-async function refreshState() {
+async function refreshState(): Promise<void> {
   try {
     const data = await callFriendsApi('fetchState');
     setState(data.state, data.profiles);
@@ -541,7 +593,7 @@ async function refreshState() {
   }
 }
 
-async function requestFriend(targetUserId, targetUsername) {
+async function requestFriend(targetUserId: string, targetUsername: string): Promise<void> {
   try {
     await callFriendsApi('sendRequest', { targetUserId, targetUsername });
     await refreshState();
@@ -551,7 +603,7 @@ async function requestFriend(targetUserId, targetUsername) {
   }
 }
 
-async function searchUsers(query) {
+async function searchUsers(query: string): Promise<void> {
   try {
     const data = await callFriendsApi('searchUsers', { query });
     renderSearchResults(data.results || []);
@@ -563,7 +615,7 @@ async function searchUsers(query) {
 // ============================================================
 // UI BINDINGS
 // ============================================================
-function switchTab(tab) {
+function switchTab(tab: string): void {
   activeTab = tab;
   const panels = document.querySelectorAll('[data-friends-section]');
   panels.forEach((p) => {
@@ -575,7 +627,7 @@ function switchTab(tab) {
   });
 }
 
-function toggleFriendsPanel(tab = 'friends') {
+function toggleFriendsPanel(tab: string = 'friends'): void {
   ensureEls();
   if (!friendsPanelEl) return;
   const willOpen = !isPanelOpen;
@@ -597,7 +649,7 @@ function toggleFriendsPanel(tab = 'friends') {
 }
 
 // Fecha o painel de amigos sem resetar estado/render
-function closeFriendsPanel() {
+function closeFriendsPanel(): void {
   ensureEls();
   isPanelOpen = false;
   if (friendsPanelEl) friendsPanelEl.classList.remove('active');
@@ -608,7 +660,7 @@ function closeFriendsPanel() {
   }
 }
 
-function toggleNotificationsPopover() {
+function toggleNotificationsPopover(): void {
   ensureEls();
   if (!notificationsPopoverEl) return;
   const willShow = notificationsPopoverEl.classList.contains('hidden');
@@ -618,7 +670,7 @@ function toggleNotificationsPopover() {
   }
 }
 
-function bindDomOnce() {
+function bindDomOnce(): void {
   if (panelBound) return;
   ensureEls();
   panelBound = true;
@@ -697,13 +749,13 @@ function bindDomOnce() {
 // ============================================================
 // PUBLIC API
 // ============================================================
-export async function initializeFriends(user) {
+export async function initializeFriends(user: User): Promise<void> {
   currentUser = user;
   bindDomOnce();
   await refreshState();
 }
 
-export function cleanupFriends() {
+export function cleanupFriends(): void {
   friendState = { ...EMPTY_STATE };
   profileCache = new Map();
   publicProfileTarget = null;
@@ -714,7 +766,7 @@ export function cleanupFriends() {
   document.body.classList.remove('friends-open-mobile');
 }
 
-export async function openFriendsPanel(tab = 'friends') {
+export async function openFriendsPanel(tab: string = 'friends'): Promise<void> {
   await refreshState();
   ensureEls();
   isPanelOpen = true;
@@ -731,11 +783,11 @@ export async function openFriendsPanel(tab = 'friends') {
   switchTab(tab);
 }
 
-export async function requestFriendFromContext({ userId, username }) {
+export async function requestFriendFromContext({ userId, username }: { userId: string; username: string }): Promise<void> {
   await requestFriend(userId, username);
 }
 
-export function syncPublicProfileFriendButton(targetUser) {
+export function syncPublicProfileFriendButton(targetUser: User): void {
   publicProfileTarget = targetUser;
   updatePublicProfileCta();
 }

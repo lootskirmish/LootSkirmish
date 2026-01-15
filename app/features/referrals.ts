@@ -1,7 +1,64 @@
 import { supabase } from './auth';
 import { showAlert, showToast } from '../shared/effects';
 
-const TYPE_META = {
+// ============================================================
+// TYPE DEFINITIONS
+// ============================================================
+
+interface TypeMeta {
+  icon: string;
+  label: string;
+}
+
+interface ReferralTransaction {
+  type: string;
+  amount: number;
+  created_at: string;
+  [key: string]: any;
+}
+
+interface ReferralStats {
+  referral_code: string;
+  referral_count: number;
+  pending_earnings: number;
+  withdrawn_earnings: number;
+  total_earned: number;
+  tier_percent: number;
+  next_withdraw_at?: string;
+  transactions?: ReferralTransaction[];
+  [key: string]: any;
+}
+
+interface ReferralElements {
+  skeleton: HTMLElement | null;
+  content: HTMLElement | null;
+  code: HTMLElement | null;
+  link: HTMLElement | null;
+  copyBtn: HTMLElement | null;
+  badge: HTMLElement | null;
+  tierChip: HTMLElement | null;
+  tierLabel: HTMLElement | null;
+  tierPercent: HTMLElement | null;
+  percent: HTMLElement | null;
+  count: HTMLElement | null;
+  pending: HTMLElement | null;
+  totalWithdrawn: HTMLElement | null;
+  totalEarned: HTMLElement | null;
+  withdrawBtn: HTMLElement | null;
+  withdrawNote: HTMLElement | null;
+  countdown: HTMLElement | null;
+  historyList: HTMLElement | null;
+  historyEmpty: HTMLElement | null;
+  historyLoad: HTMLElement | null;
+}
+
+declare global {
+  interface Window {
+    loadReferralsPanel: typeof loadReferralPanel;
+  }
+}
+
+const TYPE_META: Record<string, TypeMeta> = {
   spend_commission: { icon: '🪙', label: 'Commission' },
   win_commission: { icon: '🏆', label: 'Win commission' },
   diamond_bonus: { icon: '💎', label: 'Diamond bonus' },
@@ -10,13 +67,13 @@ const TYPE_META = {
   daily_interest: { icon: '📈', label: 'Daily interest (5%)' }
 };
 
-let isLoading = false;
-let historyPage = 1;
-let historyHasMore = true;
-let countdownTimer = null;
-let nextWithdrawAtCache = null;
+let isLoading: boolean = false;
+let historyPage: number = 1;
+let historyHasMore: boolean = true;
+let countdownTimer: ReturnType<typeof setInterval> | null = null;
+let nextWithdrawAtCache: string | null = null;
 
-function getEls() {
+function getEls(): ReferralElements {
   return {
     skeleton: document.getElementById('referrals-skeleton'),
     content: document.getElementById('referrals-content'),
@@ -41,23 +98,23 @@ function getEls() {
   };
 }
 
-function formatCoins(amount) {
+function formatCoins(amount: number | string): string {
   const num = Number(amount || 0);
   return `${num.toFixed(2)} 🪙`;
 }
 
-function formatDate(iso) {
+function formatDate(iso: string): string {
   if (!iso) return '';
   return new Date(iso).toLocaleString();
 }
 
-function toggleLoading(show) {
+function toggleLoading(show: boolean): void {
   const { skeleton, content } = getEls();
   if (skeleton) skeleton.style.display = show ? 'grid' : 'none';
   if (content) content.style.display = show ? 'none' : 'block';
 }
 
-async function fetchReferralStats() {
+async function fetchReferralStats(): Promise<{ data: any; session: any }> {
   const { data: { session } } = await supabase.auth.getSession();
   if (!session?.access_token) throw new Error('Not authenticated');
 
@@ -78,7 +135,7 @@ async function fetchReferralStats() {
   return { data: result, session };
 }
 
-function startCountdown(nextWithdrawAt) {
+function startCountdown(nextWithdrawAt: string | null): void {
   const { countdown } = getEls();
   clearInterval(countdownTimer);
   if (!countdown) return;
@@ -108,7 +165,7 @@ function startCountdown(nextWithdrawAt) {
   countdownTimer = setInterval(tick, 1000);
 }
 
-function renderHistory(items, { reset = false } = {}) {
+function renderHistory(items: ReferralTransaction[], { reset = false }: { reset?: boolean } = {}): void {
   const { historyList, historyEmpty } = getEls();
   if (!historyList) return;
   if (reset) historyList.innerHTML = '';
@@ -137,7 +194,7 @@ function renderHistory(items, { reset = false } = {}) {
   if (historyEmpty) historyEmpty.style.display = historyList.children.length ? 'none' : 'block';
 }
 
-function renderStats(data) {
+function renderStats(data: ReferralStats): void {
   const {
     code,
     link,
@@ -189,7 +246,7 @@ function renderStats(data) {
   startCountdown(data.nextWithdrawAt || null);
 }
 
-async function loadReferralPanel() {
+async function loadReferralPanel(): Promise<void> {
   if (isLoading) return;
   isLoading = true;
   toggleLoading(true);
@@ -209,7 +266,7 @@ async function loadReferralPanel() {
   }
 }
 
-async function withdrawEarnings() {
+async function withdrawEarnings(): Promise<void> {
   const { withdrawBtn } = getEls();
   if (!withdrawBtn) return;
   withdrawBtn.disabled = true;
@@ -248,7 +305,7 @@ async function withdrawEarnings() {
   }
 }
 
-async function loadMoreHistory() {
+async function loadMoreHistory(): Promise<void> {
   if (!historyHasMore) return;
   const { historyLoad } = getEls();
   if (historyLoad) historyLoad.disabled = true;
@@ -286,7 +343,7 @@ async function loadMoreHistory() {
   }
 }
 
-function copyLink() {
+function copyLink(): void {
   const { link, copyBtn } = getEls();
   if (!link || !copyBtn) return;
   navigator.clipboard.writeText(link.value).then(() => {
@@ -301,7 +358,7 @@ function copyLink() {
   });
 }
 
-function bindReferralsUI() {
+function bindReferralsUI(): void {
   const { copyBtn, withdrawBtn, historyLoad } = getEls();
   if (copyBtn && !copyBtn.dataset.bound) {
     copyBtn.addEventListener('click', copyLink);

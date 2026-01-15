@@ -7,6 +7,89 @@ import { showAlert, showToast } from '../shared/effects';
 import { getActiveUser } from '../core/session';
 
 // ============================================================
+// TIPOS E INTERFACES
+// ============================================================
+
+interface FirstPurchaseBonus {
+  type: 'percentage' | 'fixed';
+  value: number;
+  label: string;
+}
+
+interface TimedBonus {
+  percentage: number;
+  endsAt: string;
+  label: string;
+}
+
+interface ShopPackage {
+  id: string;
+  name: string;
+  diamonds: number;
+  price: number;
+  priceBRL: number;
+  icon: string;
+  popular: boolean;
+  firstPurchaseBonus?: FirstPurchaseBonus;
+  timedBonus?: TimedBonus;
+}
+
+interface ShopSubscription {
+  id: string;
+  name: string;
+  price: number;
+  priceBRL: number;
+  duration: number;
+  icon: string;
+  diamonds: number;
+  dailyDiamonds: number;
+  benefits: string[];
+  popular: boolean;
+}
+
+interface BonusCalculation {
+  bonus: number;
+  type: 'first_purchase' | 'timed' | null;
+  label: string;
+  total: number;
+  hasBonus: boolean;
+}
+
+interface SelectedProduct {
+  id: string;
+  name: string;
+  price: number;
+  priceBRL: number;
+  icon: string;
+  type: 'package' | 'subscription';
+  [key: string]: any;
+}
+
+interface PlayerStats {
+  total_purchases: number;
+  active_subscription: string | null;
+  subscription_expires_at: string | null;
+  diamonds: number;
+}
+
+interface UserData {
+  id: string;
+  [key: string]: any;
+}
+
+declare global {
+  interface Window {
+    playerDiamonds?: { value: number };
+    updateDiamondsDisplay?: (amount: number) => void;
+    applyTranslations?: () => void;
+    refreshLucideIcons?: () => void;
+    closeShopPaymentModal?: () => void;
+    proceedToCheckout?: () => Promise<void>;
+    initShop?: typeof initShop;
+  }
+}
+
+// ============================================================
 // CONFIGURAÇÃO DE PACOTES E ASSINATURAS
 // ============================================================
 
@@ -84,21 +167,21 @@ const SUBSCRIPTIONS = [
 // ESTADO GLOBAL
 // ============================================================
 
-let currentUser = null;
-let userTotalPurchases = 0;
-let userActiveSubscription = null;
-let selectedProduct = null;
-let selectedPaymentMethod = 'stripe';
-let isProcessing = false;
+let currentUser: UserData | null = null;
+let userTotalPurchases: number = 0;
+let userActiveSubscription: string | null = null;
+let selectedProduct: SelectedProduct | null = null;
+let selectedPaymentMethod: string = 'stripe';
+let isProcessing: boolean = false;
 
 // Timer para bônus temporários
-let bonusTimers = new Map();
+let bonusTimers: Map<string, NodeJS.Timeout> = new Map();
 
 // ============================================================
 // VERIFICAR RETORNO DE PAGAMENTO
 // ============================================================
 
-function checkPaymentReturn() {
+function checkPaymentReturn(): void {
   const urlParams = new URLSearchParams(window.location.search);
   const paymentStatus = urlParams.get('payment');
   const orderId = urlParams.get('order_id');
@@ -160,7 +243,7 @@ function checkPaymentReturn() {
 // INICIALIZAÇÃO
 // ============================================================
 
-export async function initShop() {
+export async function initShop(): Promise<void> {
   console.log('🔄 Iniciando shop...');
   
   try {
@@ -201,7 +284,7 @@ export async function initShop() {
 // CARREGAR DADOS DO USUÁRIO
 // ============================================================
 
-async function loadUserData() {
+async function loadUserData(): Promise<void> {
   try {
     const { data: stats, error } = await supabase
       .from('player_stats')
@@ -237,7 +320,7 @@ async function loadUserData() {
 // RENDERIZAÇÃO DA SHOP
 // ============================================================
 
-function renderShop() {
+function renderShop(): void {
   console.log('🔄 Renderizando shop...');
   
   // Remover skeleton se existir
@@ -291,7 +374,7 @@ function renderShop() {
 // CRIAR CARD DE PACOTE
 // ============================================================
 
-function createPackageCard(pkg) {
+function createPackageCard(pkg: ShopPackage): HTMLDivElement {
   const isFirstPurchase = userTotalPurchases === 0;
   const bonus = calculateBonus(pkg, isFirstPurchase);
   
@@ -364,7 +447,7 @@ function createPackageCard(pkg) {
 // CRIAR CARD DE ASSINATURA
 // ============================================================
 
-function createSubscriptionCard(sub) {
+function createSubscriptionCard(sub: ShopSubscription): HTMLDivElement {
   const card = document.createElement('div');
   card.className = 'shop-subscription-card';
   if (sub.popular) card.classList.add('popular');
@@ -400,7 +483,7 @@ function createSubscriptionCard(sub) {
 // CALCULAR BÔNUS
 // ============================================================
 
-function calculateBonus(pkg, isFirstPurchase) {
+function calculateBonus(pkg: ShopPackage, isFirstPurchase: boolean): BonusCalculation {
   let bonus = 0;
   let bonusType = null;
   let label = '';
@@ -439,7 +522,7 @@ function calculateBonus(pkg, isFirstPurchase) {
 // TIMERS DE BÔNUS
 // ============================================================
 
-function startBonusTimers() {
+function startBonusTimers(): void {
   PACKAGES.forEach(pkg => {
     if (pkg.timedBonus && new Date(pkg.timedBonus.endsAt) > new Date()) {
       startTimerForPackage(pkg.id, pkg.timedBonus.endsAt);
@@ -447,7 +530,7 @@ function startBonusTimers() {
   });
 }
 
-function startTimerForPackage(pkgId, endsAt) {
+function startTimerForPackage(pkgId: string, endsAt: string): void {
   const timerEl = document.getElementById(`timer-${pkgId}`);
   if (!timerEl) return;
 
@@ -485,7 +568,7 @@ function startTimerForPackage(pkgId, endsAt) {
 // EVENTOS
 // ============================================================
 
-function bindShopEvents() {
+function bindShopEvents(): void {
   // Botões de compra de pacotes
   document.addEventListener('click', (e) => {
     const buyBtn = e.target.closest('[data-package-id]');
@@ -506,7 +589,7 @@ function bindShopEvents() {
 // MODAL DE PAGAMENTO
 // ============================================================
 
-function openPaymentModal(productId, type) {
+function openPaymentModal(productId: string, type: 'package' | 'subscription'): void {
   if (isProcessing) return;
 
   let product;
@@ -697,7 +780,7 @@ window.proceedToCheckout = async function() {
 // ATUALIZAR UI DE ASSINATURA ATIVA
 // ============================================================
 
-function updateActiveSubscriptionUI(subId, expiresAt) {
+function updateActiveSubscriptionUI(subId: string, expiresAt: Date): void {
   const sub = SUBSCRIPTIONS.find(s => s.id === subId);
   if (!sub) return;
 

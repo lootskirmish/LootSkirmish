@@ -15,19 +15,57 @@ import {
 } from '../shared/effects';
 
 // ============================================================
+// TIPOS E INTERFACES
+// ============================================================
+
+interface SkillBadge {
+  x: number;
+  y: number;
+  icon: string;
+  name: string;
+  desc: string;
+  requirement: string;
+  current: number;
+  max: number;
+  diamonds: number;
+  xp: number;
+}
+
+interface SkillCategory {
+  name: string;
+  color: string;
+  badges: string[];
+}
+
+interface HubCoordinates {
+  x: number;
+  y: number;
+}
+
+declare global {
+  interface Window {
+    initSkillTree?: typeof initSkillTree;
+    openSkillTreeModal?: typeof openSkillTreeModal;
+    closeSkillTreeModal?: typeof closeSkillTreeModal;
+    zoomSkillTree?: typeof zoomSkillTree;
+    resetSkillTreeZoom?: typeof resetSkillTreeZoom;
+  }
+}
+
+// ============================================================
 // STATE MANAGEMENT
 // ============================================================
 
-let currentSkillTreeZoom = 0.5;
-let isSkillTreePanning = false;
-let skillTreeStartX = 0;
-let skillTreeStartY = 0;
-let skillTreeScrollLeftStart = 0;
-let skillTreeScrollTopStart = 0;
+let currentSkillTreeZoom: number = 0.5;
+let isSkillTreePanning: boolean = false;
+let skillTreeStartX: number = 0;
+let skillTreeStartY: number = 0;
+let skillTreeScrollLeftStart: number = 0;
+let skillTreeScrollTopStart: number = 0;
 
-let skillTreePanningBound = false;
-let skillTreeKeyboardBound = false;
-let skillTreeModalCloseBound = false;
+let skillTreePanningBound: boolean = false;
+let skillTreeKeyboardBound: boolean = false;
+let skillTreeModalCloseBound: boolean = false;
 
 // ============================================================
 // SKILL TREE INITIALIZATION
@@ -36,7 +74,7 @@ let skillTreeModalCloseBound = false;
 /**
  * Inicializa o Skill Tree
  */
-export function initSkillTree() {
+export function initSkillTree(): void {
   createSkillTreeBadges();
   drawSkillTreeLines();
   centerSkillTreeViewport();
@@ -52,7 +90,7 @@ export function initSkillTree() {
 /**
  * Cria os badges no canvas
  */
-function createSkillTreeBadges() {
+function createSkillTreeBadges(): void {
   const canvas = document.getElementById('st-canvas');
   if (!canvas) return;
 
@@ -95,7 +133,7 @@ function createSkillTreeBadges() {
 /**
  * Desenha as linhas conectando os badges
  */
-function drawSkillTreeLines() {
+function drawSkillTreeLines(): void {
   const svg = document.getElementById('st-lines');
   if (!svg) return;
   
@@ -124,7 +162,7 @@ function drawSkillTreeLines() {
 /**
  * Cria uma linha SVG entre dois pontos
  */
-function createSkillTreeLine(svg, x1, y1, x2, y2, color, width) {
+function createSkillTreeLine(svg: SVGSVGElement, x1: number, y1: number, x2: number, y2: number, color: string, width: number): void {
   const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
   
   const dx = x2 - x1;
@@ -156,7 +194,7 @@ function createSkillTreeLine(svg, x1, y1, x2, y2, color, width) {
 /**
  * Obtém a categoria de um badge
  */
-function getSkillTreeCategoryByBadge(badgeId) {
+function getSkillTreeCategoryByBadge(badgeId: string): SkillCategory | null {
   for (const catKey in SKILL_TREE_CATEGORIES) {
     if (SKILL_TREE_CATEGORIES[catKey].badges.includes(badgeId)) {
       return SKILL_TREE_CATEGORIES[catKey];
@@ -172,7 +210,7 @@ function getSkillTreeCategoryByBadge(badgeId) {
 /**
  * Abre modal de detalhes do badge
  */
-export function openSkillTreeModal(badgeId) {
+export function openSkillTreeModal(badgeId: string): void {
   const badge = SKILL_TREE_BADGES[badgeId];
   const cat = getSkillTreeCategoryByBadge(badgeId);
 
@@ -201,7 +239,7 @@ export function openSkillTreeModal(badgeId) {
 /**
  * Fecha modal do skill tree
  */
-export function closeSkillTreeModal() {
+export function closeSkillTreeModal(): void {
   const modal = document.getElementById('st-modal');
   if (modal) modal.classList.remove('active');
 }
@@ -213,7 +251,7 @@ export function closeSkillTreeModal() {
 /**
  * Ajusta o zoom do skill tree
  */
-export function zoomSkillTree(delta) {
+export function zoomSkillTree(delta: number): void {
   currentSkillTreeZoom += delta;
   currentSkillTreeZoom = Math.max(0.3, Math.min(1.5, currentSkillTreeZoom));
   const canvas = document.getElementById('st-canvas');
@@ -225,7 +263,7 @@ export function zoomSkillTree(delta) {
 /**
  * Reseta o zoom para 1
  */
-export function resetSkillTreeZoom() {
+export function resetSkillTreeZoom(): void {
   currentSkillTreeZoom = 1;
   const canvas = document.getElementById('st-canvas');
   if (canvas) {
@@ -240,7 +278,7 @@ export function resetSkillTreeZoom() {
 /**
  * Configura o sistema de panning
  */
-function setupSkillTreePanning() {
+function setupSkillTreePanning(): void {
   const viewport = document.getElementById('st-viewport');
   if (!viewport) return;
 
@@ -272,7 +310,7 @@ function setupSkillTreePanning() {
 /**
  * Centraliza o viewport no hub
  */
-function centerSkillTreeViewport() {
+function centerSkillTreeViewport(): void {
   const viewport = document.getElementById('st-viewport');
   if (!viewport) return;
   
@@ -290,7 +328,7 @@ function centerSkillTreeViewport() {
  * Configura atalhos de teclado
  */
 // NO SKILL-TREE.JS
-export function setupSkillTreeKeyboardShortcuts() {
+export function setupSkillTreeKeyboardShortcuts(): void {
   if (skillTreeKeyboardBound) return;
   document.addEventListener('keydown', (e) => {
     const skillTree = document.getElementById('skill-tree');
@@ -316,7 +354,7 @@ export function setupSkillTreeKeyboardShortcuts() {
 /**
  * Configura click fora do modal
  */
-export function setupSkillTreeModalClose() {
+export function setupSkillTreeModalClose(): void {
   if (skillTreeModalCloseBound) return;
   const skillTreeModal = document.getElementById('st-modal');
   if (skillTreeModal) {

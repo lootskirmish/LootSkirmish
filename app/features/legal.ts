@@ -2,10 +2,44 @@
 // LEGAL.JS - Sistema de Termos e Políticas
 // ============================================================
 
+// ============================================================
+// TYPE DEFINITIONS
+// ============================================================
+
+interface Subsection {
+  subheading: string;
+  content: string;
+}
+
+interface Section {
+  heading: string;
+  content?: string;
+  subsections?: Subsection[];
+}
+
+interface LegalDocument {
+  title: string;
+  lastUpdated: string;
+  sections: Section[];
+}
+
+interface LegalContent {
+  terms: LegalDocument;
+  privacy: LegalDocument;
+}
+
+declare global {
+  interface Window {
+    openSupport?: () => void;
+    goTo?: (screen: string) => void;
+    goToLegal: (tab?: string) => void;
+  }
+}
+
 /**
  * Carrega o conteúdo legal do JSON
  */
-async function loadLegalContent() {
+async function loadLegalContent(): Promise<void> {
   try {
     const response = await fetch('/legal-content.json');
     if (!response.ok) throw new Error('Failed to load legal content');
@@ -31,7 +65,7 @@ async function loadLegalContent() {
 /**
  * Renderiza as seções de conteúdo legal
  */
-function renderSections(sections) {
+function renderSections(sections: Section[]): string {
   return sections.map(section => {
     let html = `<h4>${section.heading}</h4>`;
     
@@ -53,7 +87,7 @@ function renderSections(sections) {
 /**
  * Inicializa o sistema de páginas legais
  */
-export function initLegal() {
+export function initLegal(): void {
   const tabs = document.querySelectorAll('.legal-tab');
   const contents = document.querySelectorAll('.legal-content');
   

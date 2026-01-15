@@ -3,16 +3,56 @@
 // ============================================================
 
 // ============================================================
+// TIPOS E INTERFACES
+// ============================================================
+
+interface SupportFormData {
+  nome: string;
+  email: string;
+  assunto: string;
+  mensagem: string;
+}
+
+interface FormValidationResult {
+  valid: boolean;
+  errors: string[];
+  data: SupportFormData;
+}
+
+interface TicketSubmitResponse {
+  success: boolean;
+  ticketId: string;
+  sent: 'immediately' | 'delayed';
+  error?: string;
+}
+
+interface CurrentUser {
+  id: string;
+  session?: {
+    access_token: string;
+  };
+}
+
+declare global {
+  interface Window {
+    currentUser?: CurrentUser;
+    openSupport?: typeof openSupportModal;
+    closeSupport?: typeof closeModal;
+    initSupport?: typeof initSupport;
+  }
+}
+
+// ============================================================
 // MODAL STATE
 // ============================================================
 
-let isOpen = false;
+let isOpen: boolean = false;
 
 // ============================================================
 // EMAIL VALIDATION
 // ============================================================
 
-function isValidEmail(email) {
+function isValidEmail(email: string): boolean {
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   return emailRegex.test(email);
 }
@@ -21,7 +61,7 @@ function isValidEmail(email) {
 // FORM VALIDATION
 // ============================================================
 
-function validateForm() {
+function validateForm(): FormValidationResult {
   const nome = document.getElementById('support-name')?.value || '';
   const email = document.getElementById('support-email')?.value || '';
   const assunto = document.getElementById('support-subject')?.value || '';
@@ -56,7 +96,7 @@ function validateForm() {
 // SHOW ERROR
 // ============================================================
 
-function showError(message) {
+function showError(message: string): void {
   const errorEl = document.getElementById('support-error');
   if (errorEl) {
     errorEl.textContent = message;
@@ -73,7 +113,7 @@ function showError(message) {
 // SHOW SUCCESS
 // ============================================================
 
-function showSuccess(ticketId, sent) {
+function showSuccess(ticketId: string, sent: 'immediately' | 'delayed'): void {
   const successEl = document.getElementById('support-success');
   const ticketIdEl = document.getElementById('support-ticket-id');
   const statusEl = document.getElementById('support-status');
@@ -100,7 +140,7 @@ function showSuccess(ticketId, sent) {
 // SUBMIT TICKET
 // ============================================================
 
-async function submitTicket(formData) {
+async function submitTicket(formData: SupportFormData): Promise<TicketSubmitResponse> {
   try {
     const response = await fetch('/api/_support', {
       method: 'POST',
@@ -136,7 +176,7 @@ async function submitTicket(formData) {
 // FORM HANDLER
 // ============================================================
 
-async function handleSubmit(e) {
+async function handleSubmit(e: SubmitEvent): Promise<void> {
   e.preventDefault();
   
   // Validate form
@@ -187,7 +227,7 @@ async function handleSubmit(e) {
 // OPEN MODAL
 // ============================================================
 
-export function openSupportModal() {
+export function openSupportModal(): void {
   if (isOpen) return;
   
   const modal = document.getElementById('support-modal');
@@ -206,7 +246,7 @@ export function openSupportModal() {
 // CLOSE MODAL
 // ============================================================
 
-export function closeModal() {
+export function closeModal(): void {
   const modal = document.getElementById('support-modal');
   const successEl = document.getElementById('support-success');
   const errorEl = document.getElementById('support-error');
@@ -225,7 +265,7 @@ export function closeModal() {
 // RENDER MODAL
 // ============================================================
 
-export function renderSupportModal() {
+export function renderSupportModal(): string {
   return `
     <!-- Support Modal -->
     <div id="support-modal" class="support-modal">
@@ -356,7 +396,7 @@ export function renderSupportModal() {
 // INITIALIZATION
 // ============================================================
 
-export function initSupport() {
+export function initSupport(): void {
   // Add modal to DOM
   const existingModal = document.getElementById('support-modal');
   if (!existingModal) {

@@ -1,53 +1,96 @@
-// @ts-nocheck
-
 // ============================================================
-// ADMIN.JS - Sistema de Administração SEGURO (FRONTEND)
+// ADMIN.TS - Sistema de Administração SEGURO (FRONTEND)
 // ============================================================
 
 import { supabase } from './auth';
+import type { RealtimeChannel } from '@supabase/supabase-js';
+
+// ============================================================
+// TYPE DEFINITIONS
+// ============================================================
+
+interface AdminRoleResult {
+  isAdmin: boolean;
+  role: string | null;
+}
+
+interface AdminStats {
+  approvedCount: number;
+  pendingCount: number;
+  totalUSD: number;
+  totalBRL: number;
+  totalLTC: number;
+}
+
+interface PurchaseOrder {
+  id: string;
+  user_id: string;
+  user_email: string;
+  diamonds_base: number;
+  diamonds_bonus: number;
+  amount_paid: number;
+  currency: string;
+  payment_method: string;
+  status: 'pending' | 'approved' | 'rejected';
+  created_at: string;
+  reviewed_at?: string;
+}
+
+interface SupportTicket {
+  id: string;
+  ticket_code: string;
+  user_email: string;
+  subject: string;
+  message: string;
+  status: string;
+  resolution_notes?: string;
+  created_at: string;
+  updated_at?: string;
+}
+
+type AdminTab = 'purchases' | 'support';
 
 // ============================================================
 // STATE MANAGEMENT
 // ============================================================
 
 let isUpdatingAdmin: boolean = false;
-let adminSubscription: any = null;
-let adminRoleCache: any = null;
+let adminSubscription: RealtimeChannel | null = null;
+let adminRoleCache: AdminRoleResult | null = null;
 let adminRoleCacheTime: number = 0;
-const ROLE_CACHE_DURATION: number = 30000; // 30 segundos
+const ROLE_CACHE_DURATION = 30000; // 30 segundos
 
 let adminDelegationBound: boolean = false;
-let adminRefreshTimer: any = null;
-let adminRefreshInFlight: any = null;
+let adminRefreshTimer: ReturnType<typeof setTimeout> | null = null;
+let adminRefreshInFlight: Promise<void> | null = null;
 let adminRefreshQueued: boolean = false;
 
-// ABA ATIVA (NOVO)
-let activeAdminTab: string = 'purchases'; // 'purchases' ou 'support'
+let activeAdminTab: AdminTab = 'purchases';
 
 function isAdminScreenActive(): boolean {
-  return document.getElementById('admin')?.classList.contains('active') || false;
+  return document.getElementById('admin')?.classList.contains('active') ?? false;
 }
 
 function bindAdminOrderDelegationOnce(): void {
   if (adminDelegationBound) return;
 
-  const pendingList: HTMLElement | null = document.getElementById('admin-pending-list');
+  const pendingList = document.getElementById('admin-pending-list');
   if (!pendingList) return;
 
-  pendingList.addEventListener('click', (e: Event) => {
-    const target: any = e.target;
+  pendingList.addEventListener('click', (e: MouseEvent) => {
+    const target = e.target;
     if (!(target instanceof Element)) return;
 
-    const approveBtn: HTMLElement | null = target.closest('.approve-btn');
+    const approveBtn = target.closest('.approve-btn');
     if (approveBtn) {
-      const orderId: string | null = approveBtn.getAttribute('data-order-id');
+      const orderId = approveBtn.getAttribute('data-order-id');
       if (orderId) handleApproveOrder(orderId);
       return;
     }
 
-    const rejectBtn: HTMLElement | null = target.closest('.reject-btn');
+    const rejectBtn = target.closest('.reject-btn');
     if (rejectBtn) {
-      const orderId: string | null = rejectBtn.getAttribute('data-order-id');
+      const orderId = rejectBtn.getAttribute('data-order-id');
       if (orderId) handleRejectOrder(orderId);
     }
   });
@@ -70,7 +113,7 @@ function requestAdminRefresh(): void {
     adminRefreshInFlight = (async () => {
       await renderAdminPanel();
     })()
-      .catch((err: any) => console.error('Admin refresh error:', err))
+      .catch((err) => console.error('Admin refresh error:', err))
       .finally(() => {
         adminRefreshInFlight = null;
         if (adminRefreshQueued) {
@@ -87,15 +130,14 @@ function requestAdminRefresh(): void {
 
 /**
  * Verifica se o usuário é admin (COM CACHE SEGURO)
- * @returns {Promise<{isAdmin: boolean, role: string|null}>}
  */
-export async function checkIsAdmin() {
-  if (!window.currentUser) {
+export async function checkIsAdmin(): Promise<AdminRoleResult> {
+  if (!(window as any).currentUser) {
     return { isAdmin: false, role: null };
   }
   
   try {
-    const now: number = Date.now();
+    const now = Date.now();
     
     // Usar cache apenas se válido
     if (adminRoleCache && (now - adminRoleCacheTime) < ROLE_CACHE_DURATION) {
@@ -116,7 +158,7 @@ export async function checkIsAdmin() {
     const { data, error } = await supabase
       .from('player_stats')
       .select('role, user_id')
-      .eq('user_id', window.currentUser.id)
+      .eq('user_id', (window as any).currentUser.id)
       .single();
     
     if (error || !data) {
@@ -127,7 +169,7 @@ export async function checkIsAdmin() {
     }
     
     // 3. CRÍTICO: Verificar integridade dos dados
-    if (data.user_id !== window.currentUser.id) {
+    if (data.user_id !== (window as any).currentUser.id) {
       console.error('⚠️ User ID mismatch detected!');
       adminRoleCache = { isAdmin: false, role: null };
       adminRoleCacheTime = now;
@@ -135,14 +177,14 @@ export async function checkIsAdmin() {
     }
     
     // 4. Verificar role
-    const isAdmin: boolean = data.role === 'admin' || data.role === 'support';
+    const isAdmin = data.role === 'admin' || data.role === 'support';
     
     adminRoleCache = { isAdmin, role: data.role };
     adminRoleCacheTime = now;
     
     return adminRoleCache;
     
-  } catch (err: any) {
+  } catch (err) {
     console.error('Error checking admin:', err);
     adminRoleCache = { isAdmin: false, role: null };
     adminRoleCacheTime = Date.now();
@@ -161,9 +203,9 @@ export function invalidateAdminRoleCache(): void {
 /**
  * Verifica e mostra botão admin se for admin
  */
-export async function checkAndShowAdminButton(): Promise<void> {
+export async function checkAndShowAdminButton() {
   const { isAdmin } = await checkIsAdmin();
-  const adminBtn: HTMLElement | null = document.getElementById('admin-btn');
+  const adminBtn = document.getElementById('admin-btn');
   
   if (adminBtn) {
     if (isAdmin) {
@@ -209,13 +251,13 @@ async function renderAdminPurchasesTab(): Promise<void> {
     document.getElementById('admin-purchases-section')?.classList.remove('hidden');
     document.getElementById('admin-support-section')?.classList.add('hidden');
 
-    const stats: any = await fetchAdminStats();
+    const stats = await fetchAdminStats();
     
-    const pendingCountEl: HTMLElement | null = document.getElementById('admin-pending-count');
-    const approvedCountEl: HTMLElement | null = document.getElementById('admin-approved-count');
-    const totalUsdEl: HTMLElement | null = document.getElementById('admin-total-usd');
-    const totalBrlEl: HTMLElement | null = document.getElementById('admin-total-brl');
-    const totalLtcEl: HTMLElement | null = document.getElementById('admin-total-ltc');
+    const pendingCountEl = document.getElementById('admin-pending-count');
+    const approvedCountEl = document.getElementById('admin-approved-count');
+    const totalUsdEl = document.getElementById('admin-total-usd');
+    const totalBrlEl = document.getElementById('admin-total-brl');
+    const totalLtcEl = document.getElementById('admin-total-ltc');
     
     if (pendingCountEl) pendingCountEl.textContent = stats.pendingCount;
     if (approvedCountEl) approvedCountEl.textContent = stats.approvedCount;
@@ -225,7 +267,7 @@ async function renderAdminPurchasesTab(): Promise<void> {
     
     await renderAdminPendingOrders();
     await renderAdminHistoryOrders();
-  } catch (err: any) {
+  } catch (err) {
     console.error('Error rendering purchases tab:', err);
   }
 }
@@ -235,13 +277,13 @@ async function renderAdminPurchasesTab(): Promise<void> {
  */
 async function renderAdminSupportTab(): Promise<void> {
   try {
-    const container: HTMLElement | null = document.getElementById('admin-content');
+    const container = document.getElementById('admin-content');
     if (!container) return;
 
     // Hide purchases section while viewing support
     document.getElementById('admin-purchases-section')?.classList.add('hidden');
 
-    let supportSection: HTMLElement | null = document.getElementById('admin-support-section');
+    let supportSection = document.getElementById('admin-support-section');
     if (!supportSection) {
       supportSection = document.createElement('div');
       supportSection.id = 'admin-support-section';
@@ -252,7 +294,7 @@ async function renderAdminSupportTab(): Promise<void> {
     supportSection.classList.remove('hidden');
 
     // Renderizar as seções de suporte
-    const tickets: any = await fetchSupportTickets();
+    const tickets = await fetchSupportTickets();
     
     supportSection.innerHTML = `
       <div class="admin-support-container">
@@ -286,7 +328,7 @@ async function renderAdminSupportTab(): Promise<void> {
       </div>
     `;
     
-  } catch (err: any) {
+  } catch (err) {
     console.error('Error rendering support tab:', err);
   }
 }
@@ -294,7 +336,7 @@ async function renderAdminSupportTab(): Promise<void> {
 /**
  * Busca tickets de suporte
  */
-async function fetchSupportTickets(): Promise<any[]> {
+async function fetchSupportTickets(): Promise<SupportTicket[]> {
   try {
     const { isAdmin } = await checkIsAdmin();
     if (!isAdmin) throw new Error('Unauthorized');
@@ -306,7 +348,7 @@ async function fetchSupportTickets(): Promise<any[]> {
       .limit(100);
     
     return data || [];
-  } catch (err: any) {
+  } catch (err) {
     console.error('Error fetching tickets:', err);
     return [];
   }
@@ -315,7 +357,7 @@ async function fetchSupportTickets(): Promise<any[]> {
 /**
  * Atualiza ticket de suporte
  */
-async function updateSupportTicket(ticketId: string, updates: any): Promise<any> {
+async function updateSupportTicket(ticketId: string, updates: Partial<SupportTicket>): Promise<SupportTicket | null> {
   try {
     const { isAdmin } = await checkIsAdmin();
     if (!isAdmin) throw new Error('Unauthorized');
@@ -332,7 +374,7 @@ async function updateSupportTicket(ticketId: string, updates: any): Promise<any>
     if (error) throw error;
     
     return data ? data[0] : null;
-  } catch (err: any) {
+  } catch (err) {
     console.error('Error updating ticket:', err);
     return null;
   }
@@ -341,21 +383,21 @@ async function updateSupportTicket(ticketId: string, updates: any): Promise<any>
 /**
  * Renderiza histórico de tickets
  */
-function renderSupportTicketsHistory(tickets: any[]): string {
+function renderSupportTicketsHistory(tickets: SupportTicket[]): string {
   if (!tickets || tickets.length === 0) {
     return '<p class="no-data">No support tickets yet</p>';
   }
   
   return `
     <div class="admin-tickets-list">
-      ${tickets.map((ticket: any) => {
-        const normalizedStatus: string = normalizeTicketStatus(ticket.status);
-        const pending: boolean = normalizedStatus === 'pending';
-        const resolved: boolean = normalizedStatus === 'resolved';
-        const escalation: boolean = normalizedStatus === 'escalation';
-        const statusColor: string = pending ? '#f59e0b' : resolved ? '#10b981' : escalation ? '#f97316' : '#6b7280';
-        const statusIcon: string = pending ? '⏳' : resolved ? '✅' : escalation ? '⚠️' : '❓';
-        const ticketCode: string = ticket.ticket_code || ticket.id || 'N/A';
+      ${tickets.map(ticket => {
+        const normalizedStatus = normalizeTicketStatus(ticket.status);
+        const pending = normalizedStatus === 'pending';
+        const resolved = normalizedStatus === 'resolved';
+        const escalation = normalizedStatus === 'escalation';
+        const statusColor = pending ? '#f59e0b' : resolved ? '#10b981' : escalation ? '#f97316' : '#6b7280';
+        const statusIcon = pending ? '⏳' : resolved ? '✅' : escalation ? '⚠️' : '❓';
+        const ticketCode = ticket.ticket_code || ticket.id || 'N/A';
         
         return `
           <div class="admin-ticket-card" style="border-left: 4px solid ${statusColor}">
@@ -432,7 +474,7 @@ function renderSupportReplyForm(): string {
         
         <div class="form-group">
           <label for="reply-message">Response Message</label>
-          <textarea id="reply-message" placeholder="Type your response here..." rows={6}></textarea>
+          <textarea id="reply-message" placeholder="Type your response here..." rows="6"></textarea>
         </div>
         
         <button type="submit" class="btn-send-reply">
@@ -447,8 +489,8 @@ function renderSupportReplyForm(): string {
 /**
  * Renderiza inbox/lista de emails
  */
-function renderSupportInbox(tickets: any[]): string {
-  const pending: any[] = tickets.filter((t: any) => normalizeTicketStatus(t.status) === 'pending');
+function renderSupportInbox(tickets: SupportTicket[]): string {
+  const pending = tickets.filter(t => normalizeTicketStatus(t.status) === 'pending');
   
   if (pending.length === 0) {
     return '<p class="no-data">No pending support tickets</p>';
@@ -461,8 +503,8 @@ function renderSupportInbox(tickets: any[]): string {
       </div>
       
       <div class="inbox-list">
-        ${pending.map((ticket: any) => {
-          const ticketCode: string = ticket.ticket_code || ticket.id;
+        ${pending.map(ticket => {
+          const ticketCode = ticket.ticket_code || ticket.id;
           return `
           <div class="inbox-email-card" onclick="window.selectInboxEmail('${ticketCode}')">
             <div class="email-from">
@@ -487,7 +529,7 @@ function renderSupportInbox(tickets: any[]): string {
 /**
  * Busca estatísticas do admin (COM VERIFICAÇÃO)
  */
-async function fetchAdminStats(): Promise<any> {
+async function fetchAdminStats(): Promise<AdminStats> {
   try {
     // Verificar permissão
     const { isAdmin } = await checkIsAdmin();
@@ -506,7 +548,7 @@ async function fetchAdminStats(): Promise<any> {
       .eq('status', 'approved')
       .eq('currency', 'USD');
     
-    const totalUSD: number = usdOrders?.reduce((sum: number, o: any) => sum + (o.amount_paid || 0), 0) || 0;
+    const totalUSD = usdOrders?.reduce((sum, o) => sum + (o.amount_paid || 0), 0) || 0;
     
     const { data: brlOrders } = await supabase
       .from('purchase_orders')
@@ -514,7 +556,7 @@ async function fetchAdminStats(): Promise<any> {
       .eq('status', 'approved')
       .eq('currency', 'BRL');
     
-    const totalBRL: number = brlOrders?.reduce((sum: number, o: any) => sum + (o.amount_paid || 0), 0) || 0;
+    const totalBRL = brlOrders?.reduce((sum, o) => sum + (o.amount_paid || 0), 0) || 0;
     
     const { data: ltcOrders } = await supabase
       .from('purchase_orders')
@@ -522,7 +564,7 @@ async function fetchAdminStats(): Promise<any> {
       .eq('status', 'approved')
       .eq('currency', 'LTC');
     
-    const totalLTC: number = ltcOrders?.reduce((sum: number, o: any) => sum + (o.amount_paid || 0), 0) || 0;
+    const totalLTC = ltcOrders?.reduce((sum, o) => sum + (o.amount_paid || 0), 0) || 0;
     
     const { count: pendingCount } = await supabase
       .from('purchase_orders')
@@ -537,7 +579,7 @@ async function fetchAdminStats(): Promise<any> {
       totalLTC
     };
     
-  } catch (err: any) {
+  } catch (err) {
     console.error('Error fetching admin stats:', err);
     return { 
       approvedCount: 0, 
@@ -552,7 +594,7 @@ async function fetchAdminStats(): Promise<any> {
 /**
  * Busca pedidos pendentes (COM VERIFICAÇÃO)
  */
-async function fetchPendingOrders(): Promise<any[]> {
+async function fetchPendingOrders(): Promise<PurchaseOrder[]> {
   try {
     // Verificar permissão
     const { isAdmin } = await checkIsAdmin();
@@ -573,7 +615,7 @@ async function fetchPendingOrders(): Promise<any[]> {
     }
     
     return data || [];
-  } catch (err: any) {
+  } catch (err) {
     console.error('Error fetching pending orders:', err);
     return [];
   }
@@ -583,12 +625,12 @@ async function fetchPendingOrders(): Promise<any[]> {
  * Renderiza pedidos pendentes (COM SANITIZAÇÃO)
  */
 async function renderAdminPendingOrders(): Promise<void> {
-  const wasUpdating: boolean = isUpdatingAdmin;
+  const wasUpdating = isUpdatingAdmin;
   isUpdatingAdmin = false;
   
   try {
-    const orders: any[] = await fetchPendingOrders();
-    const list: HTMLElement | null = document.getElementById('admin-pending-list');
+    const orders = await fetchPendingOrders();
+    const list = document.getElementById('admin-pending-list');
     
     if (!list) {
       return;
@@ -600,14 +642,14 @@ async function renderAdminPendingOrders(): Promise<void> {
     }
     
     // SANITIZAR DADOS
-    list.innerHTML = orders.map((order: any) => {
-      const date: string = new Date(order.created_at).toLocaleString('en-US');
-      const totalDiamonds: number = (order.diamonds_base || 0) + (order.diamonds_bonus || 0);
-      const orderId: string = String(order.id || '').slice(0, 8);
-      const userEmail: string = sanitizeHTML(order.user_email || 'N/A');
-      const amountPaid: string = parseFloat(order.amount_paid || 0).toFixed(2);
-      const currency: string = sanitizeHTML(String(order.currency || 'N/A').toUpperCase());
-      const paymentMethod: string = sanitizeHTML(String(order.payment_method || 'N/A').toUpperCase());
+    list.innerHTML = orders.map(order => {
+      const date = new Date(order.created_at).toLocaleString('en-US');
+      const totalDiamonds = (order.diamonds_base || 0) + (order.diamonds_bonus || 0);
+      const orderId = String(order.id || '').slice(0, 8);
+      const userEmail = sanitizeHTML(order.user_email || 'N/A');
+      const amountPaid = parseFloat(order.amount_paid || 0).toFixed(2);
+      const currency = sanitizeHTML(String(order.currency || 'N/A').toUpperCase());
+      const paymentMethod = sanitizeHTML(String(order.payment_method || 'N/A').toUpperCase());
       
       return `
         <div class="admin-order-card" data-order-id="${orderId}">
@@ -650,7 +692,7 @@ async function renderAdminPendingOrders(): Promise<void> {
     // Delegação (listeners únicos)
     bindAdminOrderDelegationOnce();
     
-  } catch (err: any) {
+  } catch (err) {
     console.error('❌ Error rendering requests:', err);
   } finally {
     if (wasUpdating) {
@@ -663,7 +705,7 @@ async function renderAdminPendingOrders(): Promise<void> {
  * Sanitiza HTML para prevenir XSS
  */
 function sanitizeHTML(str: string): string {
-  const div: HTMLElement = document.createElement('div');
+  const div = document.createElement('div');
   div.textContent = str;
   return div.innerHTML;
 }
@@ -694,7 +736,7 @@ async function renderAdminHistoryOrders(): Promise<void> {
       .order('reviewed_at', { ascending: false })
       .limit(50);
     
-    const list: HTMLElement | null = document.getElementById('admin-history-list');
+    const list = document.getElementById('admin-history-list');
     
     if (!list) return;
     
@@ -703,25 +745,25 @@ async function renderAdminHistoryOrders(): Promise<void> {
       return;
     }
     
-    list.innerHTML = orders.map((order: any) => {
-      const date: string = new Date(order.reviewed_at || order.created_at).toLocaleString('en-US');
-      const totalDiamonds: number = (order.diamonds_base || 0) + (order.diamonds_bonus || 0);
-      const orderId: string = String(order.id || '').slice(0, 8);
-      const userEmail: string = sanitizeHTML(order.user_email || 'N/A');
-      const amountPaid: string = parseFloat(order.amount_paid || 0).toFixed(2);
-      const currency: string = sanitizeHTML(String(order.currency || 'N/A').toUpperCase());
+    list.innerHTML = orders.map(order => {
+      const date = new Date(order.reviewed_at || order.created_at).toLocaleString('en-US');
+      const totalDiamonds = (order.diamonds_base || 0) + (order.diamonds_bonus || 0);
+      const orderId = String(order.id || '').slice(0, 8);
+      const userEmail = sanitizeHTML(order.user_email || 'N/A');
+      const amountPaid = parseFloat(order.amount_paid || 0).toFixed(2);
+      const currency = sanitizeHTML(String(order.currency || 'N/A').toUpperCase());
       
-      const statusColors: any = {
+      const statusColors = {
         approved: '#22c55e',
         rejected: '#ef4444'
       };
       
-      const statusText: any = {
+      const statusText = {
         approved: '✅ Approved',
         rejected: '❌ Rejected'
       };
       
-      const status: string = order.status || 'unknown';
+      const status = order.status || 'unknown';
       
       return `
         <div class="admin-order-card history" style="border-left-color: ${statusColors[status] || '#999'}">
@@ -752,7 +794,7 @@ async function renderAdminHistoryOrders(): Promise<void> {
       `;
     }).join('');
     
-  } catch (err: any) {
+  } catch (err) {
     console.error('Error rendering history:', err);
   }
 }
@@ -780,26 +822,26 @@ export async function handleApproveOrder(orderId: string): Promise<void> {
     }
     
     // 3. CONFIRMAR
-    const confirmar: boolean = confirm('✅ Confirm approval of this order?');
+    const confirmar = confirm('✅ Confirm approval of this order?');
     if (!confirmar) return;
     
     // 4. BUSCAR BOTÃO
-    const btn: HTMLElement | null = document.querySelector(`.approve-btn[data-order-id="${orderId}"]`);
-    const card: HTMLElement | null = btn?.closest('.admin-order-card') || null;
+    const btn = document.querySelector(`.approve-btn[data-order-id="${orderId}"]`);
+    const card = btn?.closest('.admin-order-card');
     
     if (!btn || !card) {
       alert('❌ Button not found');
       return;
     }
     
-    const originalText: string = btn.textContent || '';
-    const approveBtn: HTMLElement | null = card.querySelector('.approve-btn');
-    const rejectBtn: HTMLElement | null = card.querySelector('.reject-btn');
+    const originalText = btn.textContent;
+    const approveBtn = card.querySelector('.approve-btn');
+    const rejectBtn = card.querySelector('.reject-btn');
     
-    if (approveBtn) (approveBtn as HTMLButtonElement).disabled = true;
-    if (rejectBtn) (rejectBtn as HTMLButtonElement).disabled = true;
+    approveBtn.disabled = true;
+    rejectBtn.disabled = true;
     btn.textContent = '⏳ Approving...';
-    (btn as HTMLElement).style.opacity = '0.6';
+    btn.style.opacity = '0.6';
     
     // 5. BUSCAR SESSÃO
     const { data: { session }, error: sessionError } = await supabase.auth.getSession();
@@ -810,7 +852,7 @@ export async function handleApproveOrder(orderId: string): Promise<void> {
     }
     
     // 6. CHAMAR BACKEND SEGURO
-    const response: Response = await fetch('/api/_admin', {
+    const response = await fetch('/api/_admin', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -823,7 +865,7 @@ export async function handleApproveOrder(orderId: string): Promise<void> {
       })
     });
     
-    const result: any = await response.json();
+    const result = await response.json();
     
     if (!response.ok) {
       alert('❌ Error: ' + (result.error || 'Unknown error'));
@@ -850,10 +892,10 @@ export async function handleApproveOrder(orderId: string): Promise<void> {
       await renderAdminPendingOrders();
       await renderAdminHistoryOrders();
       
-      const stats: any = await fetchAdminStats();
-      const pendingCountEl: HTMLElement | null = document.getElementById('admin-pending-count');
-      const approvedCountEl: HTMLElement | null = document.getElementById('admin-approved-count');
-      const totalBrlEl: HTMLElement | null = document.getElementById('admin-total-brl');
+      const stats = await fetchAdminStats();
+      const pendingCountEl = document.getElementById('admin-pending-count');
+      const approvedCountEl = document.getElementById('admin-approved-count');
+      const totalBrlEl = document.getElementById('admin-total-brl');
       
       if (pendingCountEl) pendingCountEl.textContent = stats.pendingCount;
       if (approvedCountEl) approvedCountEl.textContent = stats.approvedCount;
@@ -862,26 +904,26 @@ export async function handleApproveOrder(orderId: string): Promise<void> {
       alert(result.message || '✅ Order approved successfully!');
     }
     
-  } catch (err: any) {
+  } catch (err) {
     console.error('❌ Error in handler:', err);
     alert('❌ Error: ' + err.message);
     
     // Restaurar botões
-    const btn: HTMLElement | null = document.querySelector(`.approve-btn[data-order-id="${orderId}"]`);
-    const card: HTMLElement | null = btn?.closest('.admin-order-card') || null;
+    const btn = document.querySelector(`.approve-btn[data-order-id="${orderId}"]`);
+    const card = btn?.closest('.admin-order-card');
     
     if (card) {
-      const approveBtn: HTMLElement | null = card.querySelector('.approve-btn');
-      const rejectBtn: HTMLElement | null = card.querySelector('.reject-btn');
+      const approveBtn = card.querySelector('.approve-btn');
+      const rejectBtn = card.querySelector('.reject-btn');
       
       if (approveBtn) {
-        (approveBtn as HTMLButtonElement).disabled = false;
+        approveBtn.disabled = false;
         approveBtn.textContent = '✅ Approve';
-        (approveBtn as HTMLElement).style.opacity = '1';
+        approveBtn.style.opacity = '1';
       }
       
       if (rejectBtn) {
-        (rejectBtn as HTMLButtonElement).disabled = false;
+        rejectBtn.disabled = false;
       }
     }
     
@@ -908,26 +950,26 @@ export async function handleRejectOrder(orderId: string): Promise<void> {
     }
     
     // 3. CONFIRMAR
-    const confirmar: boolean = confirm('❌ Confirm rejection of this order?');
+    const confirmar = confirm('❌ Confirm rejection of this order?');
     if (!confirmar) return;
     
     // 4. BUSCAR BOTÃO
-    const btn: HTMLElement | null = document.querySelector(`.reject-btn[data-order-id="${orderId}"]`);
-    const card: HTMLElement | null = btn?.closest('.admin-order-card') || null;
+    const btn = document.querySelector(`.reject-btn[data-order-id="${orderId}"]`);
+    const card = btn?.closest('.admin-order-card');
     
     if (!btn || !card) {
       alert('❌ Button not found');
       return;
     }
     
-    const originalText: string = btn.textContent || '';
-    const approveBtn: HTMLElement | null = card.querySelector('.approve-btn');
-    const rejectBtn: HTMLElement | null = card.querySelector('.reject-btn');
+    const originalText = btn.textContent;
+    const approveBtn = card.querySelector('.approve-btn');
+    const rejectBtn = card.querySelector('.reject-btn');
     
-    if (approveBtn) (approveBtn as HTMLButtonElement).disabled = true;
-    if (rejectBtn) (rejectBtn as HTMLButtonElement).disabled = true;
+    approveBtn.disabled = true;
+    rejectBtn.disabled = true;
     btn.textContent = '⏳ Rejecting...';
-    (btn as HTMLElement).style.opacity = '0.6';
+    btn.style.opacity = '0.6';
     
     // 5. BUSCAR SESSÃO
     const { data: { session }, error: sessionError } = await supabase.auth.getSession();
@@ -938,7 +980,7 @@ export async function handleRejectOrder(orderId: string): Promise<void> {
     }
     
     // 6. CHAMAR BACKEND SEGURO
-    const response: Response = await fetch('/api/_admin', {
+    const response = await fetch('/api/_admin', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -951,7 +993,7 @@ export async function handleRejectOrder(orderId: string): Promise<void> {
       })
     });
     
-    const result: any = await response.json();
+    const result = await response.json();
     
     if (!response.ok) {
       alert('❌ Error: ' + (result.error || 'Unknown error'));
@@ -970,33 +1012,33 @@ export async function handleRejectOrder(orderId: string): Promise<void> {
       await renderAdminPendingOrders();
       await renderAdminHistoryOrders();
       
-      const stats: any = await fetchAdminStats();
-      const pendingCountEl: HTMLElement | null = document.getElementById('admin-pending-count');
+      const stats = await fetchAdminStats();
+      const pendingCountEl = document.getElementById('admin-pending-count');
       if (pendingCountEl) pendingCountEl.textContent = stats.pendingCount;
       
       alert('✅ Order rejected!');
     }
     
-  } catch (err: any) {
+  } catch (err) {
     console.error('❌ Handler error:', err);
     alert('❌ Error: ' + err.message);
     
     // Restaurar botões
-    const btn: HTMLElement | null = document.querySelector(`.reject-btn[data-order-id="${orderId}"]`);
-    const card: HTMLElement | null = btn?.closest('.admin-order-card') || null;
+    const btn = document.querySelector(`.reject-btn[data-order-id="${orderId}"]`);
+    const card = btn?.closest('.admin-order-card');
     
     if (card) {
-      const approveBtn: HTMLElement | null = card.querySelector('.approve-btn');
-      const rejectBtn: HTMLElement | null = card.querySelector('.reject-btn');
+      const approveBtn = card.querySelector('.approve-btn');
+      const rejectBtn = card.querySelector('.reject-btn');
       
       if (rejectBtn) {
-        (rejectBtn as HTMLButtonElement).disabled = false;
+        rejectBtn.disabled = false;
         rejectBtn.textContent = '❌ Reject';
-        (rejectBtn as HTMLElement).style.opacity = '1';
+        rejectBtn.style.opacity = '1';
       }
       
       if (approveBtn) {
-        (approveBtn as HTMLButtonElement).disabled = false;
+        approveBtn.disabled = false;
       }
     }
     
@@ -1011,11 +1053,11 @@ export async function handleRejectOrder(orderId: string): Promise<void> {
 /**
  * Troca entre abas principais do admin
  */
-export function switchMainAdminTab(tab: string): void {
+export function switchMainAdminTab(tab: AdminTab): void {
   activeAdminTab = tab;
   
   // Atualizar botões
-  document.querySelectorAll('.admin-main-tab-btn').forEach((btn: Element) => {
+  document.querySelectorAll('.admin-main-tab-btn').forEach(btn => {
     btn.classList.remove('active');
   });
   document.querySelector(`[data-tab="${tab}"]`)?.classList.add('active');
@@ -1028,11 +1070,11 @@ export function switchMainAdminTab(tab: string): void {
  * Troca entre abas internas de suporte
  */
 export function switchSupportSubTab(subtab: string): void {
-  document.querySelectorAll('.admin-support-section').forEach((s: Element) => s.classList.add('hidden'));
-  document.querySelectorAll('.admin-support-tab-btn').forEach((b: Element) => b.classList.remove('active'));
+  document.querySelectorAll('.admin-support-section').forEach(s => s.classList.add('hidden'));
+  document.querySelectorAll('.admin-support-tab-btn').forEach(b => b.classList.remove('active'));
   
   document.getElementById(`admin-support-${subtab}`)?.classList.remove('hidden');
-  (event as any)?.target?.classList.add('active');
+  event?.target?.classList.add('active');
 }
 
 /**
@@ -1042,7 +1084,7 @@ export async function markTicketResolved(ticketId: string): Promise<void> {
   if (!confirm('Mark this ticket as resolved?')) return;
   
   try {
-    const updates: any = { status: 'resolved', updated_at: new Date().toISOString() };
+    const updates = { status: 'resolved', updated_at: new Date().toISOString() };
 
     let { error } = await supabase
       .from('support_tickets')
@@ -1060,7 +1102,7 @@ export async function markTicketResolved(ticketId: string): Promise<void> {
     if (error) throw error;
     
     await renderAdminPanel();
-  } catch (err: any) {
+  } catch (err) {
     alert('Error: ' + err.message);
   }
 }
@@ -1071,28 +1113,22 @@ export async function markTicketResolved(ticketId: string): Promise<void> {
 export function openReplyForm(ticketId: string, email: string): void {
   switchSupportSubTab('reply');
   
-  const ticketIdInput: HTMLInputElement | null = document.getElementById('reply-ticket-id') as HTMLInputElement;
-  const emailInput: HTMLInputElement | null = document.getElementById('reply-to-email') as HTMLInputElement;
-  const resolutionInput: HTMLInputElement | null = document.getElementById('reply-resolution') as HTMLInputElement;
-  const messageInput: HTMLTextAreaElement | null = document.getElementById('reply-message') as HTMLTextAreaElement;
-  
-  if (ticketIdInput) ticketIdInput.value = ticketId;
-  if (emailInput) emailInput.value = email;
-  if (resolutionInput) resolutionInput.value = '';
-  if (messageInput) messageInput.value = '';
+  document.getElementById('reply-ticket-id').value = ticketId;
+  document.getElementById('reply-to-email').value = email;
+  document.getElementById('reply-resolution').value = '';
+  document.getElementById('reply-message').value = '';
   
   // Remover seleção anterior
-  document.querySelectorAll('.resolution-btn').forEach((btn: Element) => btn.classList.remove('selected'));
+  document.querySelectorAll('.resolution-btn').forEach(btn => btn.classList.remove('selected'));
 }
 
 /**
  * Define categoria de resolução
  */
 export function setResolution(value: string): void {
-  const resolutionInput: HTMLInputElement | null = document.getElementById('reply-resolution') as HTMLInputElement;
-  if (resolutionInput) resolutionInput.value = value;
+  document.getElementById('reply-resolution').value = value;
   
-  document.querySelectorAll('.resolution-btn').forEach((btn: Element) => {
+  document.querySelectorAll('.resolution-btn').forEach(btn => {
     btn.classList.remove('selected');
   });
   document.querySelector(`[data-value="${value}"]`)?.classList.add('selected');
@@ -1111,16 +1147,11 @@ export function selectInboxEmail(ticketId: string): void {
  */
 export async function sendSupportReply(): Promise<void> {
   try {
-    const ticketIdInput: HTMLInputElement | null = document.getElementById('reply-ticket-id') as HTMLInputElement;
-    const emailInput: HTMLInputElement | null = document.getElementById('reply-to-email') as HTMLInputElement;
-    const resolutionInput: HTMLInputElement | null = document.getElementById('reply-resolution') as HTMLInputElement;
-    const messageInput: HTMLTextAreaElement | null = document.getElementById('reply-message') as HTMLTextAreaElement;
-    
-    const ticketId: string = ticketIdInput?.value || '';
-    const toEmail: string = emailInput?.value || '';
-    const resolutionRaw: string = resolutionInput?.value || '';
-    const message: string = messageInput?.value || '';
-    const resolution: string = resolutionRaw || 'resolvable';
+    const ticketId = document.getElementById('reply-ticket-id').value;
+    const toEmail = document.getElementById('reply-to-email').value;
+    const resolutionRaw = document.getElementById('reply-resolution').value;
+    const message = document.getElementById('reply-message').value;
+    const resolution = resolutionRaw || 'resolvable';
     
     if (!ticketId || !toEmail || !resolution || !message) {
       alert('❌ Fill all required fields');
@@ -1134,7 +1165,7 @@ export async function sendSupportReply(): Promise<void> {
     }
     
     // Enviar para backend
-    const response: Response = await fetch('/api/_support', {
+    const response = await fetch('/api/_support', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -1148,28 +1179,28 @@ export async function sendSupportReply(): Promise<void> {
       })
     });
     
-    const data: any = await response.json();
+    const data = await response.json();
     
     if (!response.ok) throw new Error(data.error);
     
     alert('✅ Response sent successfully!');
     
     // Limpar form
-    if (ticketIdInput) ticketIdInput.value = '';
-    if (emailInput) emailInput.value = '';
-    if (resolutionInput) resolutionInput.value = '';
-    if (messageInput) messageInput.value = '';
+    document.getElementById('reply-ticket-id').value = '';
+    document.getElementById('reply-to-email').value = '';
+    document.getElementById('reply-resolution').value = '';
+    document.getElementById('reply-message').value = '';
     
     // Recarregar tickets
     await renderAdminPanel();
     
-  } catch (err: any) {
+  } catch (err) {
     alert('❌ Error: ' + err.message);
   }
 }
 
-function normalizeTicketStatus(status: string): string {
-  const value: string = (status || '').toLowerCase();
+function normalizeTicketStatus(status: string | null | undefined): string {
+  const value = (status || '').toLowerCase();
   if (value === 'pending' || value === 'pendente') return 'pending';
   if (value === 'resolved' || value === 'resolvido') return 'resolved';
   if (value === 'escalation' || value === 'needs_escalation') return 'escalation';
@@ -1181,13 +1212,13 @@ function normalizeTicketStatus(status: string): string {
  * Troca entre abas do admin (OLD VERSION - MANTIDO POR COMPATIBILIDADE)
  */
 export function switchAdminTab(tab: string): void {
-  const currentTab: Element | null = (typeof event !== 'undefined') ? (event as any)?.currentTarget : null;
+  const currentTab = (typeof event !== 'undefined') ? event?.currentTarget : null;
   
-  document.querySelectorAll('.admin-tab').forEach((t: Element) => t.classList.remove('active'));
+  document.querySelectorAll('.admin-tab').forEach(t => t.classList.remove('active'));
   if (currentTab) currentTab.classList.add('active');
   
-  const pendingList: HTMLElement | null = document.getElementById('admin-pending-list');
-  const historyList: HTMLElement | null = document.getElementById('admin-history-list');
+  const pendingList = document.getElementById('admin-pending-list');
+  const historyList = document.getElementById('admin-history-list');
   
   if (tab === 'pending') {
     if (pendingList) pendingList.classList.remove('hidden');
@@ -1213,7 +1244,7 @@ export async function goToAdmin(): Promise<void> {
     return;
   }
   
-  const dropdown: HTMLElement | null = document.getElementById('profile-dropdown');
+  const dropdown = document.getElementById('profile-dropdown');
   if (dropdown) dropdown.classList.remove('active');
   
   if (window.goTo) {
@@ -1259,7 +1290,7 @@ export async function startAdminPolling(): Promise<void> {
         schema: 'public',
         table: 'purchase_orders'
       },
-      async (payload: any) => {
+      async (payload) => {
         
         // Verificar permissão antes de atualizar
         const { isAdmin: stillAdmin } = await checkIsAdmin();
@@ -1273,7 +1304,7 @@ export async function startAdminPolling(): Promise<void> {
         requestAdminRefresh();
       }
     )
-    .subscribe((status: string) => {
+    .subscribe((status) => {
     });
 }
 
@@ -1297,21 +1328,42 @@ export function stopAdminPolling(): void {
 // EXPOR FUNÇÕES GLOBALMENTE (COM SEGURANÇA)
 // ============================================================
 
-// Exports
-export async function checkIsAdmin() {}
-export async function checkAndShowAdminButton() {}
-export async function renderAdminPanel() {}
-export async function handleApproveOrder(orderId: string) {}
-export async function handleRejectOrder(orderId: string) {}
-export function switchAdminTab(tab: string) {}
-export function switchMainAdminTab(tab: string) {}
-export function switchSupportSubTab(subtab: string) {}
-export async function markTicketResolved(ticketId: string) {}
-export function openReplyForm(ticketId: string, email: string) {}
-export function setResolution(value: string) {}
-export function selectInboxEmail(ticketId: string) {}
-export async function sendSupportReply() {}
-export async function goToAdmin() {}
-export async function startAdminPolling() {}
-export function stopAdminPolling() {}
-export function invalidateAdminRoleCache() {}
+declare global {
+  interface Window {
+    checkIsAdmin: typeof checkIsAdmin;
+    checkAndShowAdminButton: typeof checkAndShowAdminButton;
+    renderAdminPanel: typeof renderAdminPanel;
+    handleApproveOrder: typeof handleApproveOrder;
+    handleRejectOrder: typeof handleRejectOrder;
+    switchAdminTab: typeof switchAdminTab;
+    switchMainAdminTab: typeof switchMainAdminTab;
+    switchSupportSubTab: typeof switchSupportSubTab;
+    markTicketResolved: typeof markTicketResolved;
+    openReplyForm: typeof openReplyForm;
+    setResolution: typeof setResolution;
+    selectInboxEmail: typeof selectInboxEmail;
+    sendSupportReply: typeof sendSupportReply;
+    goToAdmin: typeof goToAdmin;
+    startAdminPolling: typeof startAdminPolling;
+    stopAdminPolling: typeof stopAdminPolling;
+    invalidateAdminRoleCache: typeof invalidateAdminRoleCache;
+  }
+}
+
+window.checkIsAdmin = checkIsAdmin;
+window.checkAndShowAdminButton = checkAndShowAdminButton;
+window.renderAdminPanel = renderAdminPanel;
+window.handleApproveOrder = handleApproveOrder;
+window.handleRejectOrder = handleRejectOrder;
+window.switchAdminTab = switchAdminTab;
+window.switchMainAdminTab = switchMainAdminTab;
+window.switchSupportSubTab = switchSupportSubTab;
+window.markTicketResolved = markTicketResolved;
+window.openReplyForm = openReplyForm;
+window.setResolution = setResolution;
+window.selectInboxEmail = selectInboxEmail;
+window.sendSupportReply = sendSupportReply;
+window.goToAdmin = goToAdmin;
+window.startAdminPolling = startAdminPolling;
+window.stopAdminPolling = stopAdminPolling;
+window.invalidateAdminRoleCache = invalidateAdminRoleCache;

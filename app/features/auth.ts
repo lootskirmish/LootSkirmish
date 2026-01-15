@@ -2,10 +2,58 @@
 // AUTH.JS - Sistema de Autenticação
 // ============================================================
 
-import { createClient } from '@supabase/supabase-js';
+import { createClient, Session, User, AuthError } from '@supabase/supabase-js';
 import { showToast, showAlert } from '../shared/effects';
 import { store, authActions, dataActions } from '../core/store';
 import { clearActiveUser, setActiveUser } from '../core/session';
+
+// ============ TYPE DEFINITIONS ============
+interface RememberedCredentials {
+  email: string;
+  password: string;
+}
+
+interface PendingReferral {
+  code: string;
+  userId?: string;
+}
+
+interface HCaptchaWidgets {
+  login: number | null;
+  register: number | null;
+}
+
+interface HCaptchaInstance {
+  render: (container: HTMLElement, config: any) => number;
+  reset: (widgetId: number) => void;
+}
+
+declare global {
+  interface Window {
+    hcaptcha?: HCaptchaInstance;
+    HCAPTCHA_SITEKEY?: string;
+    currentUser?: any;
+    playerMoney?: { value: number };
+    playerDiamonds?: { value: number };
+    cachedUnlockedPasses?: string[];
+    cachedDiamonds?: number;
+    cachedCaseDiscountLevel?: number;
+    willRestoreState?: boolean;
+    __suppressCurrencyPopups?: boolean;
+    cleanupChat?: () => void;
+    cleanupFriends?: () => void;
+    invalidateAdminRoleCache?: () => void;
+    checkRouteAuth?: () => void;
+    goTo?: (screen: string) => void;
+    setChatToggleIcon?: (config: any) => void;
+    refreshLucideIcons?: () => void;
+    handleLogin: typeof handleLogin;
+    handleRegister: typeof handleRegister;
+    handlePasswordReset: typeof handlePasswordReset;
+    handleUpdatePassword: typeof handleUpdatePassword;
+    updatePasswordAfterReset: typeof updatePasswordAfterReset;
+  }
+}
 
 // ============ SUPABASE CONFIG ============
 const SUPABASE_URL = 'https://xgcseugigsdgmyrfrofj.supabase.co';
@@ -34,15 +82,15 @@ export const supabase = createClient(SUPABASE_URL, SUPABASE_KEY, {
   }
 });
 
-let authStateSubscription = null;
-let loginCaptchaToken = null;
-let registerCaptchaToken = null;
-let hcaptchaWidgets = { login: null, register: null };
-let hcaptchaScriptPromise = null;
+let authStateSubscription: { unsubscribe: () => void } | null = null;
+let loginCaptchaToken: string | null = null;
+let registerCaptchaToken: string | null = null;
+let hcaptchaWidgets: HCaptchaWidgets = { login: null, register: null };
+let hcaptchaScriptPromise: Promise<HCaptchaInstance> | null = null;
 
 // ============ HELPERS ============
 
-function getRememberedCredentials() {
+function getRememberedCredentials(): RememberedCredentials | null {
   try {
     const raw = localStorage.getItem(REMEMBER_KEY);
     if (!raw) return null;
@@ -58,7 +106,7 @@ function getRememberedCredentials() {
   }
 }
 
-function persistRememberedCredentials(email, password, remember) {
+function persistRememberedCredentials(email: string, password: string, remember: boolean): void {
   if (!remember || !email || !password) {
     localStorage.removeItem(REMEMBER_KEY);
     return;
@@ -74,7 +122,7 @@ function persistRememberedCredentials(email, password, remember) {
   }
 }
 
-function hydrateAuthForm() {
+function hydrateAuthForm(): void {
   const remembered = getRememberedCredentials();
   const emailEl = document.getElementById('login-email');
   const passwordEl = document.getElementById('login-password');
@@ -90,13 +138,13 @@ function hydrateAuthForm() {
   }
 }
 
-function setButtonLoading(button, isLoading) {
+function setButtonLoading(button: HTMLButtonElement | null, isLoading: boolean): void {
   if (!button) return;
   button.classList.toggle('loading', isLoading);
   button.disabled = Boolean(isLoading);
 }
 
-function loadHCaptchaScript() {
+function loadHCaptchaScript(): Promise<HCaptchaInstance> | null {
   if (!HCAPTCHA_SITEKEY) return null;
   if (hcaptchaScriptPromise) return hcaptchaScriptPromise;
 
@@ -118,7 +166,7 @@ function loadHCaptchaScript() {
   return hcaptchaScriptPromise;
 }
 
-function resetCaptcha(which) {
+function resetCaptcha(which: 'login' | 'register'): void {
   if (!window.hcaptcha) return;
   const widgetId = hcaptchaWidgets[which];
   if (widgetId !== null && widgetId !== undefined) {
@@ -132,7 +180,7 @@ function resetCaptcha(which) {
   if (which === 'register') registerCaptchaToken = null;
 }
 
-function storePendingReferral(code, userId) {
+function storePendingReferral(code: string, userId: string): void {
   if (!code) return;
   try {
     localStorage.setItem(PENDING_REFERRAL_KEY, JSON.stringify({ code, userId }));
@@ -141,7 +189,7 @@ function storePendingReferral(code, userId) {
   }
 }
 
-function readPendingReferral() {
+function readPendingReferral(): PendingReferral | null {
   try {
     const raw = localStorage.getItem(PENDING_REFERRAL_KEY);
     if (!raw) return null;
@@ -151,7 +199,7 @@ function readPendingReferral() {
   }
 }
 
-function clearPendingReferral() {
+function clearPendingReferral(): void {
   try {
     localStorage.removeItem(PENDING_REFERRAL_KEY);
   } catch {
@@ -159,7 +207,7 @@ function clearPendingReferral() {
   }
 }
 
-export async function handlePasswordReset() {
+export async function handlePasswordReset(): Promise<void> {
   const emailEl = document.getElementById('login-email');
   const errorEl = document.getElementById('login-error');
   
@@ -205,7 +253,7 @@ export async function handlePasswordReset() {
   }
 }
 
-export async function updatePasswordAfterReset(newPassword) {
+export async function updatePasswordAfterReset(newPassword: string): Promise<boolean> {
   if (!newPassword || newPassword.length < 6) {
     showAlert('error', 'Weak Password ❌', 'Password must be at least 6 characters.');
     return false;
@@ -228,7 +276,7 @@ export async function updatePasswordAfterReset(newPassword) {
   return true;
 }
 
-export function handleUpdatePassword() {
+export function handleUpdatePassword(): void {
   const newPasswordEl = document.getElementById('reset-new-password');
   const confirmPasswordEl = document.getElementById('reset-confirm-password');
   const errorEl = document.getElementById('reset-error');
@@ -261,7 +309,7 @@ export function handleUpdatePassword() {
   updatePasswordAfterReset(newPassword);
 }
 
-function detectPasswordReset() {
+function detectPasswordReset(): void {
   const urlParams = new URLSearchParams(window.location.search);
   const isReset = urlParams.get('reset') === 'true';
   const hasError = urlParams.get('error');
@@ -296,7 +344,7 @@ function detectPasswordReset() {
 /**
  * Verifica se o email foi confirmado e exibe um aviso visual apropriado
  */
-async function checkEmailVerification() {
+async function checkEmailVerification(): Promise<void> {
   const { data: { session } } = await supabase.auth.getSession();
   if (!session?.user) return;
   
@@ -311,7 +359,7 @@ async function checkEmailVerification() {
   }
 }
 
-function prefillReferralFromUrl() {
+function prefillReferralFromUrl(): void {
   try {
     // Suportar ambas as rotas: ?ref=username e /auth/ref/username
     const params = new URLSearchParams(window.location.search);
@@ -336,7 +384,7 @@ function prefillReferralFromUrl() {
   }
 }
 
-async function attemptReferralLink(referralCode, userId, authToken) {
+async function attemptReferralLink(referralCode: string, userId: string, authToken: string): Promise<boolean> {
   if (!referralCode || !userId || !authToken) return false;
   try {
     const response = await fetch('/api/_referrals', {
@@ -359,7 +407,7 @@ async function attemptReferralLink(referralCode, userId, authToken) {
   return false;
 }
 
-async function syncPendingReferral(user) {
+async function syncPendingReferral(user: User): Promise<void> {
   const pending = readPendingReferral();
   if (!pending || !user?.id) return;
   if (pending.userId && pending.userId !== user.id) {
@@ -372,7 +420,7 @@ async function syncPendingReferral(user) {
   await attemptReferralLink(pending.code, user.id, session.access_token);
 }
 
-async function renderHCaptcha() {
+async function renderHCaptcha(): Promise<void> {
   if (!HCAPTCHA_SITEKEY) {
     const blocks = [document.getElementById('login-captcha-block'), document.getElementById('register-captcha-block')];
     blocks.forEach(b => {
@@ -428,7 +476,7 @@ async function renderHCaptcha() {
  * Alterna entre as abas de login e registro
  * @param {string} tab - 'login' ou 'register'
  */
-export function switchTab(tab) {
+export function switchTab(tab: 'login' | 'register'): void {
   const loginForm = document.getElementById('login-form');
   const registerForm = document.getElementById('register-form');
   if (!loginForm || !registerForm) return;
@@ -445,7 +493,7 @@ export function switchTab(tab) {
 /**
  * Realiza o login do usuário
  */
-export async function handleLogin() {
+export async function handleLogin(): Promise<void> {
   const emailEl = document.getElementById('login-email');
   const passwordEl = document.getElementById('login-password');
   const errorEl = document.getElementById('login-error');
@@ -560,7 +608,7 @@ export async function handleLogin() {
 /**
  * Realiza o registro de um novo usuário
  */
-export async function handleRegister() {
+export async function handleRegister(): Promise<void> {
   const usernameEl = document.getElementById('register-username');
   const emailEl = document.getElementById('register-email');
   const passwordEl = document.getElementById('register-password');
@@ -718,7 +766,7 @@ export async function handleRegister() {
  * Realiza o logout do usuário
  * @param {boolean} isInBattle - Se o usuário está em uma batalha
  */
-export async function handleLogout(isInBattle = false) {
+export async function handleLogout(isInBattle: boolean = false): Promise<void> {
   if (isInBattle) {
     const confirmar = confirm('⚠️ You are in a battle! Do you really want to walk away and lose your investment?');
     if (!confirmar) return;
@@ -788,14 +836,14 @@ export async function handleLogout(isInBattle = false) {
  * @param {Function} goTo - Função para navegar entre telas
  */
 export async function loadUserData(
-  user, 
-  updateMoneyDisplay,
-  calculateLevel,
-  loadSavedColors,
-  checkAndShowAdminButton,
-  applyTranslations,
-  goTo
-) {
+  user: User, 
+  updateMoneyDisplay?: () => void,
+  calculateLevel?: (xp: number) => any,
+  loadSavedColors?: () => void,
+  checkAndShowAdminButton?: () => Promise<void>,
+  applyTranslations?: () => void,
+  goTo?: (screen: string) => void
+): Promise<void> {
   // Fonte única: sincroniza window + Redux
   setActiveUser(user, { persist: false });
   try {
@@ -908,7 +956,7 @@ export async function loadUserData(
  * Configura o listener de mudanças de estado de autenticação
  * @param {Function} loadUserDataCallback - Callback para carregar dados do usuário
  */
-export function setupAuthStateListener(loadUserDataCallback) {
+export function setupAuthStateListener(loadUserDataCallback: (user: User) => void): void {
   // Evitar múltiplos listeners (hot reload / chamadas repetidas)
   if (authStateSubscription) {
     try {
@@ -1009,7 +1057,7 @@ export function setupAuthStateListener(loadUserDataCallback) {
   authStateSubscription = data?.subscription || null;
 }
 
-function initializeAuthUI() {
+function initializeAuthUI(): void {
   hydrateAuthForm();
   prefillReferralFromUrl();
   detectPasswordReset();

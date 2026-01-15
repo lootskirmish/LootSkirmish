@@ -4,35 +4,113 @@
 
 import { supabase } from './auth';
 import { RARITIES, OPENING_CASES, getCaseById, getRarityByIndex, PASSES_CONFIG, getPassConfig, canOpenQuantity, getRequiredPassForQuantity } from '../shared/constants';
+import type { Case, CaseItem, Rarity, PassConfig } from '../shared/constants';
 import { playSound, startLoop } from '../shared/sfx';
+import type { LoopHandle } from '../shared/sfx';
 import { showToast, showAlert } from '../shared/effects';
+
+// ============================================================
+// TYPE DEFINITIONS
+// ============================================================
+
+interface PreviewItem {
+  name: string;
+  value: number;
+  icon: string;
+  color: string;
+  rarity: string;
+  rarityIcon: string;
+}
+
+interface CaseOpeningElements {
+  galleryGrid: HTMLElement | null;
+  galleryScreen: HTMLElement | null;
+  openingScreen: HTMLElement | null;
+  currentCaseName: HTMLElement | null;
+  currentCasePrice: HTMLElement | null;
+  lootTableGrid: HTMLElement | null;
+  reelWrapper: HTMLElement | null;
+  backToGallery: HTMLElement | null;
+  quickSpin: HTMLInputElement | null;
+  openCaseBtn: HTMLElement | null;
+  resultContinueBtn: HTMLElement | null;
+  priceFilter: HTMLSelectElement | null;
+  totalCostDisplay: HTMLElement | null;
+  baseCostDisplay: HTMLElement | null;
+  discountChip: HTMLElement | null;
+  discountPercent: HTMLElement | null;
+  discountLevel: HTMLElement | null;
+  discountNextCost: HTMLElement | null;
+  upgradeDiscountBtn: HTMLElement | null;
+  resultModal: HTMLElement | null;
+  quickSpinCost: HTMLElement | null;
+  passModal: HTMLElement | null;
+  passModalTitle: HTMLElement | null;
+  passModalIcon: HTMLElement | null;
+  passModalDesc: HTMLElement | null;
+  passModalCost: HTMLElement | null;
+  passModalBenefits: HTMLElement | null;
+  passModalConfirm: HTMLElement | null;
+  passModalCancel: HTMLElement | null;
+}
+
+interface CaseCost {
+  baseTotal: number;
+  discountedTotal: number;
+  discountPercent: number;
+  savings: number;
+}
+
+interface AdjustedPoolItem {
+  item: CaseItem;
+  min: number;
+  max: number;
+}
+
+interface SlotData {
+  items: PreviewItem[];
+  winnerIndex: number;
+  winner: PreviewItem;
+}
+
+interface User {
+  id: string;
+  [key: string]: any;
+}
+
+declare global {
+  interface Window {
+    playerMoney?: { value: number };
+    initCaseOpening: typeof initCaseOpening;
+  }
+}
 
 // ============================================================
 // GLOBAL STATE
 // ============================================================
 
-let currentCaseId = null;
-let selectedQuantity = 1;
-let isQuickSpin = false;
-let isOpening = false;
-let currentUser = null;
-let playerMoney = 0;
-let previewItems = []; // 🔥 NOVO: armazena preview dos 96 itens
+let currentCaseId: string | null = null;
+let selectedQuantity: number = 1;
+let isQuickSpin: boolean = false;
+let isOpening: boolean = false;
+let currentUser: User | null = null;
+let playerMoney: number = 0;
+let previewItems: PreviewItem[] = []; // 🔥 NOVO: armazena preview dos 96 itens
 
-let caseOpeningUIBound = false;
-let previewInFlight = null;
-let previewPending = false;
-let previewToken = 0;
+let caseOpeningUIBound: boolean = false;
+let previewInFlight: Promise<void> | null = null;
+let previewPending: boolean = false;
+let previewToken: number = 0;
 
-let playerDiamonds = 0;
-let ownedPasses = [];
-let reelLoopHandle = null;
-let caseDiscountLevel = 0;
-let isUpgradingDiscount = false;
+let playerDiamonds: number = 0;
+let ownedPasses: string[] = [];
+let reelLoopHandle: LoopHandle | null = null;
+let caseDiscountLevel: number = 0;
+let isUpgradingDiscount: boolean = false;
 
-const MAX_DISCOUNT_LEVEL = 40;
+const MAX_DISCOUNT_LEVEL: number = 40;
 
-function getCaseOpeningEls() {
+function getCaseOpeningEls(): CaseOpeningElements {
   return {
     galleryGrid: document.getElementById('case-gallery-grid'),
     galleryScreen: document.getElementById('case-gallery-screen'),
@@ -66,29 +144,29 @@ function getCaseOpeningEls() {
   };
 }
 
-function getCurrentMoney() {
+function getCurrentMoney(): number {
   return (window.playerMoney && typeof window.playerMoney.value === 'number')
     ? window.playerMoney.value
     : playerMoney;
 }
 
-function getDiscountPercent() {
+function getDiscountPercent(): number {
   return Math.min(Math.max(Number(caseDiscountLevel) || 0, 0), MAX_DISCOUNT_LEVEL);
 }
 
-function getDiscountFactor() {
+function getDiscountFactor(): number {
   return 1 - (getDiscountPercent() / 100);
 }
 
-function calcDiscountUpgradeCost(level) {
+function calcDiscountUpgradeCost(level: number): number {
   return Math.round(100 * Math.pow(1.38, level));
 }
 
-function formatCurrency(amount) {
+function formatCurrency(amount: number): string {
   return `$${(Number(amount) || 0).toFixed(2)}`;
 }
 
-function computeCaseCost(caseData, qty = selectedQuantity) {
+function computeCaseCost(caseData: Case, qty: number = selectedQuantity): CaseCost {
   const baseTotal = parseFloat((caseData.price * qty).toFixed(2));
   const discountPercent = getDiscountPercent();
   const discountedTotal = parseFloat((baseTotal * getDiscountFactor()).toFixed(2));
@@ -101,7 +179,7 @@ function computeCaseCost(caseData, qty = selectedQuantity) {
 // SEEDED RNG (CLIENT-SIDE - MUST MATCH BACKEND)
 // ============================================================
 
-function seededRandom(seed) {
+function seededRandom(seed: number | string): number {
   let seedValue = 0;
   const seedStr = String(seed);
   
@@ -114,7 +192,7 @@ function seededRandom(seed) {
   return x - Math.floor(x);
 }
 
-function createSeededRNG(seed) {
+function createSeededRNG(seed: number | string): () => number {
   let seedValue = 0;
   const seedStr = String(seed);
   
@@ -133,7 +211,7 @@ function createSeededRNG(seed) {
 // ITEM GENERATION (CLIENT-SIDE - FOR VISUAL ONLY)
 // ============================================================
 
-function buildAdjustedPools(caseData) {
+function buildAdjustedPools(caseData: Case): AdjustedPoolItem[] {
   const pools = [];
   const buckets = RARITIES.map((rarity, idx) => {
     const items = caseData.items.filter((it) => it.rarityIndex === idx);
@@ -159,7 +237,7 @@ function buildAdjustedPools(caseData) {
   return pools;
 }
 
-function generateRandomItem(caseData) {
+function generateRandomItem(caseData: Case): CaseItem {
   const pools = buildAdjustedPools(caseData);
   if (!pools.length) {
     const fallback = caseData.items?.[0];
@@ -193,7 +271,7 @@ function generateRandomItem(caseData) {
 // INITIALIZATION
 // ============================================================
 
-export function initCaseOpening(user, money, diamonds = 0, passes = [], discountLevel = null) {
+export function initCaseOpening(user: User, money: number, diamonds: number = 0, passes: string[] = [], discountLevel: number | null = null): void {
   currentUser = user;
   playerMoney = Number(money) || 0;
   playerDiamonds = diamonds;
@@ -212,7 +290,7 @@ export function initCaseOpening(user, money, diamonds = 0, passes = [], discount
 // CASE GALLERY RENDERING
 // ============================================================
 
-function renderCaseGallery() {
+function renderCaseGallery(): void {
   const { galleryGrid } = getCaseOpeningEls();
   if (!galleryGrid) return;
 
@@ -239,7 +317,7 @@ function renderCaseGallery() {
 // CASE VIEW
 // ============================================================
 
-async function openCaseView(caseId) {
+async function openCaseView(caseId: string): Promise<void> {
   currentCaseId = caseId;
   const caseData = getCaseById(caseId);
   
@@ -265,7 +343,7 @@ async function openCaseView(caseId) {
   if (openingScreen) openingScreen.classList.add('active');
 }
 
-function renderLootTable(caseData) {
+function renderLootTable(caseData: Case): void {
   const { lootTableGrid } = getCaseOpeningEls();
   const grid = lootTableGrid;
   if (!grid) return;
@@ -289,7 +367,7 @@ function renderLootTable(caseData) {
 // PREVIEW GENERATION (NOVO)
 // ============================================================
 
-async function generatePreview() {
+async function generatePreview(): Promise<void> {
   if (!currentCaseId) return;
 
   previewToken++;
@@ -351,7 +429,7 @@ async function generatePreview() {
 // REEL SETUP (ATUALIZADO)
 // ============================================================
 
-function setupReel() {
+function setupReel(): void {
   const { reelWrapper } = getCaseOpeningEls();
   const wrapper = reelWrapper;
   if (!wrapper) return;
@@ -391,7 +469,7 @@ function setupReel() {
 // RENDER PREVIEW ITEMS (NOVO)
 // ============================================================
 
-function renderPreviewItems(slotIndex, isHorizontal) {
+function renderPreviewItems(slotIndex: number, isHorizontal: boolean): void {
   const track = document.getElementById(`reel-track-${slotIndex}`);
   if (!track) return;
   
@@ -417,7 +495,7 @@ function renderPreviewItems(slotIndex, isHorizontal) {
 // CONTROLS
 // ============================================================
 
-function updateQuantityButtons() {
+function updateQuantityButtons(): void {
   document.querySelectorAll('.qty-btn').forEach(btn => {
     const qty = parseInt(btn.getAttribute('data-qty'));
     const isActive = qty === selectedQuantity;
@@ -442,7 +520,7 @@ function updateQuantityButtons() {
   });
 }
 
-function updateTotalCost() {
+function updateTotalCost(): void {
   const caseData = getCaseById(currentCaseId);
   if (!caseData) return;
   
@@ -473,7 +551,7 @@ function updateTotalCost() {
   }
 }
 
-function updateDiscountUI() {
+function updateDiscountUI(): void {
   const {
     discountPercent: discountPercentEl,
     discountLevel: discountLevelEl,
@@ -518,7 +596,7 @@ function updateDiscountUI() {
 // UPDATE PASS UI
 // ============================================================
 
-function updatePassUI() {
+function updatePassUI(): void {
   const { quickSpinCost } = getCaseOpeningEls();
   const quickSpinToggleEl = document.querySelector('.quick-spin-toggle');
   
@@ -550,7 +628,7 @@ function updatePassUI() {
 // PASS PURCHASE MODAL
 // ============================================================
 
-function showPassModal(passId) {
+function showPassModal(passId: string): void {
   const config = getPassConfig(passId);
   if (!config) return;
   
@@ -587,7 +665,7 @@ function showPassModal(passId) {
   passModal.classList.add('active');
 }
 
-function hidePassModal() {
+function hidePassModal(): void {
   const { passModal } = getCaseOpeningEls();
   if (passModal) {
     passModal.classList.remove('active');
@@ -599,7 +677,7 @@ function hidePassModal() {
 // PURCHASE PASS (API CALL)
 // ============================================================
 
-async function purchasePass(passId) {
+async function purchasePass(passId: string): Promise<void> {
   const config = getPassConfig(passId);
   if (!config) return;
   
@@ -685,7 +763,7 @@ async function purchasePass(passId) {
 // DISCOUNT UPGRADE (money-based)
 // ============================================================
 
-async function upgradeCaseDiscount() {
+async function upgradeCaseDiscount(): Promise<void> {
   if (isUpgradingDiscount) return;
   if (!currentUser?.id) {
     showAlert('error', 'Not logged in', 'Please sign in to upgrade your discount.');
@@ -799,7 +877,7 @@ async function upgradeCaseDiscount() {
 // EVENT LISTENERS
 // ============================================================
 
-function bindCaseOpeningUIOnce() {
+function bindCaseOpeningUIOnce(): void {
   if (caseOpeningUIBound) return;
 
   const {
@@ -961,7 +1039,7 @@ function bindCaseOpeningUIOnce() {
 // CASE OPENING (API CALL)
 // ============================================================
 
-async function openCase() {
+async function openCase(): Promise<void> {
   if (isOpening) return;
   
   const caseData = getCaseById(currentCaseId);
@@ -1070,7 +1148,7 @@ async function openCase() {
 // REEL ANIMATION (ATUALIZADO)
 // ============================================================
 
-async function animateReels(slots) {
+async function animateReels(slots: SlotData[]): Promise<void> {
   const animationTime = isQuickSpin ? 5000 : 15000;
   
   if (selectedQuantity === 1) {
@@ -1088,7 +1166,7 @@ async function animateReels(slots) {
 // HORIZONTAL REEL ANIMATION (ATUALIZADO)
 // ============================================================
 
-async function animateHorizontalReel(slotIndex, slotData, duration) {
+async function animateHorizontalReel(slotIndex: number, slotData: SlotData, duration: number): Promise<void> {
   return new Promise((resolve) => {
     const track = document.getElementById(`reel-track-${slotIndex}`);
     
@@ -1141,7 +1219,7 @@ async function animateHorizontalReel(slotIndex, slotData, duration) {
 // VERTICAL REEL ANIMATION (ATUALIZADO)
 // ============================================================
 
-async function animateVerticalReel(slotIndex, slotData, duration) {
+async function animateVerticalReel(slotIndex: number, slotData: SlotData, duration: number): Promise<void> {
   return new Promise((resolve) => {
     const track = document.getElementById(`reel-track-${slotIndex}`);
     
@@ -1194,7 +1272,7 @@ async function animateVerticalReel(slotIndex, slotData, duration) {
 // SHOW WINNER (ATUALIZADO)
 // ============================================================
 
-function showWinner(slotIndex, item, isHorizontal) {
+function showWinner(slotIndex: number, item: PreviewItem, isHorizontal: boolean): void {
   const container = document.getElementById(`reel-container-${slotIndex}`);
   
   if (!container) {
@@ -1220,7 +1298,7 @@ function showWinner(slotIndex, item, isHorizontal) {
 // RESULT MODAL
 // ============================================================
 
-function showResultModal(items, totalValue) {
+function showResultModal(items: PreviewItem[], totalValue: number): void {
   const grid = document.getElementById('result-items-grid');
   
   grid.innerHTML = items.map((item, i) => `
@@ -1252,7 +1330,7 @@ function showResultModal(items, totalValue) {
 // FILTER
 // ============================================================
 
-function filterCases(priceRange) {
+function filterCases(priceRange: string): void {
   const cards = document.querySelectorAll('.case-card');
   
   cards.forEach(card => {

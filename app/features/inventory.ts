@@ -10,33 +10,102 @@ import {
   showToast,
   showAlert
 } from '../shared/effects';
+
+// ============================================================
+// TYPE DEFINITIONS
+// ============================================================
+
+interface InventoryItem {
+  id: string;
+  user_id: string;
+  item_name: string;
+  value: number;
+  icon: string;
+  color: string;
+  rarity: string;
+  created_at: string;
+}
+
+interface GridMode {
+  id: string;
+  label: string;
+  cols: number;
+  rows?: number;
+  perPage: number;
+}
+
+interface Filters {
+  rarity: string;
+  value: string;
+  date: string;
+}
+
+interface UpgradeOffer {
+  nextMax: number;
+  cost: number;
+  newSlots: number;
+  canAfford: boolean;
+}
+
+interface PlayerStats {
+  max_inventory?: number;
+  diamonds?: number;
+}
+
+declare global {
+  interface Window {
+    playerDiamonds?: { value: number };
+    renderInventory: typeof renderInventory;
+    setCurrentUserId: typeof setCurrentUserId;
+    toggleItemSelection: typeof toggleItemSelection;
+    sellSingleItem: typeof sellSingleItem;
+    sellSelected: typeof sellSelected;
+    openFilterModal: typeof openFilterModal;
+    closeFilterModal: typeof closeFilterModal;
+    resetFilters: typeof resetFilters;
+    applyFilters: typeof applyFilters;
+    openSellAllModal: typeof openSellAllModal;
+    closeSellAllModal: typeof closeSellAllModal;
+    updateSellAllSummary: typeof updateSellAllSummary;
+    confirmSellAll: typeof confirmSellAll;
+    goToPage: typeof goToPage;
+    invalidateInventoryCaches: typeof invalidateInventoryCaches;
+    openInventoryUpgradeModal: typeof openInventoryUpgradeModal;
+    closeInventoryUpgradeModal: typeof closeInventoryUpgradeModal;
+    purchaseInventoryUpgrade: typeof purchaseInventoryUpgrade;
+    cycleGridMode: typeof cycleGridMode;
+  }
+}
+
+// ============================================================
+
 // Capacidade agora vem do Supabase (player_stats.max_inventory)
-const INVENTORY_BASE_CAPACITY = 15;
-const INVENTORY_MAX_CAPACITY = 50;
-const UPGRADE_STEP = 5;
-const UPGRADE_COSTS = [50, 75, 100, 150, 250];
+const INVENTORY_BASE_CAPACITY: number = 15;
+const INVENTORY_MAX_CAPACITY: number = 50;
+const UPGRADE_STEP: number = 5;
+const UPGRADE_COSTS: number[] = [50, 75, 100, 150, 250];
 
 // Layout modes for inventory grid
-const GRID_MODES = [
+const GRID_MODES: GridMode[] = [
   { id: '3x3', label: '3x3', cols: 3, perPage: 9 },
   { id: '5x5', label: '5x5', cols: 5, perPage: 25 },
   { id: '7x7', label: '7x7', cols: 7, perPage: 49 }
 ];
 
 // Layout modes específicos para mobile
-const MOBILE_GRID_MODES = [
+const MOBILE_GRID_MODES: GridMode[] = [
   { id: '2x2', label: '2x2', cols: 2, rows: 2, perPage: 4 },
   { id: '4x4', label: '4x4', cols: 4, rows: 4, perPage: 16 },
   { id: '2x6', label: '2x6', cols: 2, rows: 6, perPage: 12 }
 ];
 
 // Detectar se é mobile
-function isMobileDevice() {
+function isMobileDevice(): boolean {
   return window.innerWidth <= 768;
 }
 
 // Obter modos corretos baseado no dispositivo
-function getGridModes() {
+function getGridModes(): GridMode[] {
   return isMobileDevice() ? MOBILE_GRID_MODES : GRID_MODES;
 }
 
@@ -44,19 +113,19 @@ function getGridModes() {
 // STATE MANAGEMENT
 // ============================================================
 
-let currentFilters = {
+let currentFilters: Filters = {
   rarity: 'all',
   value: 'none',
   date: 'newest'
 };
 
-let selectedItems = new Set();
-let isSelling = false;
-let currentUserId = null;
-let currentGridModeIndex = 0;
-let lastGridToggleAt = 0;
+let selectedItems: Set<string> = new Set();
+let isSelling: boolean = false;
+let currentUserId: string | null = null;
+let currentGridModeIndex: number = 0;
+let lastGridToggleAt: number = 0;
 
-async function syncPlayerStats(userId) {
+async function syncPlayerStats(userId: string): Promise<PlayerStats | null> {
   try {
     const { data, error } = await supabase
       .from('player_stats')
@@ -84,21 +153,21 @@ async function syncPlayerStats(userId) {
 }
 
 // Cache para evitar re-fetch em paginação
-let lastInventoryCacheKey = null;
-let lastInventoryItems = null;
+let lastInventoryCacheKey: string | null = null;
+let lastInventoryItems: InventoryItem[] | null = null;
 
 // Contador total (sem filtro)
-let lastInventoryTotalCount = null;
-let lastInventoryCountUserId = null;
+let lastInventoryTotalCount: number | null = null;
+let lastInventoryCountUserId: string | null = null;
 
 // Capacidade dinâmica (sincronizada com Supabase)
-let currentMaxCapacity = INVENTORY_BASE_CAPACITY;
+let currentMaxCapacity: number = INVENTORY_BASE_CAPACITY;
 
 // Cache para Sell All (evita fetch por checkbox change)
-let sellAllInventoryCache = null;
-let sellAllInventoryCacheUserId = null;
+let sellAllInventoryCache: InventoryItem[] | null = null;
+let sellAllInventoryCacheUserId: string | null = null;
 
-function invalidateInventoryCaches() {
+function invalidateInventoryCaches(): void {
   lastInventoryCacheKey = null;
   lastInventoryItems = null;
   lastInventoryTotalCount = null;
@@ -107,7 +176,7 @@ function invalidateInventoryCaches() {
   sellAllInventoryCacheUserId = null;
 }
 
-function getCurrentGridMode() {
+function getCurrentGridMode(): GridMode {
   const modes = getGridModes();
   // Resetar índice se mudou de desktop para mobile ou vice-versa
   if (currentGridModeIndex >= modes.length) {
@@ -116,11 +185,11 @@ function getCurrentGridMode() {
   return modes[currentGridModeIndex] || modes[0];
 }
 
-function getItemsPerPage() {
+function getItemsPerPage(): number {
   return getCurrentGridMode().perPage;
 }
 
-function applyGridModeToGrid() {
+function applyGridModeToGrid(): void {
   const grid = document.getElementById('inv-grid');
   if (!grid) return;
   
@@ -135,7 +204,7 @@ function applyGridModeToGrid() {
   grid.classList.add(`grid-mode-${currentMode.id}`);
 }
 
-function updateGridModeButtonUI() {
+function updateGridModeButtonUI(): void {
   const btn = document.getElementById('grid-mode-btn');
   if (!btn) return;
   const mode = getCurrentGridMode();
@@ -143,7 +212,7 @@ function updateGridModeButtonUI() {
   btn.textContent = `${prefix}Layout ${mode.label}`;
 }
 
-function cycleGridMode() {
+function cycleGridMode(): void {
   const now = Date.now();
   if (now - lastGridToggleAt < 400) return; // simple debounce
   lastGridToggleAt = now;
@@ -166,11 +235,11 @@ const ITEMS_PER_PAGE = 5; // legacy (not used)
 // USER ID MANAGEMENT
 // ============================================================
 
-export function setCurrentUserId(userId) {
+export function setCurrentUserId(userId: string): void {
   currentUserId = userId;
 }
 
-export function getCurrentUserId() {
+export function getCurrentUserId(): string | null {
   return currentUserId;
 }
 
@@ -178,7 +247,7 @@ export function getCurrentUserId() {
 // INVENTORY RENDERING COM PAGINAÇÃO
 // ============================================================
 
-export async function renderInventory(userId) {
+export async function renderInventory(userId: string): Promise<void> {
   
   if (!userId && !currentUserId) {
     console.error('❌ No userId available!');
@@ -323,7 +392,7 @@ export async function renderInventory(userId) {
 /**
  * Renderiza a paginação
  */
-function renderPagination(totalItems) {
+function renderPagination(totalItems: number): void {
   const totalPages = Math.ceil(totalItems / getItemsPerPage());
   
   let paginationDiv = document.getElementById('inv-pagination');
@@ -361,7 +430,7 @@ function renderPagination(totalItems) {
 /**
  * Remove paginação
  */
-function removePagination() {
+function removePagination(): void {
   const paginationDiv = document.getElementById('inv-pagination');
   if (paginationDiv) {
     paginationDiv.remove();
@@ -371,7 +440,7 @@ function removePagination() {
 /**
  * Vai para página específica
  */
-export function goToPage(page) {
+export function goToPage(page: number): void {
   const perPage = getItemsPerPage();
   const totalItems = Array.isArray(lastInventoryItems) ? lastInventoryItems.length : 0;
   const totalPages = Math.max(1, Math.ceil(totalItems / perPage));
@@ -390,7 +459,7 @@ export function goToPage(page) {
 /**
  * Atualiza a barra de capacidade do inventário
  */
-export function updateCapacityBar(current) {
+export function updateCapacityBar(current: number): void {
   lastInventoryTotalCount = current;
   const safeMax = currentMaxCapacity || INVENTORY_BASE_CAPACITY;
   const percentage = safeMax > 0 ? (current / safeMax) * 100 : 0;
@@ -411,7 +480,7 @@ export function updateCapacityBar(current) {
   }
 }
 
-function setMaxCapacityFromBackend(value) {
+function setMaxCapacityFromBackend(value: number): void {
   const parsed = Number(value);
   const clamped = Math.min(INVENTORY_MAX_CAPACITY, Math.max(INVENTORY_BASE_CAPACITY, Number.isFinite(parsed) ? parsed : INVENTORY_BASE_CAPACITY));
   currentMaxCapacity = clamped;
@@ -420,7 +489,7 @@ function setMaxCapacityFromBackend(value) {
   updateUpgradeButtonUI();
 }
 
-function computeUpgradeOffer() {
+function computeUpgradeOffer(): UpgradeOffer | null {
   const current = currentMaxCapacity || INVENTORY_BASE_CAPACITY;
   if (current >= INVENTORY_MAX_CAPACITY) {
     return { maxed: true, current, next: current, cost: 0, discountApplied: false, upgradesDone: 0 };
@@ -436,7 +505,7 @@ function computeUpgradeOffer() {
   return { maxed: false, current, next, cost, discountApplied, upgradesDone };
 }
 
-function updateUpgradeButtonUI() {
+function updateUpgradeButtonUI(): void {
   const btn = document.getElementById('inv-upgrade-btn');
   if (!btn) return;
 
@@ -453,7 +522,7 @@ function updateUpgradeButtonUI() {
   btn.classList.remove('disabled');
 }
 
-function renderUpgradeModalContent() {
+function renderUpgradeModalContent(): void {
   const offer = computeUpgradeOffer();
   const currentEl = document.getElementById('upgrade-current-cap');
   const nextEl = document.getElementById('upgrade-next-cap');
@@ -491,14 +560,14 @@ function renderUpgradeModalContent() {
   return offer;
 }
 
-export function openInventoryUpgradeModal() {
+export function openInventoryUpgradeModal(): void {
   const modal = document.getElementById('inventory-upgrade-modal');
   if (!modal) return;
   renderUpgradeModalContent();
   modal.classList.remove('hidden');
 }
 
-export function closeInventoryUpgradeModal() {
+export function closeInventoryUpgradeModal(): void {
   const modal = document.getElementById('inventory-upgrade-modal');
   if (!modal) return;
   modal.classList.add('hidden');
@@ -506,7 +575,7 @@ export function closeInventoryUpgradeModal() {
   if (ctaEl) ctaEl.disabled = false;
 }
 
-export async function purchaseInventoryUpgrade() {
+export async function purchaseInventoryUpgrade(): Promise<void> {
   if (isSelling) return; // reuse guard
   if (!currentUserId) {
     alert('❌ Authentication error. Please refresh the page.');
@@ -584,7 +653,7 @@ export async function purchaseInventoryUpgrade() {
 /**
  * Alterna seleção de um item
  */
-export function toggleItemSelection(itemId) {
+export function toggleItemSelection(itemId: string): void {
   itemId = String(itemId);
   if (selectedItems.has(itemId)) {
     selectedItems.delete(itemId);
@@ -603,7 +672,7 @@ export function toggleItemSelection(itemId) {
 /**
  * Atualiza o botão "Vender Selecionados"
  */
-export function updateSelectedButton() {
+export function updateSelectedButton(): void {
   const btn = document.getElementById('sell-selected-btn');
   if (!btn) return;
   
@@ -618,7 +687,7 @@ export function updateSelectedButton() {
 /**
  * Limpa a seleção de itens
  */
-export function clearSelection() {
+export function clearSelection(): void {
   selectedItems.clear();
   updateSelectedButton();
 }
@@ -630,7 +699,7 @@ export function clearSelection() {
 /**
  * Wrapper para sellItem que pega userId automaticamente
  */
-export async function sellSingleItem(itemId) {
+export async function sellSingleItem(itemId: string): Promise<void> {
   itemId = String(itemId);
   if (!currentUserId) {
     console.error('❌ No userId available for selling!');
@@ -644,7 +713,7 @@ export async function sellSingleItem(itemId) {
 /**
  * Vende um item individual - VERSÃO SEGURA
  */
-export async function sellItem(itemId, userId, renderCallback) {
+export async function sellItem(itemId: string, userId: string, renderCallback: () => Promise<void>): Promise<void> {
   itemId = String(itemId);
   if (isSelling) {
     return;
@@ -734,7 +803,7 @@ export async function sellItem(itemId, userId, renderCallback) {
 /**
  * Vende itens selecionados - VERSÃO SEGURA
  */
-export async function sellSelected() {
+export async function sellSelected(): Promise<void> {
   if (isSelling || selectedItems.size === 0) return;
   
   if (!currentUserId) {
@@ -818,7 +887,7 @@ export async function sellSelected() {
 /**
  * Confirma a venda de todos os itens das raridades selecionadas
  */
-export async function confirmSellAll() {
+export async function confirmSellAll(): Promise<void> {
   if (isSelling) return;
   
   if (!currentUserId) {
@@ -902,17 +971,17 @@ export async function confirmSellAll() {
 // FILTERS
 // ============================================================
 
-export function openFilterModal() {
+export function openFilterModal(): void {
   const modal = document.getElementById('filter-modal');
   if (modal) modal.classList.add('active');
 }
 
-export function closeFilterModal() {
+export function closeFilterModal(): void {
   const modal = document.getElementById('filter-modal');
   if (modal) modal.classList.remove('active');
 }
 
-export function resetFilters() {
+export function resetFilters(): void {
   currentFilters = {
     rarity: 'all',
     value: 'none',
@@ -943,7 +1012,7 @@ export function resetFilters() {
   closeFilterModal();
 }
 
-export function applyFilters() {
+export function applyFilters(): void {
   const raritySelect = document.getElementById('filter-rarity');
   const valueSelect = document.getElementById('filter-value');
   const dateSelect = document.getElementById('filter-date');
@@ -970,7 +1039,7 @@ export function applyFilters() {
   closeFilterModal();
 }
 
-export function getCurrentFilters() {
+export function getCurrentFilters(): Filters {
   return { ...currentFilters };
 }
 
@@ -981,7 +1050,7 @@ export function getCurrentFilters() {
 /**
  * Abre o modal "Sell All"
  */
-export async function openSellAllModal() {
+export async function openSellAllModal(): Promise<void> {
   if (!currentUserId) {
     alert('❌ Authentication error. Please refresh the page.');
     return;
@@ -1008,7 +1077,7 @@ export async function openSellAllModal() {
 /**
  * Fecha o modal "Sell All"
  */
-export function closeSellAllModal() {
+export function closeSellAllModal(): void {
   const modal = document.getElementById('sell-all-modal');
   if (modal) modal.classList.add('hidden');
 }
@@ -1016,7 +1085,7 @@ export function closeSellAllModal() {
 /**
  * Atualiza o resumo do "Sell All"
  */
-export async function updateSellAllSummary() {
+export async function updateSellAllSummary(): Promise<void> {
   if (!currentUserId) return;
   
   try {
@@ -1070,15 +1139,15 @@ export async function updateSellAllSummary() {
 // UTILITY FUNCTIONS
 // ============================================================
 
-export function isCurrentlySelling() {
+export function isCurrentlySelling(): boolean {
   return isSelling;
 }
 
-export function getSelectedCount() {
+export function getSelectedCount(): number {
   return selectedItems.size;
 }
 
-export function getSelectedIds() {
+export function getSelectedIds(): string[] {
   return Array.from(selectedItems);
 }
 

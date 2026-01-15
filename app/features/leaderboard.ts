@@ -5,10 +5,61 @@
 import { supabase } from './auth';
 
 // ============================================================
+// TYPE DEFINITIONS
+// ============================================================
+
+interface PlayerData {
+  user_id: string;
+  username: string;
+  avatar_url?: string;
+  level?: number;
+  money?: number;
+  total_wins?: number;
+  total_cases_opened?: number;
+  best_drop?: number;
+  total_spent?: number;
+  total_gains?: number;
+  [key: string]: any;
+}
+
+interface LeaderboardType {
+  id: string;
+  name: string;
+  icon: string;
+  isSpecial?: boolean;
+  column?: string;
+  order?: 'asc' | 'desc';
+  format?: (value: number) => string;
+}
+
+interface LeaderboardTypes {
+  [key: string]: LeaderboardType;
+}
+
+interface RankMaps {
+  [key: string]: Map<string, number>;
+}
+
+interface User {
+  id: string;
+  username?: string;
+  [key: string]: any;
+}
+
+declare global {
+  interface Window {
+    goTo?: (screen: string) => void;
+    toggleCategoryDropdown: () => void;
+    switchLeaderboardCategory: (categoryId: string) => void;
+    loadMorePlayers: () => Promise<void>;
+  }
+}
+
+// ============================================================
 // CONFIGURAÇÃO DE LEADERBOARDS
 // ============================================================
 
-const LEADERBOARD_TYPES = {
+const LEADERBOARD_TYPES: LeaderboardTypes = {
 general: {
     id: 'general',
     name: '⭐ General',
@@ -69,22 +120,22 @@ general: {
 // ESTADO DO LEADERBOARD
 // ============================================================
 
-let currentLeaderboardType = 'general';
-let currentPage = 0;
-let hasMorePages = true;
-let isLoading = false;
-let allPlayersData = [];
-let currentUserData = null;
+let currentLeaderboardType: string = 'general';
+let currentPage: number = 0;
+let hasMorePages: boolean = true;
+let isLoading: boolean = false;
+let allPlayersData: PlayerData[] = [];
+let currentUserData: User | null = null;
 
-let renderToken = 0;
+let renderToken: number = 0;
 
-const USER_POSITION_CACHE_MS = 30000;
-const userPositionCache = new Map();
+const USER_POSITION_CACHE_MS: number = 30000;
+const userPositionCache: Map<string, any> = new Map();
 
-const ITEMS_PER_PAGE = 10;
+const ITEMS_PER_PAGE: number = 10;
 
 // ✅ Função para resetar estado
-function resetLeaderboardState() {
+function resetLeaderboardState(): void {
   renderToken++;
   currentPage = 0;
   hasMorePages = true;
@@ -114,7 +165,7 @@ function resetLeaderboardState() {
 // INICIALIZAÇÃO
 // ============================================================
 
-export function initLeaderboard(currentUser) {
+export function initLeaderboard(currentUser: User): void {
   currentUserData = currentUser;
   
   // ✅ RESETAR ESTADO AO INICIALIZAR
@@ -124,7 +175,7 @@ export function initLeaderboard(currentUser) {
   renderLeaderboard();
 }
 
-function setupLeaderboardUI() {
+function setupLeaderboardUI(): void {
   const container = document.getElementById('leaderboard');
   
   if (!container) return;
@@ -231,7 +282,7 @@ window.toggleCategoryDropdown = function() {
 // RENDERIZAR LEADERBOARD
 // ============================================================
 
-export async function renderLeaderboard() {
+export async function renderLeaderboard(): Promise<void> {
   const listContainer = document.getElementById('leader-list');
   
   if (!listContainer) return;
@@ -324,7 +375,7 @@ export async function renderLeaderboard() {
 // RENDERIZAR TOP 3 (PÓDIO)
 // ============================================================
 
-function renderTop3(players, typeConfig) {
+function renderTop3(players: PlayerData[], typeConfig: LeaderboardType): string {
   const listContainer = document.getElementById('leader-list');
   
   if (players.length === 0) return;
@@ -342,7 +393,7 @@ function renderTop3(players, typeConfig) {
   listContainer.innerHTML = podiumHTML;
 }
 
-function renderPodiumCard(player, rank, maxValue, typeConfig, medal) {
+function renderPodiumCard(player: PlayerData, rank: number, maxValue: number, typeConfig: LeaderboardType, medal: string): string {
   if (!player) return '<div></div>';
   
   const value = player[typeConfig.column] || 0;
@@ -420,7 +471,7 @@ function renderPodiumCard(player, rank, maxValue, typeConfig, medal) {
 // RENDERIZAR LISTA (4+)
 // ============================================================
 
-function renderList(players, startRank, typeConfig) {
+function renderList(players: PlayerData[], startRank: number, typeConfig: LeaderboardType): string {
   const listContainer = document.getElementById('leader-list');
   
   if (players.length === 0) return;
@@ -445,7 +496,7 @@ function renderList(players, startRank, typeConfig) {
   }
 }
 
-function renderListItem(player, rank, maxValue, typeConfig) {
+function renderListItem(player: PlayerData, rank: number, maxValue: number, typeConfig: LeaderboardType): string {
   const value = player[typeConfig.column] || 0;
   const progress = (value / maxValue) * 100;
   
@@ -538,7 +589,7 @@ window.loadMorePlayers = async function() {
   isLoading = false;
 };
 
-async function getUserPositionForType(typeConfig, token) {
+async function getUserPositionForType(typeConfig: LeaderboardType, token: number): Promise<number | null> {
   if (!currentUserData?.id) return null;
   if (token !== renderToken) return null;
 
@@ -596,7 +647,7 @@ async function getUserPositionForType(typeConfig, token) {
 // ATUALIZAR POSIÇÃO DO USUÁRIO
 // ============================================================
 
-async function updateUserPosition(typeConfig, token) {
+async function updateUserPosition(typeConfig: LeaderboardType, token: number): Promise<void> {
   if (!currentUserData) return;
   
   try {
@@ -634,7 +685,7 @@ async function updateUserPosition(typeConfig, token) {
 // LEADERBOARD GERAL (MÉDIA DE TODAS AS POSIÇÕES)
 // ============================================================
 
-async function renderGeneralLeaderboard(token) {
+async function renderGeneralLeaderboard(token: number): Promise<void> {
   const listContainer = document.getElementById('leader-list');
   
   listContainer.innerHTML = `
@@ -722,7 +773,7 @@ async function renderGeneralLeaderboard(token) {
   }
 }
 
-function renderGeneralTop3(players, rankMaps) {
+function renderGeneralTop3(players: PlayerData[], rankMaps: RankMaps): string {
   const listContainer = document.getElementById('leader-list');
   
   const podiumHTML = `
@@ -736,7 +787,7 @@ function renderGeneralTop3(players, rankMaps) {
   listContainer.innerHTML = podiumHTML;
 }
 
-function renderGeneralPodiumCard(player, rank, rankMaps, medal) {
+function renderGeneralPodiumCard(player: PlayerData, rank: number, rankMaps: RankMaps, medal: string): string {
   if (!player) return '<div></div>';
   
   const medalIcons = {
@@ -785,7 +836,7 @@ function renderGeneralPodiumCard(player, rank, rankMaps, medal) {
   `;
 }
 
-function renderGeneralList(players, startRank, rankMaps) {
+function renderGeneralList(players: PlayerData[], startRank: number, rankMaps: RankMaps): string {
   const listContainer = document.getElementById('leader-list');
   
   const listHTML = `
