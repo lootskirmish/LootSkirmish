@@ -207,6 +207,8 @@ async function _loadProfileRoute() {
       // GUARD: Prevent concurrent loads of the same profile
       if (currentLoadingPublicProfile === publicUsername) {
         console.warn('Profile load already in progress for:', publicUsername);
+        if (skeleton) skeleton.style.display = 'none';
+        if (content) content.style.display = 'block';
         return; // Don't load again
       }
 
@@ -240,7 +242,7 @@ async function _loadProfileRoute() {
           console.warn(`[PROFILE_LOAD] Error response:`, errorData);
           // Return to safe state (menu)
             if (window.showToast) {
-              window.showToast('Profile could not be accessed.', 'error');
+              window.showToast('error', 'Profile could not be accessed.');
             }
           window.history.replaceState({}, '', '/');
           // Force re-route to menu
@@ -261,7 +263,7 @@ async function _loadProfileRoute() {
           console.warn(`[PROFILE_LOAD] Profile "${publicUsername}" is PRIVATE (success=${checkData.success}, isPublic=${checkData.isPublic})`);
           // Return to safe state (menu)
             if (window.showToast) {
-              window.showToast(`This profile is private.`, 'info');
+              window.showToast('info', 'This profile is private.');
             }
           window.history.replaceState({}, '', '/');
           // Force re-route to menu
@@ -278,7 +280,7 @@ async function _loadProfileRoute() {
         console.error(`[PROFILE_LOAD] Fetch error for "${publicUsername}":`, err.message || err);
         // Return to safe state (menu) on error
         if (window.showToast) {
-          window.showToast('Could not access profile. Please try again.', 'error');
+          window.showToast('error', 'Could not access profile. Please try again.');
         }
         window.history.replaceState({}, '', '/');
         // Force re-route to menu
