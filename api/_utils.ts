@@ -8,7 +8,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 // TYPES
 // ============================================================
 
-interface RateLimitEntry {
+export interface RateLimitEntry {
   count: number;
   resetAt: number;
   lastSeenAt: number;
@@ -150,6 +150,17 @@ export function cleanupOldEntries(
   }
 }
 
+export function maybeCleanupRateLimits(
+  map: Map<string, RateLimitEntry>,
+  lastCleanupAt: number,
+  { maxIdleMs = 10 * 60_000, maxDelete = 200, minIntervalMs = 60_000 }: CleanupOptions & { minIntervalMs?: number } = {}
+): number {
+  const now = Date.now();
+  if (now - lastCleanupAt < minIntervalMs) return lastCleanupAt;
+  cleanupOldEntries(map, { maxIdleMs, maxDelete });
+  return now;
+}
+
 // ============================================================
 // WINDOW COUNTER HELPERS
 // ============================================================
@@ -217,6 +228,11 @@ export async function logAudit(
     const message = err instanceof Error ? err.message : String(err);
     console.error('Failed to log action:', message);
   }
+}
+
+export function buildLogAction(supabase: SupabaseClient) {
+  return async (userId: string, action: string, details: any, req?: ApiRequest): Promise<void> =>
+    logAudit(supabase, userId, action, details, req);
 }
 
 // ============================================================
@@ -421,113 +437,7 @@ export const ValidationSchemas = {
 };
 
 // ============================================================
-// 🛡️ ADVANCED RATE LIMITING WITH PROGRESSIVE PENALTIES
-// ============================================================
-
-interface ProgressiveRateLimitEntry extends RateLimitEntry {
-  violations: number; // Número de vezes que excedeu o limite
-  blockedUntil?: number; // Timestamp quando será desbloqueado
-}
-
-export class ProgressiveRateLimiter {
-  private map = new Map<string, ProgressiveRateLimitEntry>();
-  private ipBlacklist = new Set<string>();
-  private blockedUntilMap = new Map<string, number>();
-
-  // Verificar se IP está bloqueado permanentemente
-  isIPBlacklisted(ip: string): boolean {
-    return this.ipBlacklist.has(ip);
-  }
-
-  // Adicionar IP à blacklist permanente (deve ser usado após múltiplas violações)
-  blacklistIP(ip: string): void {
-    this.ipBlacklist.add(ip);
-    console.warn(`⚠️ IP ${ip} added to blacklist`);
-  }
-
-  // Remover IP da blacklist (admin only)
-  removeIPFromBlacklist(ip: string): void {
-    this.ipBlacklist.delete(ip);
-  }
-
-  // Verificação com rate limit progressivo
-  checkProgressiveLimit(
-    identifier: string,
-    { maxRequests = 30, windowMs = 60_000, actionType = 'default' }: 
-      RateLimitOptions & { actionType?: string } = {}
-  ): { allowed: boolean; remainingTime?: number } {
-    const now = Date.now();
-    let entry = this.map.get(identifier);
-
-    // Se está temporariamente bloqueado, verificar se desbloqueou
-    if (entry?.blockedUntil && now < entry.blockedUntil) {
-      return { allowed: false, remainingTime: entry.blockedUntil - now };
-    }
-
-    // Resetar entrada se expirou
-    if (!entry || now >= entry.resetAt) {
-      entry = {
-        count: 1,
-        resetAt: now + windowMs,
-        lastSeenAt: now,
-        violations: 0
-      };
-      this.map.set(identifier, entry);
-      return { allowed: true };
-    }
-
-    entry.lastSeenAt = now;
-
-    // Se ainda está dentro do limite
-    if (entry.count < maxRequests) {
-      entry.count += 1;
-      return { allowed: true };
-    }
-
-    // Excedeu o limite - aplicar penalidade progressiva
-    entry.violations += 1;
-    const blockDuration = this.getProgressiveBlockDuration(entry.violations);
-    entry.blockedUntil = now + blockDuration;
-
-    console.warn(
-      `⚠️ Rate limit exceeded for ${identifier} (violation #${entry.violations}, action: ${actionType})`
-    );
-
-    // Se muitas violações, adicionar à blacklist
-    if (entry.violations > 5) {
-      this.blacklistIP(identifier);
-    }
-
-    return { allowed: false, remainingTime: blockDuration };
-  }
-
-  // Calcular duração do bloqueio progressivo
-  private getProgressiveBlockDuration(violations: number): number {
-    // 1ª violação: 5 min | 2ª: 15 min | 3ª: 1h | 4ª+: 24h
-    const durations = [5 * 60_000, 15 * 60_000, 60 * 60_000, 24 * 60 * 60_000];
-    return durations[Math.min(violations - 1, durations.length - 1)];
-  }
-
-  cleanup(): void {
-    const now = Date.now();
-    let deleted = 0;
-    for (const [key, entry] of this.map.entries()) {
-      const lastSeen = entry.lastSeenAt;
-      if (now - lastSeen > 24 * 60 * 60_000) { // 24 horas
-        this.map.delete(key);
-        deleted += 1;
-        if (deleted > 500) break;
-      }
-    }
-  }
-
-  getStats(): { entries: number; blacklistedIPs: number } {
-    return { entries: this.map.size, blacklistedIPs: this.ipBlacklist.size };
-  }
-}
-
-// ============================================================
-// 🔒 DATA PROTECTION & MASKING
+//  DATA PROTECTION & MASKING
 // ============================================================
 
 export function maskEmail(email: string): string {
@@ -642,148 +552,7 @@ function timingSafeEqual(a: string, b: string): boolean {
 }
 
 // ============================================================
-// 🔄 WEBHOOK REPLAY ATTACK PROTECTION
-// ============================================================
-
-export class WebhookReplayProtection {
-  private processedWebhooks = new Map<string, number>(); // webhookId -> timestamp
-
-  // Verificar se webhook já foi processado
-  hasBeenProcessed(webhookId: string): boolean {
-    return this.processedWebhooks.has(webhookId);
-  }
-
-  // Registrar webhook como processado
-  markAsProcessed(webhookId: string): void {
-    this.processedWebhooks.set(webhookId, Date.now());
-  }
-
-  // Cleanup de webhooks antigos (mais de 24h)
-  cleanup(): void {
-    const now = Date.now();
-    const oneDay = 24 * 60 * 60 * 1000;
-
-    for (const [id, timestamp] of this.processedWebhooks.entries()) {
-      if (now - timestamp > oneDay) {
-        this.processedWebhooks.delete(id);
-      }
-    }
-  }
-}
-
-// ============================================================
-// ⏱️ AUTOMATIC TIMEOUT FOR PENDING ORDERS
-// ============================================================
-
-export interface PendingOrder {
-  id: string;
-  userId: string;
-  expiresAt: number; // timestamp
-  createdAt: number; // timestamp
-}
-
-export class PendingOrderManager {
-  private pendingOrders = new Map<string, PendingOrder>();
-  private readonly orderTimeout = 30 * 60 * 1000; // 30 minutos
-
-  addOrder(order: Omit<PendingOrder, 'expiresAt' | 'createdAt'>): void {
-    const now = Date.now();
-    this.pendingOrders.set(order.id, {
-      ...order,
-      createdAt: now,
-      expiresAt: now + this.orderTimeout
-    });
-  }
-
-  getExpiredOrders(): PendingOrder[] {
-    const now = Date.now();
-    const expired: PendingOrder[] = [];
-
-    for (const order of this.pendingOrders.values()) {
-      if (now > order.expiresAt) {
-        expired.push(order);
-      }
-    }
-
-    return expired;
-  }
-
-  markAsCompleted(orderId: string): void {
-    this.pendingOrders.delete(orderId);
-  }
-
-  cleanup(): void {
-    const expired = this.getExpiredOrders();
-    for (const order of expired) {
-      this.pendingOrders.delete(order.id);
-    }
-  }
-}
-
-// ============================================================
-// 📊 SECURITY METRICS & MONITORING
-// ============================================================
-
-export interface SecurityMetrics {
-  rateLimitViolations: number;
-  authFailures: number;
-  webhookFailures: number;
-  blacklistedIPs: number;
-  fraudAttempts: number;
-  timestamp: string;
-}
-
-export class SecurityMonitor {
-  private metrics = {
-    rateLimitViolations: 0,
-    authFailures: 0,
-    webhookFailures: 0,
-    fraudAttempts: 0
-  };
-
-  recordRateLimitViolation(): void {
-    this.metrics.rateLimitViolations += 1;
-    this.maybeAlert('Rate Limit Violation');
-  }
-
-  recordAuthFailure(): void {
-    this.metrics.authFailures += 1;
-    this.maybeAlert('Auth Failure');
-  }
-
-  recordWebhookFailure(): void {
-    this.metrics.webhookFailures += 1;
-  }
-
-  recordFraudAttempt(): void {
-    this.metrics.fraudAttempts += 1;
-    this.maybeAlert('Potential Fraud Detected');
-  }
-
-  private maybeAlert(event: string): void {
-    // Aqui você pode integrar com Discord/Slack webhook
-    // console.log(`🚨 SECURITY ALERT: ${event}`);
-  }
-
-  getMetrics(): SecurityMetrics {
-    return {
-      ...this.metrics,
-      blacklistedIPs: 0, // Será atualizado pelo ProgressiveRateLimiter
-      timestamp: new Date().toISOString()
-    };
-  }
-
-  reset(): void {
-    this.metrics = {
-      rateLimitViolations: 0,
-      authFailures: 0,
-      webhookFailures: 0,
-      fraudAttempts: 0
-    };
-  }
-}
-// ============================================================
-// 📝 GENERIC USERNAME VALIDATION
+//  GENERIC USERNAME VALIDATION
 // ============================================================
 
 export function normalizeUsername(raw: string): string {

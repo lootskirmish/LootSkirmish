@@ -13,14 +13,10 @@ import {
   getIdentifier,
   checkRateLimit,
   cleanupOldEntries,
-  ProgressiveRateLimiter,
   ValidationSchemas,
   verifyStripeSignature,
   verifyMercadoPagoSignature,
-  WebhookReplayProtection,
-  PendingOrderManager,
   createSecureLog,
-  SecurityMonitor,
   maskUserId,
   maskEmail
 } from './_utils.js';
@@ -101,6 +97,186 @@ const supabase: SupabaseClient = createClient(
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
   apiVersion: '2023-10-16'
 });
+
+// ============================================================
+// CLASSES (shop-only implementations - must be before instantiation)
+// ============================================================
+
+interface ProgressiveRateLimitEntry {
+  count: number;
+  resetAt: number;
+  lastSeenAt: number;
+  violations: number;
+  blockedUntil?: number;
+}
+
+class ProgressiveRateLimiter {
+  private map = new Map<string, ProgressiveRateLimitEntry>();
+  private ipBlacklist = new Set<string>();
+
+  isIPBlacklisted(ip: string): boolean {
+    return this.ipBlacklist.has(ip);
+  }
+
+  blacklistIP(ip: string): void {
+    this.ipBlacklist.add(ip);
+    console.warn(`⚠️ IP ${ip} added to blacklist`);
+  }
+
+  removeIPFromBlacklist(ip: string): void {
+    this.ipBlacklist.delete(ip);
+  }
+
+  checkProgressiveLimit(
+    identifier: string,
+    { maxRequests = 30, windowMs = 60_000, actionType = 'default' }: { maxRequests?: number; windowMs?: number; actionType?: string } = {}
+  ): { allowed: boolean; remainingTime?: number } {
+    const now = Date.now();
+    let entry = this.map.get(identifier);
+
+    if (entry?.blockedUntil && now < entry.blockedUntil) {
+      return { allowed: false, remainingTime: entry.blockedUntil - now };
+    }
+
+    if (!entry || now >= entry.resetAt) {
+      entry = { count: 1, resetAt: now + windowMs, lastSeenAt: now, violations: 0 };
+      this.map.set(identifier, entry);
+      return { allowed: true };
+    }
+
+    entry.lastSeenAt = now;
+
+    if (entry.count < maxRequests) {
+      entry.count += 1;
+      return { allowed: true };
+    }
+
+    entry.violations += 1;
+    const blockDuration = this.getProgressiveBlockDuration(entry.violations);
+    entry.blockedUntil = now + blockDuration;
+
+    console.warn(`⚠️ Rate limit exceeded for ${identifier} (violation #${entry.violations}, action: ${actionType})`);
+
+    if (entry.violations > 5) {
+      this.blacklistIP(identifier);
+    }
+
+    return { allowed: false, remainingTime: blockDuration };
+  }
+
+  private getProgressiveBlockDuration(violations: number): number {
+    const durations = [5 * 60_000, 15 * 60_000, 60 * 60_000, 24 * 60 * 60_000];
+    return durations[Math.min(violations - 1, durations.length - 1)];
+  }
+
+  cleanup(): void {
+    const now = Date.now();
+    let deleted = 0;
+    for (const [key, entry] of this.map.entries()) {
+      if (now - entry.lastSeenAt > 24 * 60 * 60_000) {
+        this.map.delete(key);
+        deleted += 1;
+        if (deleted > 500) break;
+      }
+    }
+  }
+}
+
+interface PendingOrder {
+  id: string;
+  userId: string;
+  expiresAt: number;
+  createdAt: number;
+}
+
+class PendingOrderManager {
+  private pendingOrders = new Map<string, PendingOrder>();
+  private readonly orderTimeout = 30 * 60 * 1000;
+
+  addOrder(order: Omit<PendingOrder, 'expiresAt' | 'createdAt'>): void {
+    const now = Date.now();
+    this.pendingOrders.set(order.id, { ...order, createdAt: now, expiresAt: now + this.orderTimeout });
+  }
+
+  getExpiredOrders(): PendingOrder[] {
+    const now = Date.now();
+    const expired: PendingOrder[] = [];
+    for (const order of this.pendingOrders.values()) {
+      if (now > order.expiresAt) expired.push(order);
+    }
+    return expired;
+  }
+
+  markAsCompleted(orderId: string): void {
+    this.pendingOrders.delete(orderId);
+  }
+
+  cleanup(): void {
+    for (const order of this.getExpiredOrders()) {
+      this.pendingOrders.delete(order.id);
+    }
+  }
+}
+
+class WebhookReplayProtection {
+  private processedWebhooks = new Map<string, number>();
+
+  hasBeenProcessed(webhookId: string): boolean {
+    return this.processedWebhooks.has(webhookId);
+  }
+
+  markAsProcessed(webhookId: string): void {
+    this.processedWebhooks.set(webhookId, Date.now());
+  }
+
+  cleanup(): void {
+    const now = Date.now();
+    const oneDay = 24 * 60 * 60 * 1000;
+    for (const [id, timestamp] of this.processedWebhooks.entries()) {
+      if (now - timestamp > oneDay) {
+        this.processedWebhooks.delete(id);
+      }
+    }
+  }
+}
+
+class SecurityMonitor {
+  private metrics = {
+    rateLimitViolations: 0,
+    authFailures: 0,
+    webhookFailures: 0,
+    fraudAttempts: 0
+  };
+
+  recordRateLimitViolation(): void {
+    this.metrics.rateLimitViolations += 1;
+  }
+
+  recordAuthFailure(): void {
+    this.metrics.authFailures += 1;
+  }
+
+  recordWebhookFailure(): void {
+    this.metrics.webhookFailures += 1;
+  }
+
+  recordFraudAttempt(): void {
+    this.metrics.fraudAttempts += 1;
+  }
+
+  getMetrics() {
+    return { ...this.metrics, timestamp: new Date().toISOString() };
+  }
+
+  reset(): void {
+    this.metrics = {
+      rateLimitViolations: 0,
+      authFailures: 0,
+      webhookFailures: 0,
+      fraudAttempts: 0
+    };
+  }
+}
 
 // ============================================================
 // SECURITY INITIALIZATION

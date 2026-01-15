@@ -13,6 +13,8 @@ import {
   isWindowLimitExceeded,
   logAudit,
   updatePlayerDiamonds,
+  buildLogAction,
+  type RateLimitEntry,
 } from './_utils.js';
 import { applyReferralDiamondBonus } from './_referrals.js';
 dotenv.config();
@@ -20,12 +22,6 @@ dotenv.config();
 // ============================================================
 // TYPES
 // ============================================================
-
-interface RateLimitEntry {
-  count: number;
-  resetAt: number;
-  lastSeenAt: number;
-}
 
 interface ValidationResult {
   valid: boolean;

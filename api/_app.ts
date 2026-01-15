@@ -13,6 +13,9 @@ import {
   validateSessionAndFetchPlayerStats,
   logMoneyTransactionAsync,
   updatePlayerBalance,
+  maybeCleanupRateLimits,
+  buildLogAction,
+  type RateLimitEntry,
 } from './_utils.js';
 import { applyReferralCommissionForSpend } from './_referrals.js';
 
@@ -45,12 +48,6 @@ export interface ApiResponse {
   setHeader: (key: string, value: string) => void;
 }
 
-interface RateLimitEntry {
-  count: number;
-  resetAt: number;
-  lastSeenAt: number;
-}
-
 type ValidateSessionResult = Awaited<ReturnType<typeof validateSessionAndFetchPlayerStats>>;
 type UpdateMoneyRow = { new_money: number };
 
@@ -68,19 +65,14 @@ const supabase: SupabaseClient = createClient(
 const rateLimits = new Map<string, RateLimitEntry>();
 
 let lastRateLimitCleanupAt = 0;
-function maybeCleanupRateLimits(): void {
-  const now = Date.now();
-  if (now - lastRateLimitCleanupAt < 5 * 60_000) return;
-  lastRateLimitCleanupAt = now;
-  cleanupOldEntries(rateLimits, { maxIdleMs: 15 * 60_000 });
+function cleanupRateLimits(): void {
+  lastRateLimitCleanupAt = maybeCleanupRateLimits(rateLimits, lastRateLimitCleanupAt, { maxIdleMs: 15 * 60_000, minIntervalMs: 5 * 60_000 });
 }
 
 // ============================================================
 // 📝 LOGGING E AUDITORIA
 // ============================================================
-async function logAction(userId: string, action: string, details: unknown, req: ApiRequest | null): Promise<void> {
-  return logAudit(supabase, userId, action, details, req ?? undefined);
-}
+const logAction = buildLogAction(supabase);
 
 // ============================================================
 // 🔐 VALIDAÇÃO DE SESSÃO MELHORADA
@@ -107,7 +99,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse): Promis
   }
 
   const { action, userId, authToken } = req.body ?? {};
-  maybeCleanupRateLimits();
+  cleanupRateLimits();
 
   // 2. RATE LIMITING
   const identifier = getIdentifier(req, userId);
