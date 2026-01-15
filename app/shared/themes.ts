@@ -1,12 +1,66 @@
-// @ts-nocheck
 // ============================================================
 // THEMES.TS - Sistema de Temas Premium
 // ============================================================
 
-import { supabase } from '../features/auth.js';
+import { supabase } from '../features/auth';
 import { hexToRgb, showToast, showAlert } from './effects';
 
-export const AVAILABLE_THEMES: any[] = [
+// ============================================================
+// TYPE DEFINITIONS
+// ============================================================
+
+type StickerPosition = 'top-right' | 'top-left' | 'bottom-right' | 'bottom-left' | 'center-right' | 'bottom-center';
+type StickerSize = 'small' | 'medium' | 'large';
+type StickerEffect = 'pulse' | 'glow' | 'rotate';
+
+interface ThemeSticker {
+  image: string;
+  position: StickerPosition;
+  size: StickerSize;
+  effects?: StickerEffect[];
+}
+
+interface ThemeColors {
+  primary: string;
+  secondary: string;
+  accent: string;
+  headerBackground: string;
+  headerBorder: string;
+  cardBackground: string;
+  cardBorder: string;
+  cardBorderHover: string;
+  cardBorderActive: string;
+  cardShadow: string;
+  inputBackground: string;
+  inputBorder: string;
+  inputBorderFocus: string;
+  progressBackground: string;
+  progressGlow: string;
+  modalOverlay: string;
+  modalBackground: string;
+  modalBorder: string;
+  modalShadow: string;
+  buttonPrimary: string;
+  buttonPrimaryHover: string;
+}
+
+interface Theme {
+  id: string;
+  name: string;
+  description: string;
+  gradient: string;
+  price: number;
+  isNew: boolean;
+  defaultUnlocked: boolean;
+  stickers: ThemeSticker[];
+  colors: ThemeColors;
+}
+
+// ============================================================
+// AVAILABLE THEMES
+// ============================================================
+
+export const AVAILABLE_THEMES: Theme[] = [
   {
     id: 'default',
     name: 'Default',
@@ -40,6 +94,7 @@ export const AVAILABLE_THEMES: any[] = [
       buttonPrimaryHover: 'linear-gradient(135deg, #9333ea, #db2777)'
     }
   },
+
   {
     id: 'gold',
     name: 'Golden Luxury',
@@ -86,6 +141,7 @@ export const AVAILABLE_THEMES: any[] = [
       buttonPrimaryHover: 'linear-gradient(135deg, #ca8a04, #eab308)'
     }
   },
+  
   {
     id: 'cyberpunk',
     name: 'Cyberpunk',
@@ -95,10 +151,30 @@ export const AVAILABLE_THEMES: any[] = [
     isNew: true,
     defaultUnlocked: false,
     stickers: [
-      { image: 'city.png', position: 'top-right', size: 'large', effects: ['glow'] },
-      { image: 'eye.png', position: 'bottom-left', size: 'large', effects: ['pulse'] },
-      { image: 'sword.png', position: 'center-right', size: 'medium', effects: ['rotate'] },
-      { image: 'cyberpunk.png', position: 'top-left', size: 'medium', effects: ['glow'] }
+      {
+        image: 'city.png',
+        position: 'top-right',
+        size: 'large',
+        effects: ['glow']
+      },
+      {
+        image: 'eye.png',
+        position: 'bottom-left',
+        size: 'large',
+        effects: ['pulse']
+      },
+      {
+        image: 'sword.png',
+        position: 'center-right',
+        size: 'medium',
+        effects: ['rotate']
+      },
+      {
+        image: 'cyberpunk.png',
+        position: 'top-left',
+        size: 'medium',
+        effects: ['glow']
+      }
     ],
     colors: {
       primary: '#a855f7',
@@ -124,6 +200,7 @@ export const AVAILABLE_THEMES: any[] = [
       buttonPrimaryHover: 'linear-gradient(135deg, #db2777, #9333ea)'
     }
   },
+  
   {
     id: 'sunset',
     name: 'Sunset',
@@ -157,233 +234,885 @@ export const AVAILABLE_THEMES: any[] = [
       buttonPrimaryHover: 'linear-gradient(135deg, #ea580c, #db2777)'
     }
   },
+  
   {
-    id: 'forest',
-    name: 'Forest',
-    description: 'Cool green and nature tones',
-    gradient: 'linear-gradient(135deg, #1a2d1a, #1f3f1f, #2d4a2d)',
+    id: 'ocean',
+    name: 'Deep Ocean',
+    description: 'Dive into the blue depths',
+    gradient: 'linear-gradient(135deg, #051429, #0a2540, #0d1f3c)',
     price: 100,
     isNew: false,
     defaultUnlocked: false,
     stickers: [],
     colors: {
-      primary: '#22c55e',
-      secondary: '#16a34a',
-      accent: '#4ade80',
-      headerBackground: 'rgba(34, 197, 94, 0.35)',
-      headerBorder: 'rgba(34, 197, 94, 0.2)',
-      cardBackground: 'rgba(31, 63, 31, 0.7)',
-      cardBorder: 'rgba(34, 197, 94, 0.35)',
-      cardBorderHover: 'rgba(74, 222, 128, 0.6)',
-      cardBorderActive: '#22c55e',
-      cardShadow: 'rgba(34, 197, 94, 0.3)',
-      inputBackground: 'rgba(26, 45, 26, 0.6)',
-      inputBorder: 'rgba(34, 197, 94, 0.3)',
-      inputBorderFocus: '#4ade80',
-      progressBackground: 'rgba(26, 45, 26, 0.9)',
-      progressGlow: 'rgba(34, 197, 94, 0.8)',
-      modalOverlay: 'rgba(26, 45, 26, 0.85)',
-      modalBackground: '#1a2d1a',
-      modalBorder: 'rgba(34, 197, 94, 0.4)',
-      modalShadow: 'rgba(34, 197, 94, 0.3)',
-      buttonPrimary: 'linear-gradient(135deg, #22c55e, #4ade80)',
-      buttonPrimaryHover: 'linear-gradient(135deg, #16a34a, #22c55e)'
+      primary: '#0ea5e9',
+      secondary: '#06b6d4',
+      accent: '#22d3ee',
+      headerBackground: 'rgba(14, 165, 233, 0.35)',
+      headerBorder: 'rgba(14, 165, 233, 0.2)',
+      cardBackground: 'rgba(10, 37, 64, 0.7)',
+      cardBorder: 'rgba(14, 165, 233, 0.35)',
+      cardBorderHover: 'rgba(6, 182, 212, 0.6)',
+      cardBorderActive: '#0ea5e9',
+      cardShadow: 'rgba(14, 165, 233, 0.3)',
+      inputBackground: 'rgba(5, 20, 41, 0.6)',
+      inputBorder: 'rgba(14, 165, 233, 0.3)',
+      inputBorderFocus: '#06b6d4',
+      progressBackground: 'rgba(5, 20, 41, 0.9)',
+      progressGlow: 'rgba(14, 165, 233, 0.8)',
+      modalOverlay: 'rgba(5, 20, 41, 0.85)',
+      modalBackground: '#051429',
+      modalBorder: 'rgba(14, 165, 233, 0.4)',
+      modalShadow: 'rgba(14, 165, 233, 0.3)',
+      buttonPrimary: 'linear-gradient(135deg, #0ea5e9, #06b6d4)',
+      buttonPrimaryHover: 'linear-gradient(135deg, #0284c7, #0891b2)'
     }
   },
+  
   {
-    id: 'miku',
-    name: 'Miku',
-    description: 'Inspired by vocaloid aesthetics',
-    gradient: 'linear-gradient(135deg, #0f1a1f, #1a2e3f, #2d3a4f)',
+    id: 'forest',
+    name: 'Dark Forest',
+    description: 'Mysterious green tones',
+    gradient: 'linear-gradient(135deg, #0a1f0a, #142814, #0f1f0f)',
+    price: 100,
+    isNew: false,
+    defaultUnlocked: false,
+    stickers: [
+      {
+        image: 'https://i.imgur.com/leaf-icon.png',
+        position: 'top-left',
+        size: 'medium'
+      }
+    ],
+    colors: {
+      primary: '#22c55e',
+      secondary: '#10b981',
+      accent: '#84cc16',
+      headerBackground: 'rgba(34, 197, 94, 0.35)',
+      headerBorder: 'rgba(34, 197, 94, 0.2)',
+      cardBackground: 'rgba(20, 40, 20, 0.7)',
+      cardBorder: 'rgba(34, 197, 94, 0.35)',
+      cardBorderHover: 'rgba(16, 185, 129, 0.6)',
+      cardBorderActive: '#22c55e',
+      cardShadow: 'rgba(34, 197, 94, 0.3)',
+      inputBackground: 'rgba(10, 31, 10, 0.6)',
+      inputBorder: 'rgba(34, 197, 94, 0.3)',
+      inputBorderFocus: '#10b981',
+      progressBackground: 'rgba(10, 31, 10, 0.9)',
+      progressGlow: 'rgba(34, 197, 94, 0.8)',
+      modalOverlay: 'rgba(10, 31, 10, 0.85)',
+      modalBackground: '#0a1f0a',
+      modalBorder: 'rgba(34, 197, 94, 0.4)',
+      modalShadow: 'rgba(34, 197, 94, 0.3)',
+      buttonPrimary: 'linear-gradient(135deg, #22c55e, #10b981)',
+      buttonPrimaryHover: 'linear-gradient(135deg, #16a34a, #059669)'
+    }
+  },
+  
+  {
+    id: 'royal',
+    name: 'Royal Purple',
+    description: 'Elegant and luxurious',
+    gradient: 'linear-gradient(135deg, #1a0a2e, #2d1b4e, #1f0f3d)',
+    price: 100,
+    isNew: false,
+    defaultUnlocked: false,
+    stickers: [
+      {
+        image: 'https://i.imgur.com/crown-icon.png',
+        position: 'top-right',
+        size: 'medium',
+        effects: ['pulse', 'glow']
+      }
+    ],
+    colors: {
+      primary: '#9333ea',
+      secondary: '#a855f7',
+      accent: '#c084fc',
+      headerBackground: 'rgba(147, 51, 234, 0.35)',
+      headerBorder: 'rgba(147, 51, 234, 0.2)',
+      cardBackground: 'rgba(45, 27, 78, 0.7)',
+      cardBorder: 'rgba(147, 51, 234, 0.35)',
+      cardBorderHover: 'rgba(168, 85, 247, 0.6)',
+      cardBorderActive: '#9333ea',
+      cardShadow: 'rgba(147, 51, 234, 0.3)',
+      inputBackground: 'rgba(26, 10, 46, 0.6)',
+      inputBorder: 'rgba(147, 51, 234, 0.3)',
+      inputBorderFocus: '#a855f7',
+      progressBackground: 'rgba(26, 10, 46, 0.9)',
+      progressGlow: 'rgba(147, 51, 234, 0.8)',
+      modalOverlay: 'rgba(26, 10, 46, 0.85)',
+      modalBackground: '#1a0a2e',
+      modalBorder: 'rgba(147, 51, 234, 0.4)',
+      modalShadow: 'rgba(147, 51, 234, 0.3)',
+      buttonPrimary: 'linear-gradient(135deg, #9333ea, #a855f7)',
+      buttonPrimaryHover: 'linear-gradient(135deg, #7e22ce, #9333ea)'
+    }
+  },
+  
+  {
+    id: 'blood-moon',
+    name: 'Blood Moon',
+    description: 'Dark red and crimson',
+    gradient: 'linear-gradient(135deg, #1a0505, #2d0a0a, #1f0808)',
+    price: 100,
+    isNew: false,
+    defaultUnlocked: false,
+    stickers: [
+      {
+        image: 'https://i.imgur.com/red-moon.png',
+        position: 'top-right',
+        size: 'large',
+        effects: ['glow']
+      }
+    ],
+    colors: {
+      primary: '#dc2626',
+      secondary: '#ef4444',
+      accent: '#f87171',
+      headerBackground: 'rgba(220, 38, 38, 0.35)',
+      headerBorder: 'rgba(220, 38, 38, 0.2)',
+      cardBackground: 'rgba(45, 10, 10, 0.7)',
+      cardBorder: 'rgba(220, 38, 38, 0.35)',
+      cardBorderHover: 'rgba(239, 68, 68, 0.6)',
+      cardBorderActive: '#dc2626',
+      cardShadow: 'rgba(220, 38, 38, 0.3)',
+      inputBackground: 'rgba(26, 5, 5, 0.6)',
+      inputBorder: 'rgba(220, 38, 38, 0.3)',
+      inputBorderFocus: '#ef4444',
+      progressBackground: 'rgba(26, 5, 5, 0.9)',
+      progressGlow: 'rgba(220, 38, 38, 0.8)',
+      modalOverlay: 'rgba(26, 5, 5, 0.85)',
+      modalBackground: '#1a0505',
+      modalBorder: 'rgba(220, 38, 38, 0.4)',
+      modalShadow: 'rgba(220, 38, 38, 0.3)',
+      buttonPrimary: 'linear-gradient(135deg, #dc2626, #ef4444)',
+      buttonPrimaryHover: 'linear-gradient(135deg, #b91c1c, #dc2626)'
+    }
+  },
+  
+  {
+    id: 'aurora',
+    name: 'Aurora Borealis',
+    description: 'Northern lights magic',
+    gradient: 'linear-gradient(135deg, #0a1a1f, #1a2a3f, #0f1f2f)',
+    price: 150,
+    isNew: true,
+    defaultUnlocked: false,
+    stickers: [],
+    colors: {
+      primary: '#06b6d4',
+      secondary: '#8b5cf6',
+      accent: '#10b981',
+      headerBackground: 'rgba(6, 182, 212, 0.35)',
+      headerBorder: 'rgba(6, 182, 212, 0.2)',
+      cardBackground: 'rgba(26, 42, 63, 0.7)',
+      cardBorder: 'rgba(6, 182, 212, 0.35)',
+      cardBorderHover: 'rgba(139, 92, 246, 0.6)',
+      cardBorderActive: '#06b6d4',
+      cardShadow: 'rgba(6, 182, 212, 0.3)',
+      inputBackground: 'rgba(10, 26, 31, 0.6)',
+      inputBorder: 'rgba(6, 182, 212, 0.3)',
+      inputBorderFocus: '#8b5cf6',
+      progressBackground: 'rgba(10, 26, 31, 0.9)',
+      progressGlow: 'rgba(6, 182, 212, 0.8)',
+      modalOverlay: 'rgba(10, 26, 31, 0.85)',
+      modalBackground: '#0a1a1f',
+      modalBorder: 'rgba(6, 182, 212, 0.4)',
+      modalShadow: 'rgba(6, 182, 212, 0.3)',
+      buttonPrimary: 'linear-gradient(135deg, #06b6d4, #8b5cf6)',
+      buttonPrimaryHover: 'linear-gradient(135deg, #0891b2, #7c3aed)'
+    }
+  },
+  
+  {
+    id: 'galaxy',
+    name: 'Deep Galaxy',
+    description: 'Stars and cosmic dust',
+    gradient: 'linear-gradient(135deg, #0f0520, #1a0a35, #120828)',
     price: 150,
     isNew: true,
     defaultUnlocked: false,
     stickers: [
-      { image: 'miku1.png', position: 'top-right', size: 'large', effects: ['bounce'] },
-      { image: 'miku2.png', position: 'bottom-left', size: 'medium', effects: ['rotate'] }
+      {
+        image: 'https://i.imgur.com/star-icon.png',
+        position: 'top-right',
+        size: 'small',
+        effects: ['pulse']
+      },
+      {
+        image: 'https://i.imgur.com/planet-icon.png',
+        position: 'bottom-left',
+        size: 'medium',
+        effects: ['rotate']
+      }
     ],
     colors: {
-      primary: '#00d4ff',
-      secondary: '#0099cc',
-      accent: '#00ffff',
-      headerBackground: 'rgba(0, 212, 255, 0.35)',
-      headerBorder: 'rgba(0, 212, 255, 0.2)',
-      cardBackground: 'rgba(26, 46, 63, 0.7)',
-      cardBorder: 'rgba(0, 212, 255, 0.35)',
-      cardBorderHover: 'rgba(0, 255, 255, 0.6)',
-      cardBorderActive: '#00d4ff',
-      cardShadow: 'rgba(0, 212, 255, 0.3)',
-      inputBackground: 'rgba(15, 26, 31, 0.6)',
-      inputBorder: 'rgba(0, 212, 255, 0.3)',
-      inputBorderFocus: '#00ffff',
-      progressBackground: 'rgba(15, 26, 31, 0.9)',
-      progressGlow: 'rgba(0, 212, 255, 0.8)',
-      modalOverlay: 'rgba(15, 26, 31, 0.85)',
-      modalBackground: '#0f1a1f',
-      modalBorder: 'rgba(0, 212, 255, 0.4)',
-      modalShadow: 'rgba(0, 212, 255, 0.3)',
-      buttonPrimary: 'linear-gradient(135deg, #00d4ff, #0099cc)',
-      buttonPrimaryHover: 'linear-gradient(135deg, #00b3e6, #007acc)'
+      primary: '#8b5cf6',
+      secondary: '#a855f7',
+      accent: '#ec4899',
+      headerBackground: 'rgba(139, 92, 246, 0.35)',
+      headerBorder: 'rgba(139, 92, 246, 0.2)',
+      cardBackground: 'rgba(26, 10, 53, 0.7)',
+      cardBorder: 'rgba(139, 92, 246, 0.35)',
+      cardBorderHover: 'rgba(168, 85, 247, 0.6)',
+      cardBorderActive: '#8b5cf6',
+      cardShadow: 'rgba(139, 92, 246, 0.3)',
+      inputBackground: 'rgba(15, 5, 32, 0.6)',
+      inputBorder: 'rgba(139, 92, 246, 0.3)',
+      inputBorderFocus: '#a855f7',
+      progressBackground: 'rgba(15, 5, 32, 0.9)',
+      progressGlow: 'rgba(139, 92, 246, 0.8)',
+      modalOverlay: 'rgba(15, 5, 32, 0.85)',
+      modalBackground: '#0f0520',
+      modalBorder: 'rgba(139, 92, 246, 0.4)',
+      modalShadow: 'rgba(139, 92, 246, 0.3)',
+      buttonPrimary: 'linear-gradient(135deg, #8b5cf6, #ec4899)',
+      buttonPrimaryHover: 'linear-gradient(135deg, #7c3aed, #db2777)'
     }
-  }
+  },
+  
+  {
+    id: 'sakura',
+    name: 'Cherry Blossom',
+    description: 'Soft pink Japanese spring',
+    gradient: 'linear-gradient(135deg, #1f0a1a, #2d1520, #1f0f1a)',
+    price: 150,
+    isNew: true,
+    defaultUnlocked: false,
+    stickers: [
+      {
+        image: 'https://i.imgur.com/sakura-flower.png',
+        position: 'top-right',
+        size: 'medium'
+      },
+      {
+        image: 'https://i.imgur.com/sakura-petals.png',
+        position: 'bottom-left',
+        size: 'small'
+      }
+    ],
+    colors: {
+      primary: '#ec4899',
+      secondary: '#f472b6',
+      accent: '#fda4af',
+      headerBackground: 'rgba(236, 72, 153, 0.35)',
+      headerBorder: 'rgba(236, 72, 153, 0.2)',
+      cardBackground: 'rgba(45, 21, 32, 0.7)',
+      cardBorder: 'rgba(236, 72, 153, 0.35)',
+      cardBorderHover: 'rgba(244, 114, 182, 0.6)',
+      cardBorderActive: '#ec4899',
+      cardShadow: 'rgba(236, 72, 153, 0.3)',
+      inputBackground: 'rgba(31, 10, 26, 0.6)',
+      inputBorder: 'rgba(236, 72, 153, 0.3)',
+      inputBorderFocus: '#f472b6',
+      progressBackground: 'rgba(31, 10, 26, 0.9)',
+      progressGlow: 'rgba(236, 72, 153, 0.8)',
+      modalOverlay: 'rgba(31, 10, 26, 0.85)',
+      modalBackground: '#1f0a1a',
+      modalBorder: 'rgba(236, 72, 153, 0.4)',
+      modalShadow: 'rgba(236, 72, 153, 0.3)',
+      buttonPrimary: 'linear-gradient(135deg, #ec4899, #f472b6)',
+      buttonPrimaryHover: 'linear-gradient(135deg, #db2777, #ec4899)'
+    }
+  },
+
+  {
+    id: 'miku',
+    name: 'Hatsune Miku',
+    description: 'Inspired by the virtual diva 🎤',
+    gradient: 'linear-gradient(135deg, #4bb4ffff, #003557ff, #007dc5ff)',
+    price: 500,
+    isNew: true,
+    defaultUnlocked: false,
+    stickers: [
+      {
+        image: 'kind.png',
+        position: 'top-right',
+        size: 'large',
+        effects: ['glow']
+      },
+      {
+        image: 'mikucutting.gif',
+        position: 'bottom-center',
+        size: 'medium',
+        effects: ['glow', 'pulse', 'rotate']
+      },
+      {
+        image: 'drawingmiku.png',
+        position: 'bottom-right',
+        size: 'medium',
+        effects: ['pulse']
+      },
+      {
+        image: 'downmiku.png',
+        position: 'top-left',
+        size: 'large',
+        effects: ['pulse']
+      },
+      {
+        image: 'catupmiku.png',
+        position: 'bottom-left',
+        size: 'medium',
+        effects: ['glow']
+      },
+      {
+        image: 'attackmiku.png',
+        position: 'center-right',
+        size: 'small',
+        effects: ['pulse', 'rotate']
+      }
+    ],
+    colors: {
+      primary: '#21948cff',
+      secondary: '#005763ff',
+      accent: '#2a93a3ff',
+      headerBackground: 'rgba(49, 190, 181, 0.6)',
+      headerBorder: 'rgba(49, 190, 181, 0.4)',
+      cardBackground: 'rgba(0, 87, 99, 0.6)',
+      cardBorder: 'rgba(33, 148, 140, 0.3)',
+      cardBorderHover: 'rgba(49, 190, 181, 0.4)',
+      cardBorderActive: 'rgba(57, 197, 187, 0.6)',
+      cardShadow: 'rgba(33, 148, 140, 0.2)',
+      inputBackground: 'rgba(0, 53, 87, 0.8)',
+      inputBorder: 'rgba(49, 190, 181, 0.5)',
+      inputBorderFocus: '#2a93a3',
+      progressBackground: 'rgba(0, 53, 87, 0.9)',
+      progressGlow: 'rgba(49, 190, 181, 0.8)',
+      modalOverlay: 'rgba(25, 89, 129, 0.85)',
+      modalBackground: 'rgba(0, 85, 138, 0.9)',
+      modalBorder: 'rgba(49, 190, 181, 0.8)',
+      modalShadow: 'rgba(49, 190, 181, 0.5)',
+      buttonPrimary: 'linear-gradient(135deg, #2cc7bdff, #0099b1ff)',
+      buttonPrimaryHover: 'linear-gradient(135deg, #05b3a7ff, #009b90ff)'
+    }
+  },
 ];
 
-let currentTheme = AVAILABLE_THEMES[0];
-let themeModal = null;
-let purchaseModal = null;
+// ============================================================
+// STATE MANAGEMENT
+// ============================================================
 
+let selectedThemeForPurchase: Theme | null = null;
+let activeStickers: HTMLElement[] = [];
+let themeByIdCache: Map<string, Theme> | null = null;
+let lastAppliedThemeId: string | null = null;
+let lastSavedThemeId: string | null = null;
+let loadInitialThemePromise: Promise<void> | null = null;
+let initialThemeLoaded = false;
+
+const domByIdCache: Record<string, HTMLElement> = Object.create(null);
+
+function getElById(id: string): HTMLElement | null {
+  const cached = domByIdCache[id];
+  if (cached && cached.isConnected) return cached;
+  const el = document.getElementById(id);
+  if (el) domByIdCache[id] = el;
+  return el;
+}
+
+function getThemeById(themeId: string): Theme | undefined {
+  if (!themeByIdCache) {
+    themeByIdCache = new Map(AVAILABLE_THEMES.map(t => [t.id, t]));
+  }
+  return themeByIdCache.get(themeId);
+}
+
+// ============================================================
+// HELPER PARA STICKERS
+// ============================================================
+
+/**
+ * Retorna o caminho completo da imagem do sticker
+ * @param themeId - ID do tema (ex: 'cyberpunk')
+ * @param imageName - Nome da imagem (ex: 'cyber-symbol.png')
+ * @returns Caminho completo
+ */
+function getThemeImagePath(themeId: string, imageName: string): string {
+  return `/images/themes/${themeId}/${imageName}`;
+}
+
+// ============================================================
+// UTILITY FUNCTIONS
+// ============================================================
+
+/**
+ * Remove todos os stickers da tela
+ */
+function removeAllStickers(): void {
+  if (activeStickers.length) {
+    for (const sticker of activeStickers) {
+      try { sticker.remove(); } catch (_) {}
+    }
+    activeStickers = [];
+    return;
+  }
+
+  document.querySelectorAll('.theme-sticker').forEach(sticker => sticker.remove());
+}
+
+/**
+ * Cria um sticker na tela
+ * @param config - Configuração do sticker
+ * @param themeId - ID do tema
+ */
+function createSticker(config: ThemeSticker, themeId: string): void {
+  const img = document.createElement('img');
+  img.className = 'theme-sticker';
+  img.src = getThemeImagePath(themeId, config.image);
+  
+  img.classList.add(config.position);
+  
+  if (config.size) {
+    img.classList.add(config.size);
+  }
+  
+  if (config.effects && Array.isArray(config.effects)) {
+    config.effects.forEach(effect => {
+      img.classList.add(effect);
+    });
+  }
+  
+  img.onload = function() {
+    setTimeout(() => {
+      img.classList.add('loaded');
+    }, 100);
+  };
+  
+  document.body.appendChild(img);
+  activeStickers.push(img);
+}
+
+// ============================================================
+// THEME APPLICATION
+// ============================================================
+
+/**
+ * Aplica um tema ao sistema
+ * @param themeId - ID do tema
+ */
 export function applyTheme(themeId: string): void {
-  const theme = AVAILABLE_THEMES.find(t => t.id === themeId);
-  if (!theme) return;
-  
-  currentTheme = theme;
-  
-  const root = document.documentElement;
-  const colors = theme.colors;
-  
-  Object.keys(colors).forEach(key => {
-    root.style.setProperty(`--color-${key.replace(/([A-Z])/g, '-$1').toLowerCase()}`, colors[key]);
-  });
-  
-  document.body.style.background = theme.gradient;
-  localStorage.setItem('selectedTheme', themeId);
-}
+  if (!themeId) themeId = 'default';
 
-export async function loadInitialTheme(): Promise<void> {
-  const saved = localStorage.getItem('selectedTheme') || 'default';
-  const theme = AVAILABLE_THEMES.find(t => t.id === saved);
-  
-  if (theme) {
-    applyTheme(theme.id);
+  if (themeId === lastAppliedThemeId) {
+    return;
   }
-}
 
-export async function loadUserThemes(): Promise<void> {
-  if (!supabase) return;
-  
-  try {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
-    
-    const { data, error } = await supabase
-      .from('user_themes')
-      .select('theme_id')
-      .eq('user_id', user.id);
-    
-    if (!error && data) {
-      const unlockedIds = data.map(d => d.theme_id);
-      AVAILABLE_THEMES.forEach(theme => {
-        if (theme.defaultUnlocked || unlockedIds.includes(theme.id)) {
-          theme.defaultUnlocked = true;
-        }
-      });
-    }
-  } catch (err) {
-    console.error('Erro ao carregar temas do usuário:', err);
-  }
-}
-
-export function openThemePurchaseModal(themeId: string): void {
-  const theme = AVAILABLE_THEMES.find(t => t.id === themeId);
-  if (!theme) return;
-  
-  purchaseModal = document.getElementById('theme-purchase-modal') || createPurchaseModal();
-  
-  const title = purchaseModal.querySelector('.modal-title');
-  const desc = purchaseModal.querySelector('.theme-description');
-  const price = purchaseModal.querySelector('.theme-price');
-  
-  if (title) title.textContent = `Unlock: ${theme.name}`;
-  if (desc) desc.textContent = theme.description;
-  if (price) price.textContent = `💎 ${theme.price} diamonds`;
-  
-  purchaseModal.dataset.themeId = themeId;
-  purchaseModal.classList.add('active');
-}
-
-export function closeThemePurchaseModal(): void {
-  if (purchaseModal) {
-    purchaseModal.classList.remove('active');
-  }
-}
-
-export async function confirmThemePurchase(): Promise<void> {
-  if (!purchaseModal) return;
-  
-  const themeId = purchaseModal.dataset.themeId;
-  if (!themeId) return;
-  
-  try {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
-    
-    const theme = AVAILABLE_THEMES.find(t => t.id === themeId);
-    if (!theme) return;
-    
-    const { data, error } = await supabase
-      .from('profiles')
-      .select('diamonds')
-      .eq('id', user.id)
-      .single();
-    
-    if (error || !data || data.diamonds < theme.price) {
-      showAlert('error', 'Insufficient diamonds', 'You need more diamonds to purchase this theme.');
-      return;
-    }
-    
-    const { error: updateError } = await supabase
-      .from('profiles')
-      .update({ diamonds: data.diamonds - theme.price })
-      .eq('id', user.id);
-    
-    if (updateError) throw updateError;
-    
-    const { error: insertError } = await supabase
-      .from('user_themes')
-      .insert([{ user_id: user.id, theme_id: themeId }]);
-    
-    if (insertError) throw insertError;
-    
-    theme.defaultUnlocked = true;
-    showToast('success', 'Theme Unlocked!', `You've unlocked the ${theme.name} theme!`);
-    closeThemePurchaseModal();
-  } catch (err) {
-    console.error('Erro ao comprar tema:', err);
-    showAlert('error', 'Purchase Failed', 'An error occurred while unlocking the theme.');
-  }
-}
-
-export async function activateTheme(themeId: string): Promise<void> {
-  const theme = AVAILABLE_THEMES.find(t => t.id === themeId);
-  if (!theme) return;
-  
-  if (!theme.defaultUnlocked) {
-    openThemePurchaseModal(themeId);
+  const theme = getThemeById(themeId);
+  if (!theme) {
+    console.warn(`⚠️ Tema "${themeId}" não encontrado, aplicando default`);
+    applyTheme('default');
     return;
   }
   
-  applyTheme(themeId);
-  showToast('success', 'Theme Activated', `${theme.name} theme is now active!`);
+  document.body.style.background = theme.gradient;
+  
+  if (theme.colors) {
+    const root = document.documentElement;
+    
+    root.style.setProperty('--primary-color', theme.colors.primary);
+    root.style.setProperty('--secondary-color', theme.colors.secondary);
+    root.style.setProperty('--accent-color', theme.colors.accent);
+    
+    const primaryRGB = hexToRgb(theme.colors.primary);
+    const secondaryRGB = hexToRgb(theme.colors.secondary);
+    const accentRGB = hexToRgb(theme.colors.accent);
+    
+    root.style.setProperty('--primary-rgb', `${primaryRGB.r}, ${primaryRGB.g}, ${primaryRGB.b}`);
+    root.style.setProperty('--secondary-rgb', `${secondaryRGB.r}, ${secondaryRGB.g}, ${secondaryRGB.b}`);
+    root.style.setProperty('--accent-rgb', `${accentRGB.r}, ${accentRGB.g}, ${accentRGB.b}`);
+    
+    if (theme.colors.headerBackground) root.style.setProperty('--header-background', theme.colors.headerBackground);
+    if (theme.colors.headerBorder) root.style.setProperty('--header-border', theme.colors.headerBorder);
+    
+    if (theme.colors.cardBackground) root.style.setProperty('--card-background', theme.colors.cardBackground);
+    if (theme.colors.cardBorder) root.style.setProperty('--card-border', theme.colors.cardBorder);
+    if (theme.colors.cardBorderHover) root.style.setProperty('--card-border-hover', theme.colors.cardBorderHover);
+    if (theme.colors.cardBorderActive) root.style.setProperty('--card-border-active', theme.colors.cardBorderActive);
+    if (theme.colors.cardShadow) root.style.setProperty('--card-shadow', theme.colors.cardShadow);
+    
+    if (theme.colors.inputBackground) root.style.setProperty('--input-background', theme.colors.inputBackground);
+    if (theme.colors.inputBorder) root.style.setProperty('--input-border', theme.colors.inputBorder);
+    if (theme.colors.inputBorderFocus) root.style.setProperty('--input-border-focus', theme.colors.inputBorderFocus);
+    
+    if (theme.colors.progressBackground) root.style.setProperty('--progress-background', theme.colors.progressBackground);
+    if (theme.colors.progressGlow) root.style.setProperty('--progress-glow', theme.colors.progressGlow);
+    
+    if (theme.colors.modalOverlay) root.style.setProperty('--modal-overlay', theme.colors.modalOverlay);
+    if (theme.colors.modalBackground) root.style.setProperty('--modal-background', theme.colors.modalBackground);
+    if (theme.colors.modalBorder) root.style.setProperty('--modal-border', theme.colors.modalBorder);
+    if (theme.colors.modalShadow) root.style.setProperty('--modal-shadow', theme.colors.modalShadow);
+    
+    if (theme.colors.buttonPrimary) root.style.setProperty('--button-primary', theme.colors.buttonPrimary);
+    if (theme.colors.buttonPrimaryHover) root.style.setProperty('--button-primary-hover', theme.colors.buttonPrimaryHover);
+  }
+  
+  removeAllStickers();
+  
+  if (theme.stickers && theme.stickers.length > 0) {
+    theme.stickers.forEach(stickerConfig => {
+      createSticker(stickerConfig, theme.id);
+    });
+  }
+  
+  if (lastSavedThemeId === null) {
+    try { lastSavedThemeId = localStorage.getItem('activeTheme'); } catch (_) { lastSavedThemeId = ''; }
+  }
+  if (lastSavedThemeId !== themeId) {
+    try {
+      localStorage.setItem('activeTheme', themeId);
+      lastSavedThemeId = themeId;
+    } catch (_) {
+      // ignore
+    }
+  }
+
+  lastAppliedThemeId = themeId;
 }
 
+/**
+ * Carrega o tema inicial (localStorage ou banco)
+ */
+export async function loadInitialTheme(): Promise<void> {
+  if (initialThemeLoaded) return;
+  if (loadInitialThemePromise) return loadInitialThemePromise;
+
+  loadInitialThemePromise = (async () => {
+    let localTheme: string | null = null;
+    try { localTheme = localStorage.getItem('activeTheme'); } catch (_) { localTheme = null; }
+    if (localTheme) {
+      applyTheme(localTheme);
+      initialThemeLoaded = true;
+      return;
+    }
+
+    if ((window as any).currentUser?.id) {
+      try {
+        const { data: userData, error } = await supabase
+          .from('player_stats')
+          .select('active_theme, unlocked_themes')
+          .eq('user_id', (window as any).currentUser.id)
+          .single();
+
+        if (!error && userData) {
+          const activeTheme = userData.active_theme;
+          const unlockedThemes = userData.unlocked_themes || ['default'];
+
+          if (activeTheme && unlockedThemes.includes(activeTheme)) {
+            applyTheme(activeTheme);
+            initialThemeLoaded = true;
+            return;
+          }
+
+          console.warn('⚠️ Tema não desbloqueado, aplicando default');
+          applyTheme('default');
+
+          await supabase
+            .from('player_stats')
+            .update({ active_theme: 'default' })
+            .eq('user_id', (window as any).currentUser.id);
+
+          initialThemeLoaded = true;
+          return;
+        }
+      } catch (err) {
+        console.error('❌ Erro ao buscar tema do banco:', err);
+      }
+    }
+
+    applyTheme('default');
+    initialThemeLoaded = true;
+  })().finally(() => {
+    loadInitialThemePromise = null;
+  });
+
+  return loadInitialThemePromise;
+}
+
+// ============================================================
+// USER THEMES MANAGEMENT
+// ============================================================
+
+/**
+ * Carrega os temas do usuário
+ */
+export async function loadUserThemes(): Promise<void> {
+  try {
+    if (!(window as any).currentUser?.id) {
+      console.warn('⚠️ User not authenticated');
+      return;
+    }
+    
+    const { data: userData, error } = await supabase
+      .from('player_stats')
+      .select('unlocked_themes, active_theme')
+      .eq('user_id', (window as any).currentUser.id)
+      .single();
+    
+    if (error) {
+      console.error('Error to load themes:', error);
+      showAlert('error', 'Loading Failed! 🎨', 'Unable to load themes. Please refresh the page.');
+      return;
+    }
+    
+    const unlockedThemes = userData?.unlocked_themes || ['default'];
+    const activeTheme = userData?.active_theme || 'default';
+    
+    renderThemesGrid(unlockedThemes, activeTheme);
+    applyTheme(activeTheme);
+    
+  } catch (err) {
+    console.error('Erro:', err);
+  }
+}
+
+/**
+ * Renderiza o grid de temas
+ * @param unlockedThemes - Temas desbloqueados
+ * @param activeTheme - Tema ativo
+ */
+function renderThemesGrid(unlockedThemes: string[], activeTheme: string): void {
+  const grid = getElById('themes-grid');
+  if (!grid) return;
+
+  const unlockedSet = new Set(Array.isArray(unlockedThemes) ? unlockedThemes : []);
+  
+  const ownedCount = unlockedSet.size;
+  const totalCount = AVAILABLE_THEMES.length;
+  const ownedCountElement = getElById('themes-owned-count');
+  if (ownedCountElement) {
+    ownedCountElement.textContent = `${ownedCount}/${totalCount} owned`;
+  }
+  
+  const diamondsDisplay = getElById('player-diamonds-display');
+  if (diamondsDisplay) {
+    const diamondsValue = (window as any).playerDiamonds?.value;
+    if (diamondsValue !== undefined) diamondsDisplay.textContent = diamondsValue;
+  }
+  
+  grid.innerHTML = AVAILABLE_THEMES.map(theme => {
+    const isUnlocked = unlockedSet.has(theme.id);
+    const isActive = activeTheme === theme.id;
+    
+    return `
+      <div class="theme-card ${!isUnlocked ? 'locked' : ''} ${isActive ? 'active' : ''}" 
+           onclick="${isUnlocked ? `activateTheme('${theme.id}')` : `openThemePurchaseModal('${theme.id}')`}">
+        
+        ${theme.isNew ? '<div class="theme-new-badge">NEW</div>' : ''}
+        
+        ${isActive ? '<div class="theme-status-badge active">✓ ACTIVE</div>' : ''}
+        ${isUnlocked && !isActive ? '<div class="theme-status-badge owned">OWNED</div>' : ''}
+        
+        <div class="theme-preview" style="background: ${theme.gradient}"></div>
+        
+        ${!isUnlocked ? `
+          <div class="theme-lock-overlay">
+            <div class="theme-lock-icon">🔒</div>
+            <div class="theme-price">
+              <span>${theme.price}</span>
+              <span>💎</span>
+            </div>
+          </div>
+        ` : ''}
+        
+        <div class="theme-info">
+          <div class="theme-name">${theme.name}</div>
+          <div class="theme-description">${theme.description}</div>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+// ============================================================
+// THEME PURCHASE MODAL
+// ============================================================
+
+/**
+ * Abre modal de compra de tema
+ * @param themeId - ID do tema
+ */
+export function openThemePurchaseModal(themeId: string): void {
+  const theme = getThemeById(themeId);
+  if (!theme) return;
+  
+  selectedThemeForPurchase = theme;
+  
+  const preview = getElById('modal-theme-preview');
+  const nameEl = getElById('modal-theme-name');
+  const descEl = getElById('modal-theme-desc');
+  const priceEl = getElById('modal-theme-price');
+  const diamondsEl = getElById('modal-player-diamonds');
+
+  if (preview) (preview as HTMLElement).style.background = theme.gradient;
+  if (nameEl) nameEl.textContent = theme.name;
+  if (descEl) descEl.textContent = theme.description;
+  if (priceEl) priceEl.textContent = String(theme.price);
+
+  const diamonds = Number((window as any).playerDiamonds?.value ?? 0);
+  if (diamondsEl) diamondsEl.textContent = String(diamonds);
+
+  const balanceCheck = getElById('modal-balance-check');
+  const confirmBtn = getElById('confirm-purchase-btn') as HTMLButtonElement;
+  const canAfford = diamonds >= Number(theme.price ?? 0);
+  if (balanceCheck) balanceCheck.classList.toggle('insufficient', !canAfford);
+  if (confirmBtn) confirmBtn.disabled = !canAfford;
+  
+  const modal = getElById('theme-purchase-modal');
+  if (modal) modal.classList.add('active');
+}
+
+/**
+ * Fecha modal de compra de tema
+ */
+export function closeThemePurchaseModal(): void {
+  const modal = getElById('theme-purchase-modal');
+  if (modal) modal.classList.remove('active');
+  selectedThemeForPurchase = null;
+}
+
+/**
+ * Confirma compra de tema
+ */
+export async function confirmThemePurchase(): Promise<void> {
+  if (!selectedThemeForPurchase || !(window as any).currentUser?.id) return;
+  
+  try {
+    const theme = selectedThemeForPurchase;
+    const currentDiamonds = Number((window as any).playerDiamonds?.value ?? 0);
+    
+    if (currentDiamonds < theme.price) {
+      showAlert('error', 'Insufficient Diamonds! 💎', `You need ${theme.price - currentDiamonds} more diamonds to buy this theme.`);
+      return;
+    }
+    
+    const { data: userData, error: fetchError } = await supabase
+      .from('player_stats')
+      .select('unlocked_themes, diamonds')
+      .eq('user_id', (window as any).currentUser.id)
+      .single();
+    
+    if (fetchError) {
+      showAlert('error', 'Loading Failed! ❌', 'Unable to fetch user data. Please try again.');
+      return;
+    }
+    
+    const unlockedThemes = userData.unlocked_themes || ['default'];
+    const unlockedSet = new Set(unlockedThemes);
+    
+    if (unlockedSet.has(theme.id)) {
+      showAlert('info', 'Already Owned! ✅', 'You already own this theme. Click on it to activate.');
+      closeThemePurchaseModal();
+      return;
+    }
+    
+    const newDiamonds = userData.diamonds - theme.price;
+    const newUnlockedThemes = [...unlockedThemes, theme.id];
+    
+    const { error: updateError } = await supabase
+      .from('player_stats')
+      .update({
+        diamonds: newDiamonds,
+        unlocked_themes: newUnlockedThemes,
+        active_theme: theme.id
+      })
+      .eq('user_id', (window as any).currentUser.id);
+    
+    if (updateError) {
+      showAlert('error', 'Purchase Failed! ❌', 'Unable to complete purchase. Please try again.');
+      return;
+    }
+    
+    (window as any).playerDiamonds.value = newDiamonds;
+    if ((window as any).updateMoneyDisplay) {
+      (window as any).updateMoneyDisplay();
+    }
+    
+    applyTheme(theme.id);
+    loadUserThemes();
+    closeThemePurchaseModal();
+    
+    showAlert('success', 'Theme Purchased! 🎉', `"${theme.name}" has been unlocked and activated!`);
+    showToast('success', 'Theme Active! 🎨', `Now using "${theme.name}" theme.`);
+    
+  } catch (err) {
+    console.error('Erro:', err);
+    showAlert('error', 'Transaction Error! 🌐', 'Unable to process purchase. Check your connection.');
+  }
+}
+
+/**
+ * Ativa um tema já desbloqueado
+ * @param themeId - ID do tema
+ */
+export async function activateTheme(themeId: string): Promise<void> {
+  try {
+    if (!(window as any).currentUser?.id) {
+      showAlert('error', 'Not Authenticated! ⚠️', 'Please login to change themes.');
+      return;
+    }
+    
+    const { error } = await supabase
+      .from('player_stats')
+      .update({ active_theme: themeId })
+      .eq('user_id', (window as any).currentUser.id);
+    
+    if (error) {
+      console.error('Erro ao ativar theme:', error);
+      showAlert('error', 'Activation Failed! ❌', 'Unable to activate theme. Please try again.');
+      return;
+    }
+    
+    applyTheme(themeId);
+    
+    const theme = getThemeById(themeId);
+    if (theme) {
+      showToast('success', 'Theme Changed! 🎨', `Now using "${theme.name}" theme.`);
+    }
+    
+    loadUserThemes();
+    
+  } catch (err) {
+    console.error('Erro:', err);
+  }
+}
+
+/**
+ * Carrega cores salvas (fallback para sistema antigo)
+ */
 export function loadSavedColors(): void {
-  const saved = localStorage.getItem('selectedTheme') || 'default';
-  applyTheme(saved);
+  let savedTheme: string | null = null;
+  try { savedTheme = localStorage.getItem('activeTheme'); } catch (_) { savedTheme = null; }
+  
+  if (savedTheme) {
+    applyTheme(savedTheme);
+  }
 }
 
-function createPurchaseModal(): HTMLElement {
-  const modal = document.createElement('div');
-  modal.id = 'theme-purchase-modal';
-  modal.className = 'modal-overlay';
-  modal.innerHTML = `
-    <div class="modal-content">
-      <button class="modal-close" onclick="window.closeThemePurchaseModal()">×</button>
-      <div class="modal-title">Unlock Theme</div>
-      <div class="theme-description"></div>
-      <div class="theme-price"></div>
-      <button class="btn btn-primary" onclick="window.confirmThemePurchase()">Confirm Purchase</button>
-    </div>
-  `;
-  document.body.appendChild(modal);
-  return modal;
+// ============================================================
+// EXPOR FUNÇÕES GLOBALMENTE
+// ============================================================
+
+declare global {
+  interface Window {
+    applyTheme: typeof applyTheme;
+    loadInitialTheme: typeof loadInitialTheme;
+    loadUserThemes: typeof loadUserThemes;
+    openThemePurchaseModal: typeof openThemePurchaseModal;
+    closeThemePurchaseModal: typeof closeThemePurchaseModal;
+    confirmThemePurchase: typeof confirmThemePurchase;
+    activateTheme: typeof activateTheme;
+    loadSavedColors: typeof loadSavedColors;
+  }
+}
+
+if (typeof window !== 'undefined') {
+  window.applyTheme = applyTheme;
+  window.loadInitialTheme = loadInitialTheme;
+  window.loadUserThemes = loadUserThemes;
+  window.openThemePurchaseModal = openThemePurchaseModal;
+  window.closeThemePurchaseModal = closeThemePurchaseModal;
+  window.confirmThemePurchase = confirmThemePurchase;
+  window.activateTheme = activateTheme;
+  window.loadSavedColors = loadSavedColors;
 }

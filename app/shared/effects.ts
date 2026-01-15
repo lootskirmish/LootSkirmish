@@ -1,11 +1,24 @@
-// @ts-nocheck
 // ============================================================
 // EFFECTS.TS - Sistema de Popups, Efeitos e Utilitários
 // ============================================================
 
 import { playSound } from './sfx';
 
+// ============ TYPE DEFINITIONS ============
+
+type NotificationType = 'success' | 'error' | 'warning' | 'info';
+
+interface RGB {
+  r: number;
+  g: number;
+  b: number;
+}
+
 // ============ MONEY POPUP ============
+/**
+ * Exibe popup animado quando o usuário ganha ou perde dinheiro
+ * @param amount - Quantidade de dinheiro (positivo = ganho, negativo = perda)
+ */
 export function showMoneyPopup(amount: number): void {
   const isPositive = amount > 0;
   const absAmount = Math.abs(amount);
@@ -83,6 +96,10 @@ export function showMoneyPopup(amount: number): void {
   setTimeout(() => popup.remove(), 2800);
 }
 
+/**
+ * Exibe popup animado quando o usuário ganha ou perde diamantes
+ * @param amount - Quantidade de diamantes (positivo = ganho, negativo = perda)
+ */
 export function showDiamondPopup(amount: number): void {
   const isPositive = amount > 0;
   const absAmount = Math.abs(amount);
@@ -162,11 +179,25 @@ export function showDiamondPopup(amount: number): void {
 }
 
 // ============ XP POPUP ============
-export function showXPPopup(xpGained: number, currentXP: number, nextLevelXP: number, oldLevel?: number, newLevel?: number): void {
-  const leveledUp = oldLevel && newLevel && oldLevel < newLevel;
+/**
+ * Exibe popup de ganho de XP ou Level Up
+ * @param xpGained - XP ganho
+ * @param currentXP - XP atual no nível
+ * @param nextLevelXP - XP necessário para próximo nível
+ * @param oldLevel - Nível anterior (opcional)
+ * @param newLevel - Nível atual (opcional)
+ */
+export function showXPPopup(
+  xpGained: number, 
+  currentXP: number, 
+  nextLevelXP: number, 
+  oldLevel?: number, 
+  newLevel?: number
+): void {
+  const leveledUp = oldLevel !== undefined && newLevel !== undefined && oldLevel < newLevel;
   
   if (leveledUp) {
-    showLevelUpExplosion(oldLevel!, newLevel!);
+    showLevelUpExplosion(oldLevel, newLevel);
     return;
   }
   
@@ -214,6 +245,15 @@ export function showXPPopup(xpGained: number, currentXP: number, nextLevelXP: nu
   popup.style.opacity = '0';
   popup.style.transition = 'all 0.6s cubic-bezier(0.68, -0.55, 0.265, 1.55)';
 
+  setTimeout(() => {
+    popup.style.opacity = '1';
+    if (rect) {
+      popup.style.transform = 'translateX(-50%) translateY(0) scale(1)';
+    } else {
+      popup.style.transform = 'translate(-50%, -50%) scale(1)';
+    }
+  }, 50);
+
   for (let i = 0; i < 15; i++) {
     setTimeout(() => {
       const particle = document.createElement('div');
@@ -243,9 +283,21 @@ export function showXPPopup(xpGained: number, currentXP: number, nextLevelXP: nu
       setTimeout(() => particle.remove(), 2000);
     }, i * 40);
   }
+
+  setTimeout(() => {
+    popup.style.opacity = '0';
+    popup.style.transform = popup.style.transform.replace('scale(1)', 'scale(0.5)');
+  }, 2500);
+
+  setTimeout(() => popup.remove(), 3000);
 }
 
 // ============ LEVEL UP EXPLOSION ============
+/**
+ * Exibe explosão de tela cheia quando o usuário sobe de nível
+ * @param oldLevel - Nível anterior
+ * @param newLevel - Nível novo
+ */
 export function showLevelUpExplosion(oldLevel: number, newLevel: number): void {
   const popup = document.createElement('div');
   popup.className = 'levelup-explosion';
@@ -290,6 +342,10 @@ export function showLevelUpExplosion(oldLevel: number, newLevel: number): void {
 }
 
 // ============ SELL PARTICLES ============
+/**
+ * Cria partículas verdes quando um item é vendido
+ * @param element - Elemento do card vendido
+ */
 export function createSellParticles(element: HTMLElement): void {
   const rect = element.getBoundingClientRect();
   const centerX = rect.left + rect.width / 2;
@@ -319,6 +375,11 @@ export function createSellParticles(element: HTMLElement): void {
 }
 
 // ============ HISTORY PARTICLES ============
+/**
+ * Cria partículas ao fazer hover em drops raros no histórico
+ * @param element - Elemento do card
+ * @param color - Cor das partículas
+ */
 export function createHistoryParticles(element: HTMLElement, color: string): void {
   const rect = element.getBoundingClientRect();
   const centerX = rect.left + rect.width / 2;
@@ -350,6 +411,11 @@ export function createHistoryParticles(element: HTMLElement, color: string): voi
 }
 
 // ============ UPLOAD NOTIFICATION ============
+/**
+ * Mostra notificação de upload de avatar/banner
+ * @param message - Mensagem a ser exibida
+ * @param isError - Se é erro (true) ou sucesso (false)
+ */
 export function showUploadNotification(message: string, isError: boolean = false): void {
   const notification = document.getElementById('upload-notification');
   if (!notification) return;
@@ -374,16 +440,21 @@ export function showUploadNotification(message: string, isError: boolean = false
 }
 
 // ============ SELL CONFIRMATION MODAL ============
+/**
+ * Mostra modal de confirmação de venda
+ * @param count - Quantidade de itens vendidos
+ * @param total - Valor total recebido
+ */
 export function showSellConfirmation(count: number, total: number): void {
   const modal = document.getElementById('sell-confirm-modal');
   if (!modal) return;
   
-  const soldCountEl = document.getElementById('sold-count');
-  const soldTotalEl = document.getElementById('sold-total');
+  const soldCount = document.getElementById('sold-count');
+  const soldTotal = document.getElementById('sold-total');
   
-  if (soldCountEl) soldCountEl.textContent = String(count);
-  if (soldTotalEl) {
-    soldTotalEl.textContent = 
+  if (soldCount) soldCount.textContent = String(count);
+  if (soldTotal) {
+    soldTotal.textContent = 
       total.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' 💰';
   }
   
@@ -394,6 +465,9 @@ export function showSellConfirmation(count: number, total: number): void {
   }, 3000);
 }
 
+/**
+ * Fecha o modal de confirmação de venda
+ */
 export function closeSellConfirmModal(): void {
   const modal = document.getElementById('sell-confirm-modal');
   if (modal) modal.classList.remove('active');
@@ -401,6 +475,11 @@ export function closeSellConfirmModal(): void {
 
 // ============ UTILIDADES GERAIS ============
 
+/**
+ * Formata data e hora para exibição
+ * @param isoString - String de data em formato ISO
+ * @returns Data formatada
+ */
 export function formatDateTime(isoString: string): string {
   const date = new Date(isoString);
   const options: Intl.DateTimeFormatOptions = {
@@ -414,13 +493,12 @@ export function formatDateTime(isoString: string): string {
   return date.toLocaleString('en-US', options);
 }
 
-interface RgbColor {
-  r: number;
-  g: number;
-  b: number;
-}
-
-export function hexToRgb(hex: string): RgbColor {
+/**
+ * Converte HEX para RGB
+ * @param hex - Cor em formato HEX
+ * @returns Objeto com r, g, b
+ */
+export function hexToRgb(hex: string): RGB {
   hex = hex.replace('#', '');
   const r = parseInt(hex.substring(0, 2), 16);
   const g = parseInt(hex.substring(2, 4), 16);
@@ -428,6 +506,11 @@ export function hexToRgb(hex: string): RgbColor {
   return { r, g, b };
 }
 
+/**
+ * Gera um número aleatório com seed (determinístico)
+ * @param seed - Seed para geração
+ * @returns Número entre 0 e 1
+ */
 export function seededRandom(seed: string): number {
   let hash = 0;
   for (let i = 0; i < seed.length; i++) {
@@ -438,9 +521,18 @@ export function seededRandom(seed: string): number {
   return x - Math.floor(x);
 }
 
-export function debounce(func: (...args: any[]) => void, wait: number): (...args: any[]) => void {
-  let timeout: NodeJS.Timeout;
-  return function executedFunction(...args: any[]) {
+/**
+ * Debounce - limita execução de função
+ * @param func - Função a ser executada
+ * @param wait - Tempo de espera em ms
+ * @returns Função com debounce
+ */
+export function debounce<T extends (...args: any[]) => any>(
+  func: T, 
+  wait: number
+): (...args: Parameters<T>) => void {
+  let timeout: ReturnType<typeof setTimeout>;
+  return function executedFunction(...args: Parameters<T>) {
     const later = () => {
       clearTimeout(timeout);
       func(...args);
@@ -450,17 +542,31 @@ export function debounce(func: (...args: any[]) => void, wait: number): (...args
   };
 }
 
-export function throttle(func: (...args: any[]) => void, limit: number): (...args: any[]) => void {
+/**
+ * Throttle - limita taxa de execução
+ * @param func - Função a ser executada
+ * @param limit - Tempo mínimo entre execuções em ms
+ * @returns Função com throttle
+ */
+export function throttle<T extends (...args: any[]) => any>(
+  func: T, 
+  limit: number
+): (...args: Parameters<T>) => void {
   let inThrottle: boolean;
-  return function(...args: any[]) {
+  return function(...args: Parameters<T>) {
     if (!inThrottle) {
-      func.apply(this, args);
+      func.apply(null, args);
       inThrottle = true;
       setTimeout(() => inThrottle = false, limit);
     }
   };
 }
 
+/**
+ * Copia texto para clipboard
+ * @param text - Texto a ser copiado
+ * @returns Sucesso da operação
+ */
 export async function copyToClipboard(text: string): Promise<boolean> {
   try {
     await navigator.clipboard.writeText(text);
@@ -471,16 +577,32 @@ export async function copyToClipboard(text: string): Promise<boolean> {
   }
 }
 
+/**
+ * Aguarda um tempo específico (helper para async/await)
+ * @param ms - Milissegundos para aguardar
+ * @returns Promise que resolve após o tempo
+ */
 export function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
+/**
+ * Sanitiza string para uso seguro em HTML
+ * @param str - String a ser sanitizada
+ * @returns String sanitizada
+ */
 export function sanitizeHTML(str: string): string {
   const temp = document.createElement('div');
   temp.textContent = str;
   return temp.innerHTML;
 }
 
+/**
+ * Formata número como moeda
+ * @param value - Valor numérico
+ * @param currency - Código da moeda (USD, BRL, etc)
+ * @returns Valor formatado
+ */
 export function formatCurrency(value: number, currency: string = 'USD'): string {
   return new Intl.NumberFormat('en-US', {
     style: 'currency',
@@ -490,6 +612,11 @@ export function formatCurrency(value: number, currency: string = 'USD'): string 
   }).format(value);
 }
 
+/**
+ * Calcula tempo relativo (ex: "5 minutos atrás")
+ * @param date - Data para calcular
+ * @returns Tempo relativo
+ */
 export function getRelativeTime(date: Date | string): string {
   const now = new Date();
   const past = new Date(date);
@@ -504,14 +631,14 @@ export function getRelativeTime(date: Date | string): string {
   return `${diffDays}d atrás`;
 }
 
-const TOAST_ICONS: Record<string, string> = Object.freeze({
+const TOAST_ICONS: Record<NotificationType, string> = Object.freeze({
   success: '✅',
   error: '❌',
   warning: '⚠️',
   info: 'ℹ️'
 });
 
-const ALERT_ICONS: Record<string, string> = Object.freeze({
+const ALERT_ICONS: Record<NotificationType, string> = Object.freeze({
   success: '🎉',
   error: '🚫',
   warning: '⚡',
@@ -534,7 +661,19 @@ function getOrCreateNotificationContainer(id: string): HTMLElement {
 // NOTIFICATION SYSTEM - TOAST & ALERT
 // ============================================================
 
-export function showToast(type: string = 'info', title: string = 'Notification', message: string = '', duration: number = 5000): void {
+/**
+ * Exibe notificação Toast (canto superior direito)
+ * @param type - Tipo: 'success', 'error', 'warning', 'info'
+ * @param title - Título da notificação
+ * @param message - Mensagem opcional
+ * @param duration - Duração em ms (padrão: 5000)
+ */
+export function showToast(
+  type: NotificationType = 'info', 
+  title: string = 'Notification', 
+  message: string = '', 
+  duration: number = 5000
+): void {
   const container = toastContainerCache || (toastContainerCache = getOrCreateNotificationContainer('toast-container'));
 
   if (type === 'error') {
@@ -547,7 +686,7 @@ export function showToast(type: string = 'info', title: string = 'Notification',
   toast.className = `toast ${type}`;
   
   toast.innerHTML = `
-    <div class="toast-icon">${TOAST_ICONS[type] || TOAST_ICONS['info']}</div>
+    <div class="toast-icon">${TOAST_ICONS[type] || TOAST_ICONS.info}</div>
     <div class="toast-content">
       <div class="toast-title">${title}</div>
       ${message ? `<div class="toast-message">${message}</div>` : ''}
@@ -567,6 +706,10 @@ export function showToast(type: string = 'info', title: string = 'Notification',
   toast.dataset.timeoutId = String(timeoutId);
 }
 
+/**
+ * Remove uma notificação Toast
+ * @param button - Botão de fechar ou elemento toast
+ */
 export function removeToast(button: HTMLElement): void {
   const toast = button.closest ? button.closest('.toast') as HTMLElement : button;
   if (!toast) return;
@@ -581,7 +724,19 @@ export function removeToast(button: HTMLElement): void {
   }, 300);
 }
 
-export function showAlert(type: string = 'info', title: string = 'Alert', message: string = '', duration: number = 5000): void {
+/**
+ * Exibe notificação Alert (centro superior)
+ * @param type - Tipo: 'success', 'error', 'warning', 'info'
+ * @param title - Título da notificação
+ * @param message - Mensagem opcional
+ * @param duration - Duração em ms (padrão: 5000)
+ */
+export function showAlert(
+  type: NotificationType = 'info', 
+  title: string = 'Alert', 
+  message: string = '', 
+  duration: number = 5000
+): void {
   const container = alertContainerCache || (alertContainerCache = getOrCreateNotificationContainer('alert-container'));
 
   if (type === 'error') {
@@ -594,7 +749,7 @@ export function showAlert(type: string = 'info', title: string = 'Alert', messag
   alert.className = `alert ${type}`;
   
   alert.innerHTML = `
-    <div class="alert-icon">${ALERT_ICONS[type] || ALERT_ICONS['info']}</div>
+    <div class="alert-icon">${ALERT_ICONS[type] || ALERT_ICONS.info}</div>
     <div class="alert-content">
       <div class="alert-title">${title}</div>
       ${message ? `<div class="alert-message">${message}</div>` : ''}
@@ -613,6 +768,10 @@ export function showAlert(type: string = 'info', title: string = 'Alert', messag
   alert.dataset.timeoutId = String(timeoutId);
 }
 
+/**
+ * Remove uma notificação Alert
+ * @param button - Botão de fechar ou elemento alert
+ */
 export function removeAlert(button: HTMLElement): void {
   const alert = button.closest ? button.closest('.alert') as HTMLElement : button;
   if (!alert) return;
@@ -631,28 +790,56 @@ export function removeAlert(button: HTMLElement): void {
 // EXPOR FUNÇÕES GLOBALMENTE
 // ============================================================
 
-(window as any).showMoneyPopup = showMoneyPopup;
-(window as any).showDiamondPopup = showDiamondPopup;
-(window as any).showXPPopup = showXPPopup;
-(window as any).showLevelUpExplosion = showLevelUpExplosion;
-(window as any).createSellParticles = createSellParticles;
-(window as any).createHistoryParticles = createHistoryParticles;
-(window as any).showUploadNotification = showUploadNotification;
-(window as any).showSellConfirmation = showSellConfirmation;
-(window as any).closeSellConfirmModal = closeSellConfirmModal;
-(window as any).seededRandom = seededRandom;
-(window as any).hexToRgb = hexToRgb;
-(window as any).formatDateTime = formatDateTime;
+declare global {
+  interface Window {
+    showMoneyPopup: typeof showMoneyPopup;
+    showDiamondPopup: typeof showDiamondPopup;
+    showXPPopup: typeof showXPPopup;
+    showLevelUpExplosion: typeof showLevelUpExplosion;
+    createSellParticles: typeof createSellParticles;
+    createHistoryParticles: typeof createHistoryParticles;
+    showUploadNotification: typeof showUploadNotification;
+    showSellConfirmation: typeof showSellConfirmation;
+    closeSellConfirmModal: typeof closeSellConfirmModal;
+    seededRandom: typeof seededRandom;
+    hexToRgb: typeof hexToRgb;
+    formatDateTime: typeof formatDateTime;
+    debounce: typeof debounce;
+    throttle: typeof throttle;
+    copyToClipboard: typeof copyToClipboard;
+    sleep: typeof sleep;
+    sanitizeHTML: typeof sanitizeHTML;
+    formatCurrency: typeof formatCurrency;
+    getRelativeTime: typeof getRelativeTime;
+    showToast: typeof showToast;
+    showAlert: typeof showAlert;
+    removeToast: typeof removeToast;
+    removeAlert: typeof removeAlert;
+  }
+}
 
-(window as any).debounce = debounce;
-(window as any).throttle = throttle;
-(window as any).copyToClipboard = copyToClipboard;
-(window as any).sleep = sleep;
-(window as any).sanitizeHTML = sanitizeHTML;
-(window as any).formatCurrency = formatCurrency;
-(window as any).getRelativeTime = getRelativeTime;
-
-(window as any).showToast = showToast;
-(window as any).showAlert = showAlert;
-(window as any).removeToast = removeToast;
-(window as any).removeAlert = removeAlert;
+if (typeof window !== 'undefined') {
+  window.showMoneyPopup = showMoneyPopup;
+  window.showDiamondPopup = showDiamondPopup;
+  window.showXPPopup = showXPPopup;
+  window.showLevelUpExplosion = showLevelUpExplosion;
+  window.createSellParticles = createSellParticles;
+  window.createHistoryParticles = createHistoryParticles;
+  window.showUploadNotification = showUploadNotification;
+  window.showSellConfirmation = showSellConfirmation;
+  window.closeSellConfirmModal = closeSellConfirmModal;
+  window.seededRandom = seededRandom;
+  window.hexToRgb = hexToRgb;
+  window.formatDateTime = formatDateTime;
+  window.debounce = debounce;
+  window.throttle = throttle;
+  window.copyToClipboard = copyToClipboard;
+  window.sleep = sleep;
+  window.sanitizeHTML = sanitizeHTML;
+  window.formatCurrency = formatCurrency;
+  window.getRelativeTime = getRelativeTime;
+  window.showToast = showToast;
+  window.showAlert = showAlert;
+  window.removeToast = removeToast;
+  window.removeAlert = removeAlert;
+}

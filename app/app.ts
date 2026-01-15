@@ -2,8 +2,8 @@
 // APP.TS - IMPORTS
 // ============================================================
 
-import './core/store.ts'; // Importar store primeiro
-import './core/route-loader.ts'; // Importar route loader
+import './core/store'; // Importar store primeiro
+import './core/route-loader'; // Importar route loader
 
 import {
   handleLogout as authHandleLogout,
@@ -18,7 +18,7 @@ import {
   showMoneyPopup,
   showDiamondPopup,
   showXPPopup
-} from './shared/effects.js';
+} from './shared/effects';
 
 import { 
   setupProfileUploadListeners
@@ -35,7 +35,7 @@ import {
 
 import { 
   RARITIES
-} from './shared/constants.js';
+} from './shared/constants';
 
 import './features/settings.js';
 import './features/skill-tree.js';
@@ -52,14 +52,14 @@ import './features/referrals.js';
 import {
   loadInitialTheme,
   loadSavedColors
-} from './shared/themes.js';
+} from './shared/themes';
 
 import {
   initializeStateSystem
-} from './core/state.ts';
+} from './core/state';
 
 import './features/caseopening.js';
-import { bindGlobalClickSfx, bindGlobalHoverSfx } from './shared/sfx.js';
+import { bindGlobalClickSfx, bindGlobalHoverSfx } from './shared/sfx';
 
 import { initializeChat } from './features/chat.js';
 import { initializeFriends } from './features/friends.js';
@@ -68,7 +68,7 @@ import './features/leaderboard.js';
 
 import { 
   initRouter
-} from './core/router.ts';
+} from './core/router';
 
 // ============================================================
 // GLOBAL STATE VARIABLES

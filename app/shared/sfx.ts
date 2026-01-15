@@ -2,7 +2,20 @@
 // SFX.TS - Simple sound helper with localStorage-backed prefs
 // ============================================================
 
-const SOUND_MAP: Record<string, string> = {
+type SoundKey = 'click' | 'buy' | 'open_case' | 'reel_spin' | 'payout' | 'switch' | 'win' | 'error' | 'notify' | 'hover';
+
+type SoundPreferences = Partial<Record<SoundKey, boolean>>;
+
+interface PlaySoundOptions {
+  volume?: number;
+  loop?: boolean;
+}
+
+interface LoopHandle {
+  stop(): void;
+}
+
+const SOUND_MAP: Record<SoundKey, string> = {
   click: '/sounds/click.mp3',
   buy: '/sounds/click.mp3',
   open_case: '/sounds/open_case.mp3',
@@ -20,7 +33,7 @@ function getEnabled(): boolean {
   return saved == null ? true : saved === 'true';
 }
 
-function loadPrefs(): Record<string, boolean> {
+function loadPrefs(): SoundPreferences {
   try {
     const raw = localStorage.getItem('soundPrefs');
     if (!raw) return {};
@@ -31,11 +44,11 @@ function loadPrefs(): Record<string, boolean> {
   }
 }
 
-function savePrefs(prefs: Record<string, boolean>): void {
+function savePrefs(prefs: SoundPreferences): void {
   localStorage.setItem('soundPrefs', JSON.stringify(prefs || {}));
 }
 
-function isSoundAllowed(key: string): boolean {
+function isSoundAllowed(key: SoundKey): boolean {
   const prefs = loadPrefs();
   if (Object.prototype.hasOwnProperty.call(prefs, key)) {
     return !!prefs[key];
@@ -43,16 +56,16 @@ function isSoundAllowed(key: string): boolean {
   return true;
 }
 
-export function setSoundPreference(key: string, enabled: boolean): void {
+export function setSoundPreference(key: SoundKey, enabled: boolean): void {
   const prefs = loadPrefs();
   prefs[key] = !!enabled;
   savePrefs(prefs);
 }
 
 export function setAllSoundPreferences(enabled: boolean): void {
-  const prefs: Record<string, boolean> = {};
+  const prefs: SoundPreferences = {};
   Object.keys(SOUND_MAP).forEach(k => {
-    prefs[k] = !!enabled;
+    prefs[k as SoundKey] = !!enabled;
   });
   savePrefs(prefs);
 }
@@ -73,12 +86,7 @@ export function setMasterVolume(volume0to100: number): void {
   localStorage.setItem('volume', String(clamped));
 }
 
-interface PlaySoundOptions {
-  volume?: number;
-  loop?: boolean;
-}
-
-export function playSound(key: string, { volume = 1, loop = false }: PlaySoundOptions = {}): HTMLAudioElement | null {
+export function playSound(key: SoundKey, { volume = 1, loop = false }: PlaySoundOptions = {}): HTMLAudioElement | null {
   if (!getEnabled()) return null;
   const src = SOUND_MAP[key];
   if (!src) return null;
@@ -91,11 +99,7 @@ export function playSound(key: string, { volume = 1, loop = false }: PlaySoundOp
   return audio;
 }
 
-interface LoopHandle {
-  stop(): void;
-}
-
-export function startLoop(key: string, opts: PlaySoundOptions = {}): LoopHandle {
+export function startLoop(key: SoundKey, opts: PlaySoundOptions = {}): LoopHandle {
   const handle = playSound(key, { ...opts, loop: true });
   return {
     stop() {
@@ -106,3 +110,40 @@ export function startLoop(key: string, opts: PlaySoundOptions = {}): LoopHandle 
     }
   };
 }
+
+let globalClickBound = false;
+let globalHoverBound = false;
+
+export function bindGlobalClickSfx(): void {
+  if (globalClickBound) return;
+  globalClickBound = true;
+  document.addEventListener('click', (e: MouseEvent) => {
+    if (!getEnabled()) return;
+    if (e.defaultPrevented) return;
+    const target = e.target instanceof Element ? e.target : null;
+    const skip = target?.closest('[data-no-click-sfx]');
+    if (skip) return;
+    const custom = target?.closest('[data-click-sfx]');
+    if (custom?.dataset?.clickSfx) {
+      playSound(custom.dataset.clickSfx as SoundKey, { volume: 0.35 });
+      return;
+    }
+    playSound('click', { volume: 0.35 });
+  });
+}
+
+export function bindGlobalHoverSfx(): void {
+  if (globalHoverBound) return;
+  globalHoverBound = true;
+  document.addEventListener('mouseenter', (e: MouseEvent) => {
+    if (!getEnabled()) return;
+    const el = e.target instanceof Element ? e.target : null;
+    const skip = el?.closest('[data-no-hover-sfx]');
+    if (skip) return;
+    const hoverEl = el?.closest('[data-hover-sfx], button, a, [role="button"], .btn');
+    if (!hoverEl) return;
+    const key = (hoverEl as HTMLElement).dataset.hoverSfx || 'hover';
+    playSound(key as SoundKey, { volume: 0.2 });
+  }, true);
+}
+

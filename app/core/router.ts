@@ -3,9 +3,9 @@
 // ROUTER.TS - Sistema de Rotas com History API + Redux (TypeScript)
 // ============================================================
 
-import { store, routerActions } from './store.js';
-import { loadRouteData } from './route-loader.js';
-import { getActiveUser, setActiveUser } from './session.js';
+import { store, routerActions } from './store';
+import { loadRouteData } from './route-loader';
+import { getActiveUser, setActiveUser } from './session';
 
 // ============================================================
 // TYPES

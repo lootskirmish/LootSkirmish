@@ -3,17 +3,17 @@
 // ============================================================
 
 // ============================================================
-// CASE OPENING CONSTANTS
+// TYPE DEFINITIONS
 // ============================================================
 
-interface Rarity {
+export interface Rarity {
   name: string;
   chance: number;
   color: string;
   icon: string;
 }
 
-interface CaseItem {
+export interface CaseItem {
   name: string;
   icon: string;
   minValue: number;
@@ -21,7 +21,7 @@ interface CaseItem {
   rarityIndex: number;
 }
 
-interface CaseDefinition {
+export interface Case {
   id: string;
   name: string;
   icon: string;
@@ -30,6 +30,77 @@ interface CaseDefinition {
   color: string;
   items: CaseItem[];
 }
+
+export interface SkillTreeBadge {
+  x: number;
+  y: number;
+  icon: string;
+  name: string;
+  desc: string;
+  requirement: string;
+  diamonds: number;
+  xp: number;
+  category: string;
+  current: number;
+  max: number;
+}
+
+export interface SkillTreeCategory {
+  color: string;
+  badges: string[];
+}
+
+export interface BadgeStats {
+  total_battles?: number;
+  total_wins?: number;
+  money?: number;
+  level?: number;
+  total_spent?: number;
+  best_drop?: number;
+  collected_badges?: string[];
+}
+
+export interface BadgeDefinition {
+  id: string;
+  icon: string;
+  name: string;
+  nameKey: string;
+  desc: string;
+  descKey: string;
+  requirement: (stats: BadgeStats) => boolean;
+  diamonds: number;
+  xp: number;
+}
+
+export interface PaymentConfig {
+  pix_brl_key: string;
+  pix_usd_key: string;
+  ltc_address: string;
+  discord_webhook: string;
+}
+
+export interface PassConfig {
+  id: string;
+  name: string;
+  description: string;
+  icon: string;
+  cost: number;
+  requires: string | null;
+  benefits: string[];
+  color: string;
+}
+
+export interface PassesConfig {
+  [key: string]: PassConfig;
+}
+
+export interface MultiOpenRequirements {
+  [quantity: number]: string | null;
+}
+
+// ============================================================
+// CASE OPENING CONSTANTS
+// ============================================================
 
 // Rarities with drop chances
 export const RARITIES: Rarity[] = [
@@ -42,7 +113,8 @@ export const RARITIES: Rarity[] = [
 ];
 
 // Case definitions
-export const OPENING_CASES: CaseDefinition[] = [
+export const OPENING_CASES: Case[] = [
+  // Cases organizadas por valor crescente - valores muito mais altos
   {
     id: 'starter_box',
     name: 'Starter Box',
@@ -239,11 +311,12 @@ export const OPENING_CASES: CaseDefinition[] = [
 ];
 
 // Precomputed lookup (faster than linear .find on every call)
-const CASE_BY_ID = new Map<string, CaseDefinition>(OPENING_CASES.map(c => [c.id, c]));
+const CASE_BY_ID = new Map(OPENING_CASES.map(c => [c.id, c]));
 
 // Get case by ID
-export function getCaseById(caseId: string | number | undefined): CaseDefinition | undefined {
+export function getCaseById(caseId: string | number | undefined): Case | undefined {
   if (!caseId) return undefined;
+  // Most callers pass strings via dataset; normalize defensively.
   const key = typeof caseId === 'string' ? caseId : String(caseId);
   return CASE_BY_ID.get(key);
 }
@@ -259,43 +332,36 @@ export function getRarityByIndex(index: number): Rarity {
 
 export const HUB = { x: 1200, y: 1200 };
 
-interface SkillBadge {
-  x: number;
-  y: number;
-  icon: string;
-  name: string;
-  desc: string;
-  requirement: string;
-  diamonds: number;
-  xp: number;
-  category: string;
-  current: number;
-  max: number;
-}
-
-type SkillBadges = Record<string, SkillBadge>;
-
-export const SKILL_TREE_BADGES: SkillBadges = {
+export const SKILL_TREE_BADGES: Record<string, SkillTreeBadge> = {
+  // BATALHAS (Vermelho)
   'first-blood': { x: 851, y: 1384, icon: '⚔️', name: 'First Blood', desc: 'Win your first battle', requirement: '1 victory', diamonds: 10, xp: 50, category: 'battles', current: 0, max: 1 },
   'warrior': { x: 533, y: 1317, icon: '🗡️', name: 'Warrior', desc: 'Become an experienced warrior', requirement: '50 victories', diamonds: 25, xp: 100, category: 'battles', current: 0, max: 50 },
   'slayer': { x: 257, y: 1105, icon: '🔪', name: 'Slayer', desc: 'Dominate the battlefield', requirement: '250 victories', diamonds: 50, xp: 200, category: 'battles', current: 0, max: 250 },
   'berserker': { x: 130, y: 781, icon: '😈', name: 'Berserker', desc: 'Fight with uncontrollable fury', requirement: '1000 victories', diamonds: 100, xp: 500, category: 'battles', current: 0, max: 1000 },
   'titan': { x: 171, y: 362, icon: '🏔️', name: 'Titan', desc: 'A true titan of battles', requirement: '5000 victories', diamonds: 250, xp: 1000, category: 'battles', current: 0, max: 5000 },
+  
+  // DINHEIRO (Amarelo)
   'beggar': { x: 1412, y: 1412, icon: '💰', name: 'Beggar', desc: 'Your first earnings', requirement: '100 💰', diamonds: 10, xp: 50, category: 'money', current: 0, max: 100 },
   'gold-digger': { x: 1603, y: 1461, icon: '⛏️', name: 'Gold Digger', desc: 'Accumulate wealth', requirement: '1000 💰', diamonds: 25, xp: 100, category: 'money', current: 0, max: 1000 },
   'treasure-hunter': { x: 1822, y: 1437, icon: '🗺️', name: 'Treasure Hunter', desc: 'Treasure hunter', requirement: '10000 💰', diamonds: 50, xp: 200, category: 'money', current: 0, max: 10000 },
   'fortune-seeker': { x: 2029, y: 1331, icon: '🔮', name: 'Fortune Seeker', desc: 'Seek your fortune', requirement: '50000 💰', diamonds: 100, xp: 500, category: 'money', current: 0, max: 50000 },
   'midas': { x: 2219, y: 1253, icon: '👑', name: 'Midas', desc: 'Everything you touch turns to gold', requirement: '1000000 💰', diamonds: 500, xp: 2000, category: 'money', current: 0, max: 1000000 },
+  
+  // CASES (Roxo)
   'curious': { x: 1359, y: 943, icon: '🔍', name: 'Curious', desc: 'Your first case', requirement: '10 cases', diamonds: 10, xp: 50, category: 'cases', current: 0, max: 10 },
   'unlocksmith': { x: 1406, y: 629, icon: '🔓', name: 'Unlocksmith', desc: 'Master of keys', requirement: '100 cases', diamonds: 25, xp: 100, category: 'cases', current: 0, max: 100 },
   'loot-master': { x: 1378, y: 371, icon: '🎁', name: 'Loot Master', desc: 'Master the art of loot', requirement: '1000 cases', diamonds: 50, xp: 200, category: 'cases', current: 0, max: 1000 },
   'key-collector': { x: 1219, y: 190, icon: '🗝️', name: 'Key Collector', desc: 'Key collector', requirement: '15000 cases', diamonds: 100, xp: 500, category: 'cases', current: 0, max: 15000 },
   'pandora': { x: 911, y: 76, icon: '📦', name: 'Pandora', desc: "Open Pandora's box", requirement: '100000 cases', diamonds: 500, xp: 2000, category: 'cases', current: 0, max: 100000 },
+  
+  // LEVEL (Ciano)
   'novice': { x: 1486, y: 1092, icon: '🎓', name: 'Novice', desc: 'Your first steps', requirement: 'Level 5', diamonds: 10, xp: 50, category: 'level', current: 0, max: 5 },
   'mage': { x: 1683, y: 984, icon: '🔮', name: 'Mage', desc: 'Become a mage', requirement: 'Level 25', diamonds: 25, xp: 100, category: 'level', current: 0, max: 25 },
   'warlock': { x: 1813, y: 835, icon: '🧙', name: 'Warlock', desc: 'Master black magic', requirement: 'Level 50', diamonds: 50, xp: 200, category: 'level', current: 0, max: 50 },
   'ascendant': { x: 1876, y: 610, icon: '⚡', name: 'Ascendant', desc: 'Ascend to a new level', requirement: 'Level 75', diamonds: 100, xp: 500, category: 'level', current: 0, max: 75 },
   'enlightened': { x: 1822, y: 381, icon: '🌟', name: 'Enlightened', desc: 'Achieve enlightenment', requirement: 'Level 100', diamonds: 500, xp: 2000, category: 'level', current: 0, max: 100 },
+  
+  // COLETOR (Verde)
   'collector': { x: 1070, y: 1483, icon: '🎯', name: 'Collector', desc: 'Start your collection', requirement: '5 badges', diamonds: 10, xp: 50, category: 'collector', current: 0, max: 5 },
   'gatherer': { x: 1219, y: 1749, icon: '📚', name: 'Gatherer', desc: 'Gather knowledge', requirement: '15 badges', diamonds: 25, xp: 100, category: 'collector', current: 0, max: 15 },
   'achievement-hunter': { x: 1527, y: 1851, icon: '🏅', name: 'Achievement Hunter', desc: 'Achievement hunter', requirement: '25 badges', diamonds: 50, xp: 200, category: 'collector', current: 0, max: 25 },
@@ -303,14 +369,7 @@ export const SKILL_TREE_BADGES: SkillBadges = {
   'chosen-one': { x: 2092, y: 1692, icon: '👑', name: 'The Chosen One', desc: 'The chosen among all', requirement: '50 badges', diamonds: 1000, xp: 5000, category: 'collector', current: 0, max: 50 }
 };
 
-interface SkillCategory {
-  color: string;
-  badges: string[];
-}
-
-type SkillCategories = Record<string, SkillCategory>;
-
-export const SKILL_TREE_CATEGORIES: SkillCategories = {
+export const SKILL_TREE_CATEGORIES: Record<string, SkillTreeCategory> = {
   battles: { color: '#ef4444', badges: ['first-blood', 'warrior', 'slayer', 'berserker', 'titan'] },
   money: { color: '#facc15', badges: ['beggar', 'gold-digger', 'treasure-hunter', 'fortune-seeker', 'midas'] },
   cases: { color: '#a855f7', badges: ['curious', 'unlocksmith', 'loot-master', 'key-collector', 'pandora'] },
@@ -322,18 +381,6 @@ export const SKILL_TREE_CATEGORIES: SkillCategories = {
 // BADGE DEFINITIONS
 // ============================================================
 
-interface BadgeDefinition {
-  id: string;
-  icon: string;
-  name: string;
-  nameKey: string;
-  desc: string;
-  descKey: string;
-  requirement: (stats: any) => boolean;
-  diamonds: number;
-  xp: number;
-}
-
 export const BADGE_DEFINITIONS: BadgeDefinition[] = [
   { 
     id: 'starter',
@@ -342,7 +389,7 @@ export const BADGE_DEFINITIONS: BadgeDefinition[] = [
     nameKey: 'badge_starter',
     desc: 'Join 1 battle',
     descKey: 'badge_starter_desc',
-    requirement: (stats: any) => stats.total_battles >= 1,
+    requirement: (stats: BadgeStats) => (stats.total_battles ?? 0) >= 1,
     diamonds: 10,
     xp: 50
   },
@@ -353,7 +400,7 @@ export const BADGE_DEFINITIONS: BadgeDefinition[] = [
     nameKey: 'badge_lucky',
     desc: 'Win 5 battles',
     descKey: 'badge_lucky_desc',
-    requirement: (stats: any) => stats.total_wins >= 5,
+    requirement: (stats: BadgeStats) => (stats.total_wins ?? 0) >= 5,
     diamonds: 10,
     xp: 100
   },
@@ -364,7 +411,7 @@ export const BADGE_DEFINITIONS: BadgeDefinition[] = [
     nameKey: 'badge_veteran',
     desc: 'Join 50 battles',
     descKey: 'badge_veteran_desc',
-    requirement: (stats: any) => stats.total_battles >= 50,
+    requirement: (stats: BadgeStats) => (stats.total_battles ?? 0) >= 50,
     diamonds: 10,
     xp: 200
   },
@@ -375,7 +422,7 @@ export const BADGE_DEFINITIONS: BadgeDefinition[] = [
     nameKey: 'badge_rich',
     desc: 'Have 1000 💰',
     descKey: 'badge_rich_desc',
-    requirement: (stats: any) => stats.money >= 1000,
+    requirement: (stats: BadgeStats) => (stats.money ?? 0) >= 1000,
     diamonds: 25,
     xp: 300
   },
@@ -386,7 +433,7 @@ export const BADGE_DEFINITIONS: BadgeDefinition[] = [
     nameKey: 'badge_champion',
     desc: 'Win 20 battles',
     descKey: 'badge_champion_desc',
-    requirement: (stats: any) => stats.total_wins >= 20,
+    requirement: (stats: BadgeStats) => (stats.total_wins ?? 0) >= 20,
     diamonds: 25,
     xp: 400
   },
@@ -397,7 +444,7 @@ export const BADGE_DEFINITIONS: BadgeDefinition[] = [
     nameKey: 'badge_legendary',
     desc: 'Reach level 10',
     descKey: 'badge_legendary_desc',
-    requirement: (stats: any) => stats.level >= 10,
+    requirement: (stats: BadgeStats) => (stats.level ?? 0) >= 10,
     diamonds: 50,
     xp: 500
   },
@@ -408,7 +455,7 @@ export const BADGE_DEFINITIONS: BadgeDefinition[] = [
     nameKey: 'badge_highroller',
     desc: 'Spend 10,000 💰 on cases',
     descKey: 'badge_highroller_desc',
-    requirement: (stats: any) => (stats.total_spent || 0) >= 10000,
+    requirement: (stats: BadgeStats) => (stats.total_spent ?? 0) >= 10000,
     diamonds: 50,
     xp: 750
   },
@@ -419,7 +466,7 @@ export const BADGE_DEFINITIONS: BadgeDefinition[] = [
     nameKey: 'badge_jackpot',
     desc: 'Win an item worth more than 5,000 💰',
     descKey: 'badge_jackpot_desc',
-    requirement: (stats: any) => (stats.best_drop || 0) >= 5000,
+    requirement: (stats: BadgeStats) => (stats.best_drop ?? 0) >= 5000,
     diamonds: 75,
     xp: 1000
   },
@@ -430,7 +477,7 @@ export const BADGE_DEFINITIONS: BadgeDefinition[] = [
     nameKey: 'badge_ultimate',
     desc: 'Collect all other badges',
     descKey: 'badge_ultimate_desc',
-    requirement: (stats: any) => {
+    requirement: (stats: BadgeStats) => {
       const collected = stats.collected_badges || [];
       const mainBadges = BADGE_DEFINITIONS.slice(0, 8);
       return mainBadges.every(b => collected.includes(b.id));
@@ -444,13 +491,6 @@ export const BADGE_DEFINITIONS: BadgeDefinition[] = [
 // PAYMENT CONFIG
 // ============================================================
 
-interface PaymentConfig {
-  pix_brl_key: string;
-  pix_usd_key: string;
-  ltc_address: string;
-  discord_webhook: string;
-}
-
 export const PAYMENT_CONFIG: PaymentConfig = {
   pix_brl_key: 'alexomenor@gmail.com',
   pix_usd_key: 'SEU_EMAIL_OU_CHAVE_PIX_USD',
@@ -462,28 +502,13 @@ export const PAYMENT_CONFIG: PaymentConfig = {
 // INVENTORY CONFIG
 // ============================================================
 
-export const MAX_CAPACITY: number = 15;
+export const MAX_CAPACITY = 15;
 
 // ============================================================
 // PASSES CONFIG
 // ============================================================
 
-interface PassConfig {
-  id: string;
-  name: string;
-  description: string;
-  icon: string;
-  cost: number;
-  requires: string | null;
-  benefits: string[];
-  color: string;
-}
-
-interface PassesConfigType {
-  [key: string]: PassConfig;
-}
-
-export const PASSES_CONFIG: PassesConfigType = {
+export const PASSES_CONFIG: PassesConfig = {
   quick_roll: {
     id: 'quick_roll',
     name: 'Quick Roll',
@@ -541,8 +566,7 @@ export const PASSES_CONFIG: PassesConfigType = {
   }
 };
 
-// Mapa de quantidade -> pass requerido
-export const MULTI_OPEN_REQUIREMENTS: Record<number, string | null> = {
+export const MULTI_OPEN_REQUIREMENTS: MultiOpenRequirements = {
   1: null,
   2: 'multi_2x',
   3: 'multi_3x',
@@ -570,7 +594,18 @@ export function canOpenQuantity(ownedPasses: string[], quantity: number): boolea
 
 // ============================================================
 // UTILITY EXPORTS
-// =============================================================
-(window as any).RARITIES = RARITIES;
-(window as any).PAYMENT_CONFIG = PAYMENT_CONFIG;
-(window as any).PASSES_CONFIG = PASSES_CONFIG;
+// ============================================================
+declare global {
+  interface Window {
+    RARITIES: typeof RARITIES;
+    PAYMENT_CONFIG: typeof PAYMENT_CONFIG;
+    PASSES_CONFIG: typeof PASSES_CONFIG;
+  }
+}
+
+if (typeof window !== 'undefined') {
+  window.RARITIES = RARITIES;
+  window.PAYMENT_CONFIG = PAYMENT_CONFIG;
+  window.PASSES_CONFIG = PASSES_CONFIG;
+}
+
