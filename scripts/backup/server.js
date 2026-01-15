@@ -92,40 +92,40 @@ async function handleApiRequest(req, res, handlerPath) {
 
 // Rotas da API
 app.all('/api/_app', async (req, res) => {
-  await handleApiRequest(req, res, '../api/_app.js');
+  await handleApiRequest(req, res, '../api/_app.ts');
 });
 
 app.all('/api/_admin', async (req, res) => {
-  await handleApiRequest(req, res, '../api/_admin.js');
+  await handleApiRequest(req, res, '../api/_admin.ts');
 });
 
 app.all('/api/_caseopening', async (req, res) => {
-  await handleApiRequest(req, res, '../api/_caseopening.js');
+  await handleApiRequest(req, res, '../api/_caseopening.ts');
 });
 
 app.all('/api/_chat', async (req, res) => {
-  await handleApiRequest(req, res, '../api/_chat.js');
+  await handleApiRequest(req, res, '../api/_chat.ts');
 });
 
 app.all('/api/_inventory', async (req, res) => {
-  await handleApiRequest(req, res, '../api/_inventory.js');
+  await handleApiRequest(req, res, '../api/_inventory.ts');
 });
 
 app.all('/api/_shop', async (req, res) => {
-  await handleApiRequest(req, res, '../api/_shop.js');
+  await handleApiRequest(req, res, '../api/_shop.ts');
 });
 
 // Consolidated APIs
 app.all('/api/_profile', async (req, res) => {
-  await handleApiRequest(req, res, '../api/_profile.js');
+  await handleApiRequest(req, res, '../api/_profile.ts');
 });
 
 app.all('/api/_referrals', async (req, res) => {
-  await handleApiRequest(req, res, '../api/_referrals.js');
+  await handleApiRequest(req, res, '../api/_referrals.ts');
 });
 
 app.all('/api/_support', async (req, res) => {
-  await handleApiRequest(req, res, '../api/_support.js');
+  await handleApiRequest(req, res, '../api/_support.ts');
 });
 
 // ============================================================

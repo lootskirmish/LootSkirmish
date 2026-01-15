@@ -5,10 +5,13 @@
   "type": "module",
   "scripts": {
     "dev": "vite --config config/vite.config.js",
-    "server": "node scripts/server.js",
-    "start": "node scripts/server.js",
+    "server": "tsx scripts/server.js",
+    "start": "tsx scripts/server.js",
     "build": "vite build --config config/vite.config.js",
     "preview": "vite preview --config config/vite.config.js",
+    "build:api": "tsc",
+    "build:api:full": "tsc && node -e \"const fs=require('fs'); ['_admin','_app','_caseopening','_chat','_inventory','_profile','_referrals','_shop','_support','_utils'].forEach(f=>fs.copyFileSync(`dist/ts/api/${f}.js`,`api/${f}.js`))\" && echo ✅ API TypeScript compiled and deployed",
+    "typecheck": "tsc --noEmit",
     "email-processor": "node scripts/email-queue-processor.js",
     "email-processor:manual": "node scripts/email-queue-processor.js --manual"
   },
@@ -26,6 +29,9 @@
     "stripe": "^14.0.0"
   },
   "devDependencies": {
+    "@types/node": "^25.0.8",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3",
     "vite": "^5.0.0"
   }
 }
