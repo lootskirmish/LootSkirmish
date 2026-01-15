@@ -11,6 +11,8 @@ dotenv.config();
 interface PassConfig {
   enabled: boolean;
   cost?: number;
+  name?: string;
+  requires?: string | null;
 }
 
 interface OpenedItem {
@@ -32,6 +34,9 @@ interface ApiRequest {
     caseId?: string;
     quantity?: number;
     passTier?: string;
+    passId?: string;
+    cost?: number;
+    requiredPass?: string | null;
     [key: string]: any;
   };
   headers?: Record<string, string | string[] | undefined>;
@@ -40,7 +45,8 @@ interface ApiRequest {
 
 interface ApiResponse {
   status: (code: number) => ApiResponse;
-  json: (body: any) => ApiResponse;
+  json: (body: any) => void;
+  end: (body?: any) => void;
   setHeader: (name: string, value: string) => void;
 }
 
@@ -498,9 +504,12 @@ async function checkInventoryCapacity(userId: string, quantity: number, provided
 
 export async function handleOpenCases(req: ApiRequest, res: ApiResponse) {
   try {
-    const { userId, authToken, caseId, quantity } = req.body;
+    const { userId, authToken, caseId, quantity } = req.body ?? {};
 
     // Validação de quantidade com schema
+    if (!authToken) {
+      return res.status(400).json({ error: 'Missing required fields: authToken' });
+    }
     const qtyValidation = ValidationSchemas.diamonds.validate(quantity);
     if (!qtyValidation.success || !qtyValidation.data || qtyValidation.data < 1 || qtyValidation.data > 4) {
       const log = createSecureLog({
@@ -515,7 +524,7 @@ export async function handleOpenCases(req: ApiRequest, res: ApiResponse) {
     }
 
     if (!userId || !caseId || quantity === undefined || quantity === null) {
-      return res.status(400).json({ error: 'Missing required fields' });
+      return res.status(400).json({ error: 'Missing required fields: userId, caseId, quantity' });
     }
 
     const qty = Number(quantity);
@@ -533,7 +542,7 @@ export async function handleOpenCases(req: ApiRequest, res: ApiResponse) {
 
     const requiredPass = MULTI_REQUIREMENTS[qty];
     if (requiredPass) {
-      const session = await validateSessionAndFetchPlayerStats(supabase, authToken, userId, {
+      const session = await validateSessionAndFetchPlayerStats(supabase, authToken, userId, { 
         select: 'unlocked_passes'
       });
       
@@ -814,10 +823,10 @@ export async function handleOpenCases(req: ApiRequest, res: ApiResponse) {
 
 export async function handlePurchasePass(req: ApiRequest, res: ApiResponse) {
   try {
-    const { userId, authToken, passId, cost, requiredPass } = req.body;
+    const { userId, authToken, passId, cost, requiredPass } = req.body ?? {};
 
     // Validação básica
-    if (!userId || !passId || !cost) {
+    if (!userId || !passId || !cost || !authToken) {
       return res.status(400).json({ error: 'Missing required fields' });
     }
 
@@ -919,7 +928,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
   
-  const { action } = req.body;
+  const { action } = req.body ?? {};
 
   if (action === 'openCases') {
     return await handleOpenCases(req, res);
@@ -951,7 +960,7 @@ function calcDiscountUpgradeCost(level: number): number {
 
 export async function handleUpgradeCaseDiscount(req: ApiRequest, res: ApiResponse) {
   try {
-    const { userId, authToken } = req.body;
+    const { userId, authToken } = req.body ?? {};
 
     if (!userId || !authToken) {
       return res.status(400).json({ error: 'Missing required fields' });
@@ -1039,5 +1048,43 @@ export async function handleUpgradeCaseDiscount(req: ApiRequest, res: ApiRespons
   } catch (error) {
     console.error('FATAL ERROR in handleUpgradeCaseDiscount:', error);
     return res.status(500).json({ error: 'Internal server error' });
+  }
+}
+
+// ============================================================
+// PREVIEW GENERATION
+// ============================================================
+export async function handleGeneratePreview(req: ApiRequest, res: ApiResponse) {
+  try {
+    const { caseId, quantity } = req.body ?? {};
+    const qty = Number(quantity);
+
+    if (!caseId || !Number.isInteger(qty) || qty < 1 || qty > 4) {
+      return res.status(400).json({ error: 'Invalid request' });
+    }
+
+    const caseData = getCaseById(caseId);
+    if (!caseData) {
+      return res.status(404).json({ error: 'Case not found' });
+    }
+
+    const timestamp = Date.now();
+    const previewSeed = `preview-${caseId}-${timestamp}`;
+
+    const previews: OpenedItem[][] = [];
+    for (let slot = 0; slot < qty; slot++) {
+      const items: OpenedItem[] = [];
+      for (let i = 0; i < 96; i++) {
+        const itemSeed = `${previewSeed}-slot${slot}-item${i}`;
+        const item = generateItemSeeded(caseData, itemSeed);
+        if (item) items.push(item);
+      }
+      previews.push(items);
+    }
+
+    return res.status(200).json({ success: true, previews });
+  } catch (error) {
+    console.error('💥 Preview generation error:', error);
+    return res.status(500).json({ error: 'Failed to generate preview' });
   }
 }
