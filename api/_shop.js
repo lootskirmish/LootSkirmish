@@ -45,19 +45,12 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
 // CONFIGURAÇÃO DE PACOTES E ASSINATURAS
 // ============================================================
 
-/*
 const STRIPE_PRICE_IDS = {
   STARTER: 'price_1Sov9SC4sph1j0MSJggz6zvH',
   BRONZE: 'price_1SovAjC4sph1j0MSdwo9fdRM',
   SILVER: 'price_1SovCBC4sph1j0MS3ydPa7rP',
   GOLD: 'price_1SovD8C4sph1j0MSslCHqV8J',
   PREMIUM_SUB: 'price_1SpERfC4sph1j0MSbo6OCl7J'
-};
-*/
-
-// teste
-const STRIPE_PRICE_IDS = {
-  PREMIUM_SUB: 'price_1SpXYXC4sph1j0MShzK0ePcZ'
 };
 
 const PACKAGES = [
@@ -108,7 +101,7 @@ const SUBSCRIPTIONS = [
     id: 'sub_premium',
     name: 'PREMIUM SUBSCRIPTION',
     price: 4.99,
-    priceBRL: 0.01,
+    priceBRL: 29.99,
     priceId: STRIPE_PRICE_IDS.PREMIUM_SUB,
     duration: 30,
     diamonds: 250,

@@ -74,6 +74,16 @@ function ensureEls() {
   tabButtons ||= Array.from(document.querySelectorAll('[data-friends-tab]'));
 }
 
+function openPublicProfile(username) {
+  const target = (username || '').trim();
+  if (!target) return;
+  // Keep chat/friends overlays closed before routing to a profile
+  closeFriendsPanel();
+  closeChatIfOpen();
+  window.publicProfileUsername = target;
+  navigateTo(`/u/${encodeURIComponent(target)}`);
+}
+
 function closeChatIfOpen() {
   const chatPanel = document.getElementById('chat-panel');
   const chatBtn = document.getElementById('chat-toggle-icon');
@@ -172,10 +182,7 @@ function renderFriendsList() {
     `;
 
     // Abrir perfil público ao clicar no avatar ou no bloco meta
-    const navigateToProfile = () => {
-      closeFriendsPanel();
-      navigateTo(`/u/${encodeURIComponent(f.username)}`);
-    };
+    const navigateToProfile = () => openPublicProfile(f.username);
     const avatarEl = item.querySelector('.friend-avatar');
     const metaEl = item.querySelector('.friend-meta');
     avatarEl?.addEventListener('click', navigateToProfile);
@@ -229,10 +236,7 @@ function renderIncoming() {
     `;
 
     // Clique no avatar/meta abre perfil público
-    const go = () => {
-      closeFriendsPanel();
-      navigateTo(`/u/${encodeURIComponent(f.username)}`);
-    };
+    const go = () => openPublicProfile(f.username);
     item.querySelector('.friend-avatar')?.addEventListener('click', go);
     item.querySelector('.friend-meta')?.addEventListener('click', (e) => {
       if (!(e.target instanceof Element) || e.target.closest('.friend-actions')) return;
@@ -292,10 +296,7 @@ function renderOutgoing() {
     `;
 
     // Clique no avatar/meta abre perfil público
-    const go = () => {
-      closeFriendsPanel();
-      navigateTo(`/u/${encodeURIComponent(f.username)}`);
-    };
+    const go = () => openPublicProfile(f.username);
     item.querySelector('.friend-avatar')?.addEventListener('click', go);
     item.querySelector('.friend-meta')?.addEventListener('click', (e) => {
       if (!(e.target instanceof Element) || e.target.closest('.friend-actions')) return;
@@ -343,10 +344,7 @@ function renderSearchResults(results = []) {
     `;
 
     // Avatar/meta abre perfil público
-    const go = () => {
-      closeFriendsPanel();
-      navigateTo(`/u/${encodeURIComponent(r.username)}`);
-    };
+    const go = () => openPublicProfile(r.username);
     item.querySelector('.friend-avatar')?.addEventListener('click', go);
     item.querySelector('.friend-meta')?.addEventListener('click', (e) => {
       if (!(e.target instanceof Element) || e.target.closest('.friend-actions')) return;
