@@ -361,8 +361,8 @@ async function handleApproveOrder(req: ApiRequest, res: ApiResponse, validation:
     
     // 2. BUSCAR PEDIDO COM LOCK
     const { data: order, error: orderError } = await supabase
-      .from('purchase_orders')
-      .select('id, status, user_id, user_email, diamonds_base, diamonds_bonus')
+      .from('shop_orders')
+      .select('id, status, user_id, product_name, order_type, quantity, metadata')
       .eq('id', orderId)
       .single();
     
@@ -388,9 +388,9 @@ async function handleApproveOrder(req: ApiRequest, res: ApiResponse, validation:
       return res.status(400).json({ error: 'Invalid order data: missing user_id' });
     }
     
-    // Garantir que diamonds_base e diamonds_bonus sejam números
-    const diamondsBase = parseInt(order.diamonds_base) || 0;
-    const diamondsBonus = parseInt(order.diamonds_bonus) || 0;
+    // Calcular quantidade de diamonds baseada no tipo
+    const diamondsBase = order.order_type === 'package' ? Number(order.quantity || 0) : 0;
+    const diamondsBonus = 0;
     
     if (diamondsBase < 0 || diamondsBonus < 0) {
       logAction(userId, 'APPROVE_ORDER_INVALID_DATA', { orderId, reason: 'negative diamonds' }, req).catch(() => {});
@@ -424,11 +424,16 @@ async function handleApproveOrder(req: ApiRequest, res: ApiResponse, validation:
     
     // 6. ATUALIZAR PEDIDO COM LOCK OTIMISTA
     const { data: updateResult, error: updateOrderError } = await supabase
-      .from('purchase_orders')
+      .from('shop_orders')
       .update({
-        status: 'approved',
-        reviewed_by: userId,
-        reviewed_at: new Date().toISOString()
+        status: 'success',
+        metadata: {
+          ...(order?.metadata || {}),
+          admin_action: 'approved',
+          reviewed_by: userId,
+          reviewed_at: new Date().toISOString()
+        },
+        updated_at: new Date().toISOString()
       })
       .eq('id', orderId)
       .eq('status', 'pending') // LOCK OTIMISTA
@@ -473,11 +478,15 @@ async function handleApproveOrder(req: ApiRequest, res: ApiResponse, validation:
       
       // ROLLBACK: Reverter status do pedido
       await supabase
-        .from('purchase_orders')
+        .from('shop_orders')
         .update({ 
           status: 'pending', 
-          reviewed_by: null, 
-          reviewed_at: null 
+          metadata: {
+            ...(order?.metadata || {}),
+            rollback: true,
+            rollback_at: new Date().toISOString()
+          },
+          updated_at: new Date().toISOString()
         })
         .eq('id', orderId);
       
@@ -508,7 +517,6 @@ async function handleApproveOrder(req: ApiRequest, res: ApiResponse, validation:
     logAction(userId, 'APPROVE_ORDER_SUCCESS', {
       orderId,
       targetUserId: order.user_id,
-      targetEmail: order.user_email,
       diamondsAdded: totalDiamonds,
       newBalance: newBalance,
       adminRole: role
@@ -519,7 +527,7 @@ async function handleApproveOrder(req: ApiRequest, res: ApiResponse, validation:
     
     return res.status(200).json({
       success: true,
-      message: `Order approved! ${totalDiamonds} diamonds added to ${order.user_email}`,
+      message: `Order approved! ${totalDiamonds} diamonds added to user ${order.user_id}`,
       yourNewBalance: yourNewBalance
     });
     
@@ -553,8 +561,8 @@ async function handleRejectOrder(req: ApiRequest, res: ApiResponse, validation: 
     
     // 2. BUSCAR PEDIDO
     const { data: order, error: orderError } = await supabase
-      .from('purchase_orders')
-      .select('status, user_email, id')
+      .from('shop_orders')
+      .select('status, user_id, product_name, order_type, id, metadata')
       .eq('id', orderId)
       .single();
     
@@ -576,11 +584,16 @@ async function handleRejectOrder(req: ApiRequest, res: ApiResponse, validation: 
     
     // 4. ATUALIZAR STATUS COM LOCK OTIMISTA
     const { data: updateResult, error: updateError } = await supabase
-      .from('purchase_orders')
+      .from('shop_orders')
       .update({
-        status: 'rejected',
-        reviewed_by: userId,
-        reviewed_at: new Date().toISOString()
+        status: 'cancelled',
+        metadata: {
+          ...(order?.metadata || {}),
+          admin_action: 'rejected',
+          reviewed_by: userId,
+          reviewed_at: new Date().toISOString()
+        },
+        updated_at: new Date().toISOString()
       })
       .eq('id', orderId)
       .eq('status', 'pending') // LOCK OTIMISTA
@@ -613,7 +626,6 @@ async function handleRejectOrder(req: ApiRequest, res: ApiResponse, validation: 
     // 5. LOG DE SUCESSO
     logAction(userId, 'REJECT_ORDER_SUCCESS', {
       orderId,
-      targetEmail: order.user_email,
       adminRole: role
     }, req).catch(() => {});
     
