@@ -260,27 +260,17 @@ async function renderAdminPurchasesTab(): Promise<void> {
 
     const stats = await fetchAdminStats();
     
-    const pendingCountEl = document.getElementById('admin-pending-count');
-    const approvedCountEl = document.getElementById('admin-approved-count');
-    const totalUsdEl = document.getElementById('admin-total-usd');
-    const totalBrlEl = document.getElementById('admin-total-brl');
-    const totalLtcEl = document.getElementById('admin-total-ltc');
-    
-    if (pendingCountEl) pendingCountEl.textContent = stats.pendingCount;
-    if (approvedCountEl) approvedCountEl.textContent = stats.approvedCount;
-    if (totalUsdEl) totalUsdEl.textContent = `$ ${stats.totalUSD.toFixed(2)}`;
-    if (totalBrlEl) totalBrlEl.textContent = `R$ ${stats.totalBRL.toFixed(2)}`;
-    if (totalLtcEl) totalLtcEl.textContent = `${stats.totalLTC.toFixed(4)} LTC`;
-    
-        // Update new stats elements
+    // Update summary dashboard
         const totalAmountEl = document.getElementById('admin-total-amount');
         const totalQuantityEl = document.getElementById('admin-total-quantity');
+    const orderCountEl = document.getElementById('admin-order-count');
         const statusBreakdownEl = document.getElementById('admin-status-breakdown');
         const paymentMethodEl = document.getElementById('admin-payment-methods');
         const orderTypeEl = document.getElementById('admin-order-types');
     
         if (totalAmountEl) totalAmountEl.textContent = `$ ${stats.totalAmount.toFixed(2)}`;
         if (totalQuantityEl) totalQuantityEl.textContent = String(stats.totalQuantity);
+    if (orderCountEl) orderCountEl.textContent = String(stats.orderCount);
     
         // Status breakdown
         if (statusBreakdownEl) {
@@ -578,39 +568,62 @@ async function fetchAdminStats(): Promise<AdminStats> {
       throw new Error('Unauthorized');
     }
     
-    // Fetch all shop_orders for comprehensive stats
-    const { data: allOrders } = await supabase
-      .from('shop_orders')
-      .select('*')
-      .order('created_at', { ascending: false });
-    
-    const orders = allOrders || [];
-    
-    // Calculate totals and breakdowns
+    // Prefer aggregated view if available
     let totalAmount = 0;
     let totalQuantity = 0;
     const statusBreakdown: Record<string, number> = {};
     const paymentMethodBreakdown: Record<string, number> = {};
     const orderTypeBreakdown: Record<string, number> = {};
-    
+
+    const { data: report, error: reportError } = await supabase
+      .from('shop_sales_report')
+      .select('*')
+      .limit(1000);
+
+    if (!reportError && report && report.length > 0) {
+      report.forEach(row => {
+        totalAmount += Number(row.total_amount || 0);
+        totalQuantity += Number(row.total_quantity || 0);
+        const count = Number(row.order_count || 0);
+        const status = row.status || 'unknown';
+        const method = row.payment_method || 'unknown';
+        const type = row.order_type || 'unknown';
+        statusBreakdown[status] = (statusBreakdown[status] || 0) + count;
+        paymentMethodBreakdown[method] = (paymentMethodBreakdown[method] || 0) + count;
+        orderTypeBreakdown[type] = (orderTypeBreakdown[type] || 0) + count;
+      });
+      return {
+        approvedCount: statusBreakdown['completed'] || 0,
+        pendingCount: statusBreakdown['pending'] || 0,
+        totalUSD: 0,
+        totalBRL: 0,
+        totalLTC: 0,
+        totalAmount,
+        totalQuantity,
+        orderCount: Object.values(statusBreakdown).reduce((a,b)=>a+b,0),
+        statusBreakdown,
+        paymentMethodBreakdown,
+        orderTypeBreakdown
+      };
+    }
+
+    // Fallback: compute from shop_orders
+    const { data: allOrders } = await supabase
+      .from('shop_orders')
+      .select('*');
+
+    const orders = allOrders || [];
     orders.forEach(order => {
-      // Amount and Quantity
-      totalAmount += order.total_amount || 0;
-      totalQuantity += order.total_quantity || 0;
-      
-      // Status breakdown
+      totalAmount += Number(order.total_amount ?? order.amount_paid ?? 0);
+      totalQuantity += Number(order.total_quantity ?? order.quantity ?? 0);
       const status = order.status || 'unknown';
       statusBreakdown[status] = (statusBreakdown[status] || 0) + 1;
-      
-      // Payment method breakdown
       const paymentMethod = order.payment_method || 'unknown';
       paymentMethodBreakdown[paymentMethod] = (paymentMethodBreakdown[paymentMethod] || 0) + 1;
-      
-      // Order type breakdown
       const orderType = order.order_type || 'unknown';
       orderTypeBreakdown[orderType] = (orderTypeBreakdown[orderType] || 0) + 1;
     });
-    
+
     return {
       approvedCount: statusBreakdown['completed'] || 0,
       pendingCount: statusBreakdown['pending'] || 0,
@@ -640,7 +653,7 @@ async function fetchAdminStats(): Promise<AdminStats> {
 /**
  * Busca pedidos pendentes (COM VERIFICAÇÃO)
  */
-async function fetchPendingOrders(): Promise<PurchaseOrder[]> {
+async function fetchPendingOrders(): Promise<any[]> {
   try {
     // Verificar permissão
     const { isAdmin } = await checkIsAdmin();
@@ -649,11 +662,11 @@ async function fetchPendingOrders(): Promise<PurchaseOrder[]> {
     }
     
     const { data, error } = await supabase
-      .from('purchase_orders')
-      .select('*')
+      .from('shop_orders')
+      .select('id,user_id,product_name,order_type,payment_method,status,created_at,total_amount,total_quantity,amount_paid,quantity')
       .eq('status', 'pending')
       .order('created_at', { ascending: false })
-      .limit(100); // Limitar quantidade
+      .limit(100);
     
     if (error) {
       console.error('Error retrieving orders:', error);
@@ -690,53 +703,47 @@ async function renderAdminPendingOrders(): Promise<void> {
     // SANITIZAR DADOS
     list.innerHTML = orders.map(order => {
       const date = new Date(order.created_at).toLocaleString('en-US');
-      const totalDiamonds = (order.diamonds_base || 0) + (order.diamonds_bonus || 0);
-      const orderId = String(order.id || '').slice(0, 8);
-      const userEmail = sanitizeHTML(order.user_email || 'N/A');
-      const amountPaid = parseFloat(order.amount_paid || 0).toFixed(2);
-      const currency = sanitizeHTML(String(order.currency || 'N/A').toUpperCase());
+      const orderId = String(order.id || '').slice(0, 12);
+      const amount = parseFloat((order.total_amount ?? order.amount_paid ?? 0) as number).toFixed(2);
+      const quantity = Number(order.total_quantity ?? order.quantity ?? 0);
       const paymentMethod = sanitizeHTML(String(order.payment_method || 'N/A').toUpperCase());
+      const productName = sanitizeHTML(String(order.product_name || 'N/A'));
+      const orderType = sanitizeHTML(String(order.order_type || 'N/A'));
       
       return `
         <div class="admin-order-card" data-order-id="${orderId}">
           <div class="admin-order-header">
-            <span class="admin-order-id">#${orderId}...</span>
+            <span class="admin-order-id">#${orderId}</span>
             <span class="admin-order-date">${date}</span>
           </div>
           
           <div class="admin-order-body">
             <div class="admin-order-row">
-              <span>👤 Email:</span>
-              <span>${userEmail}</span>
+              <span>📋 Product:</span>
+              <span>${productName}</span>
             </div>
             <div class="admin-order-row">
-              <span>💎 Diamonds:</span>
-              <span>${order.diamonds_base} + ${order.diamonds_bonus} = <strong>${totalDiamonds}</strong></span>
+              <span>📦 Quantity:</span>
+              <span><strong>${quantity}</strong></span>
             </div>
             <div class="admin-order-row">
-              <span>💰 Value:</span>
-              <span class="order-value">${amountPaid} ${currency}</span>
+              <span>💰 Amount:</span>
+              <span class="order-value">$ ${amount}</span>
             </div>
             <div class="admin-order-row">
               <span>💳 Method:</span>
               <span>${paymentMethod}</span>
             </div>
-          </div>
-          
-          <div class="admin-order-actions">
-            <button class="approve-btn" data-order-id="${order.id}">
-              ✅ Approve
-            </button>
-            <button class="reject-btn" data-order-id="${order.id}">
-              ❌ Reject
-            </button>
+            <div class="admin-order-row">
+              <span>📋 Order Type:</span>
+              <span>${orderType}</span>
+            </div>
           </div>
         </div>
       `;
     }).join('');
 
-    // Delegação (listeners únicos)
-    bindAdminOrderDelegationOnce();
+    // Sem ações de aprovação/rejeição na nova integração
     
   } catch (err) {
     console.error('❌ Error rendering requests:', err);
@@ -1365,7 +1372,7 @@ export async function startAdminPolling(): Promise<void> {
       {
         event: '*',
         schema: 'public',
-        table: 'purchase_orders'
+        table: 'shop_orders'
       },
       async (payload) => {
         

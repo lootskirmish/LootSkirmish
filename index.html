@@ -1027,32 +1027,46 @@
     <div id="admin-content" class="admin-content">
       <!-- SEÇÃO COMPRAS -->
       <div id="admin-purchases-section" class="admin-section">
-        <!-- Stats -->
-        <div class="admin-stats-grid">
-          <div class="admin-stat-card">
-            <div class="admin-stat-icon">⏳</div>
-            <div class="admin-stat-value" id="admin-pending-count">0</div>
-            <div class="admin-stat-label">Pending</div>
+        <!-- Dashboard Summary -->
+        <div class="admin-summary-grid">
+          <div class="admin-summary-card">
+            <div class="summary-icon">💰</div>
+            <div class="summary-value" id="admin-total-amount">$ 0.00</div>
+            <div class="summary-label">Total Revenue</div>
           </div>
-          <div class="admin-stat-card">
-            <div class="admin-stat-icon">✅</div>
-            <div class="admin-stat-value" id="admin-approved-count">0</div>
-            <div class="admin-stat-label">Approved</div>
+          <div class="admin-summary-card">
+            <div class="summary-icon">📦</div>
+            <div class="summary-value" id="admin-total-quantity">0</div>
+            <div class="summary-label">Total Items</div>
           </div>
-          <div class="admin-stat-card">
-            <div class="admin-stat-icon">usd</div>
-            <div class="admin-stat-value" id="admin-total-usd">$ 0</div>
-            <div class="admin-stat-label">Total USD</div>
+          <div class="admin-summary-card">
+            <div class="summary-icon">🧾</div>
+            <div class="summary-value" id="admin-order-count">0</div>
+            <div class="summary-label">Orders</div>
           </div>
-          <div class="admin-stat-card">
-            <div class="admin-stat-icon">🇧🇷</div>
-            <div class="admin-stat-value" id="admin-total-brl">R$ 0</div>
-            <div class="admin-stat-label">Total BRL</div>
+        </div>
+
+        <!-- Breakdown Panels -->
+        <div class="admin-breakdown-grid">
+          <div class="breakdown-section">
+            <div class="breakdown-title">📊 Status Breakdown</div>
+            <div id="admin-status-breakdown">
+              <div class="stat-item"><span>pending</span>: <strong>0</strong></div>
+            </div>
           </div>
-          <div class="admin-stat-card">
-            <div class="admin-stat-icon">🪙</div>
-            <div class="admin-stat-value" id="admin-total-ltc">0 LTC</div>
-            <div class="admin-stat-label">Total LTC</div>
+          
+          <div class="breakdown-section">
+            <div class="breakdown-title">💳 Payment Methods</div>
+            <div id="admin-payment-methods">
+              <div class="stat-item"><span>unknown</span>: <strong>0</strong></div>
+            </div>
+          </div>
+          
+          <div class="breakdown-section">
+            <div class="breakdown-title">📋 Order Types</div>
+            <div id="admin-order-types">
+              <div class="stat-item"><span>unknown</span>: <strong>0</strong></div>
+            </div>
           </div>
         </div>
         
