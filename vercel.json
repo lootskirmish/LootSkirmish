@@ -2,11 +2,11 @@
   "version": 2,
   "builds": [
     { "src": "package.json", "use": "@vercel/static-build", "config": { "distDir": "dist" } },
-    { "src": "api/**/*.js", "use": "@vercel/node" }
+    { "src": "api/**/*.ts", "use": "@vercel/node" }
   ],
   "routes": [
-    { "src": "/api/webhooks/shop", "dest": "/api/_shop.js" },
-    { "src": "/api/([^/]+)", "dest": "/api/$1.js" },
+    { "src": "/api/webhooks/shop", "dest": "/api/_shop.ts" },
+    { "src": "/api/([^/]+)", "dest": "/api/$1.ts" },
     { "handle": "filesystem" },
     { "src": "/(.*)", "dest": "/index.html" }
   ]

@@ -103,42 +103,42 @@ async function handleApiRequest(req: VercelRequest, res: Response, handlerPath: 
   }
 }
 
-// Rotas da API
+// Rotas da API (usar arquivos compilados .js de dist/ts/api)
 app.all('/api/_app', async (req: VercelRequest, res: Response) => {
-  await handleApiRequest(req, res, '../api/_app.ts');
+  await handleApiRequest(req, res, '../dist/ts/api/_app.js');
 });
 
 app.all('/api/_admin', async (req: VercelRequest, res: Response) => {
-  await handleApiRequest(req, res, '../api/_admin.ts');
+  await handleApiRequest(req, res, '../dist/ts/api/_admin.js');
 });
 
 app.all('/api/_caseopening', async (req: VercelRequest, res: Response) => {
-  await handleApiRequest(req, res, '../api/_caseopening.ts');
+  await handleApiRequest(req, res, '../dist/ts/api/_caseopening.js');
 });
 
 app.all('/api/_chat', async (req: VercelRequest, res: Response) => {
-  await handleApiRequest(req, res, '../api/_chat.ts');
+  await handleApiRequest(req, res, '../dist/ts/api/_chat.js');
 });
 
 app.all('/api/_inventory', async (req: VercelRequest, res: Response) => {
-  await handleApiRequest(req, res, '../api/_inventory.ts');
+  await handleApiRequest(req, res, '../dist/ts/api/_inventory.js');
 });
 
 app.all('/api/_shop', async (req: VercelRequest, res: Response) => {
-  await handleApiRequest(req, res, '../api/_shop.ts');
+  await handleApiRequest(req, res, '../dist/ts/api/_shop.js');
 });
 
 // Consolidated APIs
 app.all('/api/_profile', async (req: VercelRequest, res: Response) => {
-  await handleApiRequest(req, res, '../api/_profile.ts');
+  await handleApiRequest(req, res, '../dist/ts/api/_profile.js');
 });
 
 app.all('/api/_referrals', async (req: VercelRequest, res: Response) => {
-  await handleApiRequest(req, res, '../api/_referrals.ts');
+  await handleApiRequest(req, res, '../dist/ts/api/_referrals.js');
 });
 
 app.all('/api/_support', async (req: VercelRequest, res: Response) => {
-  await handleApiRequest(req, res, '../api/_support.ts');
+  await handleApiRequest(req, res, '../dist/ts/api/_support.js');
 });
 
 // ============================================================
