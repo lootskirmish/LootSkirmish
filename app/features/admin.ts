@@ -20,6 +20,13 @@ interface AdminStats {
   totalUSD: number;
   totalBRL: number;
   totalLTC: number;
+  // New shop_orders stats
+  totalAmount: number;
+  totalQuantity: number;
+  orderCount: number;
+  statusBreakdown: Record<string, number>;
+  paymentMethodBreakdown: Record<string, number>;
+  orderTypeBreakdown: Record<string, number>;
 }
 
 interface PurchaseOrder {
@@ -264,6 +271,40 @@ async function renderAdminPurchasesTab(): Promise<void> {
     if (totalUsdEl) totalUsdEl.textContent = `$ ${stats.totalUSD.toFixed(2)}`;
     if (totalBrlEl) totalBrlEl.textContent = `R$ ${stats.totalBRL.toFixed(2)}`;
     if (totalLtcEl) totalLtcEl.textContent = `${stats.totalLTC.toFixed(4)} LTC`;
+    
+        // Update new stats elements
+        const totalAmountEl = document.getElementById('admin-total-amount');
+        const totalQuantityEl = document.getElementById('admin-total-quantity');
+        const statusBreakdownEl = document.getElementById('admin-status-breakdown');
+        const paymentMethodEl = document.getElementById('admin-payment-methods');
+        const orderTypeEl = document.getElementById('admin-order-types');
+    
+        if (totalAmountEl) totalAmountEl.textContent = `$ ${stats.totalAmount.toFixed(2)}`;
+        if (totalQuantityEl) totalQuantityEl.textContent = String(stats.totalQuantity);
+    
+        // Status breakdown
+        if (statusBreakdownEl) {
+          const statusHTML = Object.entries(stats.statusBreakdown)
+            .map(([status, count]) => `<div class="stat-item"><span>${status}</span>: <strong>${count}</strong></div>`)
+            .join('');
+          statusBreakdownEl.innerHTML = statusHTML;
+        }
+    
+        // Payment methods breakdown
+        if (paymentMethodEl) {
+          const paymentHTML = Object.entries(stats.paymentMethodBreakdown)
+            .map(([method, count]) => `<div class="stat-item"><span>${method}</span>: <strong>${count}</strong></div>`)
+            .join('');
+          paymentMethodEl.innerHTML = paymentHTML;
+        }
+    
+        // Order types breakdown
+        if (orderTypeEl) {
+          const typeHTML = Object.entries(stats.orderTypeBreakdown)
+            .map(([type, count]) => `<div class="stat-item"><span>${type}</span>: <strong>${count}</strong></div>`)
+            .join('');
+          orderTypeEl.innerHTML = typeHTML;
+        }
     
     await renderAdminPendingOrders();
     await renderAdminHistoryOrders();
@@ -537,46 +578,51 @@ async function fetchAdminStats(): Promise<AdminStats> {
       throw new Error('Unauthorized');
     }
     
-    const { count: approvedCount } = await supabase
-      .from('purchase_orders')
-      .select('*', { count: 'exact', head: true })
-      .eq('status', 'approved');
+    // Fetch all shop_orders for comprehensive stats
+    const { data: allOrders } = await supabase
+      .from('shop_orders')
+      .select('*')
+      .order('created_at', { ascending: false });
     
-    const { data: usdOrders } = await supabase
-      .from('purchase_orders')
-      .select('amount_paid')
-      .eq('status', 'approved')
-      .eq('currency', 'USD');
+    const orders = allOrders || [];
     
-    const totalUSD = usdOrders?.reduce((sum, o) => sum + (o.amount_paid || 0), 0) || 0;
+    // Calculate totals and breakdowns
+    let totalAmount = 0;
+    let totalQuantity = 0;
+    const statusBreakdown: Record<string, number> = {};
+    const paymentMethodBreakdown: Record<string, number> = {};
+    const orderTypeBreakdown: Record<string, number> = {};
     
-    const { data: brlOrders } = await supabase
-      .from('purchase_orders')
-      .select('amount_paid')
-      .eq('status', 'approved')
-      .eq('currency', 'BRL');
-    
-    const totalBRL = brlOrders?.reduce((sum, o) => sum + (o.amount_paid || 0), 0) || 0;
-    
-    const { data: ltcOrders } = await supabase
-      .from('purchase_orders')
-      .select('amount_paid')
-      .eq('status', 'approved')
-      .eq('currency', 'LTC');
-    
-    const totalLTC = ltcOrders?.reduce((sum, o) => sum + (o.amount_paid || 0), 0) || 0;
-    
-    const { count: pendingCount } = await supabase
-      .from('purchase_orders')
-      .select('*', { count: 'exact', head: true })
-      .eq('status', 'pending');
+    orders.forEach(order => {
+      // Amount and Quantity
+      totalAmount += order.total_amount || 0;
+      totalQuantity += order.total_quantity || 0;
+      
+      // Status breakdown
+      const status = order.status || 'unknown';
+      statusBreakdown[status] = (statusBreakdown[status] || 0) + 1;
+      
+      // Payment method breakdown
+      const paymentMethod = order.payment_method || 'unknown';
+      paymentMethodBreakdown[paymentMethod] = (paymentMethodBreakdown[paymentMethod] || 0) + 1;
+      
+      // Order type breakdown
+      const orderType = order.order_type || 'unknown';
+      orderTypeBreakdown[orderType] = (orderTypeBreakdown[orderType] || 0) + 1;
+    });
     
     return {
-      approvedCount: approvedCount || 0,
-      pendingCount: pendingCount || 0,
-      totalUSD,
-      totalBRL,
-      totalLTC
+      approvedCount: statusBreakdown['completed'] || 0,
+      pendingCount: statusBreakdown['pending'] || 0,
+      totalUSD: 0,
+      totalBRL: 0,
+      totalLTC: 0,
+      totalAmount,
+      totalQuantity,
+      orderCount: orders.length,
+      statusBreakdown,
+      paymentMethodBreakdown,
+      orderTypeBreakdown
     };
     
   } catch (err) {
@@ -730,11 +776,10 @@ async function renderAdminHistoryOrders(): Promise<void> {
     }
     
     const { data: orders, error } = await supabase
-      .from('purchase_orders')
+      .from('shop_orders')
       .select('*')
-      .neq('status', 'pending')
-      .order('reviewed_at', { ascending: false })
-      .limit(50);
+      .order('created_at', { ascending: false })
+      .limit(100);
     
     const list = document.getElementById('admin-history-list');
     
@@ -745,54 +790,86 @@ async function renderAdminHistoryOrders(): Promise<void> {
       return;
     }
     
-    list.innerHTML = orders.map(order => {
-      const date = new Date(order.reviewed_at || order.created_at).toLocaleString('en-US');
-      const totalDiamonds = (order.diamonds_base || 0) + (order.diamonds_bonus || 0);
-      const orderId = String(order.id || '').slice(0, 8);
-      const userEmail = sanitizeHTML(order.user_email || 'N/A');
-      const amountPaid = parseFloat(order.amount_paid || 0).toFixed(2);
-      const currency = sanitizeHTML(String(order.currency || 'N/A').toUpperCase());
-      
-      const statusColors = {
-        approved: '#22c55e',
-        rejected: '#ef4444'
-      };
-      
-      const statusText = {
-        approved: '✅ Approved',
-        rejected: '❌ Rejected'
-      };
-      
-      const status = order.status || 'unknown';
-      
-      return `
-        <div class="admin-order-card history" style="border-left-color: ${statusColors[status] || '#999'}">
-          <div class="admin-order-header">
-            <span class="admin-order-id">#${orderId}...</span>
-            <span class="admin-order-status" style="color: ${statusColors[status] || '#999'}">${statusText[status] || status}</span>
-          </div>
-          
-          <div class="admin-order-body">
-            <div class="admin-order-row">
-              <span>👤 Email:</span>
-              <span>${userEmail}</span>
-            </div>
-            <div class="admin-order-row">
-              <span>💎 Diamonds:</span>
-              <span>${totalDiamonds}</span>
-            </div>
-            <div class="admin-order-row">
-              <span>💰 Value:</span>
-              <span>${amountPaid} ${currency}</span>
-            </div>
-            <div class="admin-order-row">
-              <span>📅 Date:</span>
-              <span>${date}</span>
-            </div>
-          </div>
+    // Create collapsible history with summary
+    const historyHTML = `
+      <div class="admin-history-container">
+        <div class="admin-history-summary">
+          <p>📊 Showing <strong>${orders.length}</strong> orders</p>
         </div>
-      `;
-    }).join('');
+        <div class="admin-history-list">
+          ${orders.map((order, idx) => {
+            const orderId = String(order.id || '').slice(0, 12);
+            const date = new Date(order.created_at).toLocaleString('en-US');
+            const amount = parseFloat(order.total_amount || 0).toFixed(2);
+            const quantity = order.total_quantity || 0;
+            const status = order.status || 'unknown';
+            const method = order.payment_method || 'N/A';
+            const type = order.order_type || 'N/A';
+            const userId = sanitizeHTML(order.user_id || 'N/A');
+            
+            const statusColor = {
+              'completed': '#22c55e',
+              'pending': '#f59e0b',
+              'cancelled': '#ef4444',
+              'failed': '#ec4899'
+            }[status] || '#6b7280';
+            
+            const statusEmoji = {
+              'completed': '✅',
+              'pending': '⏳',
+              'cancelled': '❌',
+              'failed': '⚠️'
+            }[status] || '❓';
+            
+            return `
+              <div class="admin-order-card expandable" style="border-left: 4px solid ${statusColor}">
+                <div class="admin-order-header" onclick="this.closest('.expandable').classList.toggle('expanded')">
+                  <div class="order-header-left">
+                    <span class="admin-order-id">#${orderId}</span>
+                    <span class="order-date">${date}</span>
+                  </div>
+                  <div class="order-header-right">
+                    <span class="admin-order-status" style="color: ${statusColor}">${statusEmoji} ${status}</span>
+                    <span class="expand-icon">▼</span>
+                  </div>
+                </div>
+                
+                <div class="admin-order-body expanded-content">
+                  <div class="admin-order-row">
+                    <span>👤 User ID:</span>
+                    <span>${userId}</span>
+                  </div>
+                  <div class="admin-order-row">
+                    <span>💰 Amount:</span>
+                    <span><strong>$ ${amount}</strong></span>
+                  </div>
+                  <div class="admin-order-row">
+                    <span>📦 Quantity:</span>
+                    <span><strong>${quantity}</strong></span>
+                  </div>
+                  <div class="admin-order-row">
+                    <span>💳 Payment Method:</span>
+                    <span>${sanitizeHTML(method)}</span>
+                  </div>
+                  <div class="admin-order-row">
+                    <span>📋 Order Type:</span>
+                    <span>${sanitizeHTML(type)}</span>
+                  </div>
+                  ${order.metadata ? `
+                    <div class="admin-order-row">
+                      <span>📝 Metadata:</span>
+                      <span><code>${sanitizeHTML(JSON.stringify(order.metadata))}</code></span>
+                    </div>
+                  ` : ''}
+                </div>
+              </div>
+            `;
+          }).join('')}
+        </div>
+      </div>
+    `;
+    
+    list.innerHTML = historyHTML;
     
   } catch (err) {
     console.error('Error rendering history:', err);

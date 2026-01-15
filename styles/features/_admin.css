@@ -753,6 +753,114 @@
 }
 
 .no-data {
+
+  /* ============ EXPANDABLE HISTORY ============ */
+  .admin-history-container {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .admin-history-summary {
+    padding: 12px 16px;
+    background: rgba(var(--primary-rgb), 0.1);
+    border: 1px solid rgba(var(--primary-rgb), 0.2);
+    border-radius: 8px;
+    text-align: center;
+    font-weight: 600;
+    color: var(--primary);
+  }
+
+  .admin-history-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .admin-order-card.expandable {
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+
+  .admin-order-card.expandable .admin-order-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    cursor: pointer;
+    user-select: none;
+  }
+
+  .order-header-left {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex: 1;
+  }
+
+  .order-header-right {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .expand-icon {
+    transition: transform 0.2s ease;
+    font-size: 0.8rem;
+    color: rgba(var(--text-rgb), 0.5);
+  }
+
+  .admin-order-card.expandable:not(.expanded) .expanded-content {
+    display: none;
+  }
+
+  .admin-order-card.expandable.expanded .expand-icon {
+    transform: rotate(180deg);
+  }
+
+  /* ============ STATS BREAKDOWN ============ */
+  .admin-breakdown-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 12px;
+    margin-bottom: 20px;
+  }
+
+  .breakdown-section {
+    background: rgba(var(--secondary-rgb), 0.6);
+    border: 1px solid rgba(var(--primary-rgb), 0.2);
+    border-radius: 8px;
+    padding: 12px;
+  }
+
+  .breakdown-title {
+    font-weight: 600;
+    color: var(--primary);
+    margin-bottom: 8px;
+    font-size: 0.9rem;
+  }
+
+  .stat-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 4px 0;
+    font-size: 0.85rem;
+    border-bottom: 1px solid rgba(var(--primary-rgb), 0.1);
+  }
+
+  .stat-item:last-child {
+    border-bottom: none;
+  }
+
+  .stat-item span:first-child {
+    color: rgba(var(--text-rgb), 0.7);
+    text-transform: capitalize;
+  }
+
+  .stat-item strong {
+    color: var(--accent);
+    font-weight: 700;
+  }
   text-align: center;
   padding: 24px;
   color: rgba(var(--text-rgb),0.5);
