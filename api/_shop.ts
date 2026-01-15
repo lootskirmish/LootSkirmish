@@ -12,7 +12,17 @@ import {
   logAudit,
   getIdentifier,
   checkRateLimit,
-  cleanupOldEntries
+  cleanupOldEntries,
+  ProgressiveRateLimiter,
+  ValidationSchemas,
+  verifyStripeSignature,
+  verifyMercadoPagoSignature,
+  WebhookReplayProtection,
+  PendingOrderManager,
+  createSecureLog,
+  SecurityMonitor,
+  maskUserId,
+  maskEmail
 } from './_utils.js';
 
 import { 
@@ -91,6 +101,25 @@ const supabase: SupabaseClient = createClient(
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
   apiVersion: '2023-10-16'
 });
+
+// ============================================================
+// SECURITY INITIALIZATION
+// ============================================================
+
+const progressiveRateLimiter = new ProgressiveRateLimiter();
+const webhookReplayProtection = new WebhookReplayProtection();
+const pendingOrderManager = new PendingOrderManager();
+const securityMonitor = new SecurityMonitor();
+
+let lastSecurityCleanupAt = 0;
+function maybeCleanupSecurity(): void {
+  const now = Date.now();
+  if (now - lastSecurityCleanupAt < 15 * 60_000) return; // 15 min
+  lastSecurityCleanupAt = now;
+  webhookReplayProtection.cleanup();
+  pendingOrderManager.cleanup();
+  progressiveRateLimiter.cleanup();
+}
 
 // ============================================================
 // CONFIGURAÇÃO DE PACOTES E ASSINATURAS
@@ -950,10 +979,9 @@ async function handleCreateOrder(req: ApiRequest, res: ApiResponse, body: any): 
 async function handleWebhook(req: ApiRequest, res: ApiResponse, { rawBody, parsedBody }: { rawBody?: Buffer | null; parsedBody?: any } = {}): Promise<void> {
   try {
     const gateway = req.query?.gateway || 'stripe';
+    const ip = getIdentifier(req);
 
-    console.log('🔔 Webhook received from:', gateway);
-    console.log('🔔 Headers:', req.headers);
-    console.log('🔔 Body (parsed):', parsedBody);
+    console.log('🔔 Webhook received from:', gateway, '| IP:', ip);
 
     // ============================================================
     // STRIPE WEBHOOK
@@ -969,6 +997,7 @@ async function handleWebhook(req: ApiRequest, res: ApiResponse, { rawBody, parse
 
       if (!sig) {
         console.error('❌ [Stripe] Missing signature header');
+        securityMonitor.recordWebhookFailure();
         return res.status(400).json({ error: 'Missing signature header' });
       }
 
@@ -978,6 +1007,7 @@ async function handleWebhook(req: ApiRequest, res: ApiResponse, { rawBody, parse
 
         if (!payload || !payload.length) {
           console.error('❌ Missing raw body for Stripe webhook');
+          securityMonitor.recordWebhookFailure();
           return res.status(400).json({ error: 'Missing payload' });
         }
 
@@ -985,26 +1015,46 @@ async function handleWebhook(req: ApiRequest, res: ApiResponse, { rawBody, parse
       } catch (err) {
         const error = err as any;
         console.error('❌ Webhook signature verification failed:', error.message);
+        securityMonitor.recordWebhookFailure();
+        const log = createSecureLog({
+          action: 'STRIPE_WEBHOOK_INVALID_SIGNATURE',
+          ip,
+          statusCode: 400,
+          isSecurityEvent: true
+        });
+        console.log('🚨', JSON.stringify(log));
         return res.status(400).json({ error: 'Invalid signature' });
       }
 
+      // Replay attack protection
+      if (webhookReplayProtection.hasBeenProcessed(event.id)) {
+        console.warn('⚠️ Stripe webhook already processed:', event.id);
+        securityMonitor.recordWebhookFailure();
+        return res.status(200).json({ received: true, duplicate: true });
+      }
+
       console.log('✅ Stripe webhook verified:', event.type);
+      webhookReplayProtection.markAsProcessed(event.id);
 
       if (event.type === 'checkout.session.completed') {
         const session = event.data.object;
         const orderId = session.metadata?.order_id || session.client_reference_id;
 
-        console.log('💳 Stripe session completed:', {
-          sessionId: session.id,
-          orderId: orderId,
-          paymentStatus: session.payment_status,
-          amount: session.amount_total,
-          currency: session.currency,
-          customerEmail: session.customer_email
+        const log = createSecureLog({
+          action: 'STRIPE_PAYMENT_COMPLETED',
+          userId: session.metadata?.user_id,
+          ip,
+          statusCode: 200,
+          details: {
+            sessionId: session.id,
+            orderId,
+            amount: session.amount_total,
+            currency: session.currency
+          }
         });
+        console.log('✅', JSON.stringify(log));
 
         if (orderId) {
-          console.log('🔄 Processing payment with Stripe session details');
           await processSuccessfulPayment(orderId, { gateway: 'stripe', paymentDetails: session });
         } else {
           console.warn('⚠️ Order ID not found in Stripe session metadata');
@@ -1024,8 +1074,33 @@ async function handleWebhook(req: ApiRequest, res: ApiResponse, { rawBody, parse
       const topic = (req.query?.topic || req.query?.type || notification.type || '').toLowerCase();
       const notificationId = req.query?.id || notification.id;
       
-      console.log('📦 MercadoPago notification:', JSON.stringify(notification, null, 2));
-      console.log('📦 MercadoPago query params:', req.query);
+      // Signature verification (optional but recommended)
+      const xSignature = req.headers?.['x-signature'] as string;
+      const webhookSecret = process.env.MERCADOPAGO_WEBHOOK_SECRET;
+      
+      if (webhookSecret && xSignature && notification.id && notification.topic) {
+        const isValid = verifyMercadoPagoSignature(notification, xSignature, webhookSecret);
+        if (!isValid) {
+          console.error('❌ MercadoPago signature verification failed');
+          securityMonitor.recordWebhookFailure();
+          const log = createSecureLog({
+            action: 'MERCADOPAGO_WEBHOOK_INVALID_SIGNATURE',
+            ip,
+            statusCode: 400,
+            isSecurityEvent: true
+          });
+          console.log('🚨', JSON.stringify(log));
+          return res.status(400).json({ error: 'Invalid signature' });
+        }
+      }
+
+      // Replay attack protection
+      const webhookUniqueId = `mp_${notification.id}_${notificationId}`;
+      if (webhookReplayProtection.hasBeenProcessed(webhookUniqueId)) {
+        console.warn('⚠️ MercadoPago notification already processed:', webhookUniqueId);
+        return res.status(200).json({ received: true, duplicate: true });
+      }
+      webhookReplayProtection.markAsProcessed(webhookUniqueId);
 
       // MercadoPago envia diferentes tipos de notificação
       // Tipo 'payment' é o que nos interessa
@@ -1044,6 +1119,7 @@ async function handleWebhook(req: ApiRequest, res: ApiResponse, { rawBody, parse
         
         if (!accessToken) {
           console.error('❌ MercadoPago access token not configured');
+          securityMonitor.recordWebhookFailure();
           return res.status(500).json({ error: 'Access token not configured' });
         }
 
@@ -1058,17 +1134,23 @@ async function handleWebhook(req: ApiRequest, res: ApiResponse, { rawBody, parse
 
         if (!paymentResponse.ok) {
           console.error('❌ Erro ao buscar pagamento:', paymentResponse.status);
+          securityMonitor.recordWebhookFailure();
           return res.status(500).json({ error: 'Failed to fetch payment' });
         }
 
         const payment: any = await paymentResponse.json();
         
-        console.log('💳 Payment details:', {
-          id: payment.id,
-          status: payment.status,
-          status_detail: payment.status_detail,
-          external_reference: payment.external_reference
+        const log = createSecureLog({
+          action: 'MERCADOPAGO_PAYMENT_RECEIVED',
+          ip,
+          statusCode: 200,
+          details: {
+            paymentId: payment.id,
+            status: payment.status,
+            amount: payment.transaction_amount
+          }
         });
+        console.log('✅', JSON.stringify(log));
 
         let orderId = payment.external_reference;
 
@@ -1249,6 +1331,7 @@ async function handleWebhook(req: ApiRequest, res: ApiResponse, { rawBody, parse
 
 export default async function handler(req: ApiRequest, res: ApiResponse): Promise<void> {
   applyCors(req as any, res as any);
+  maybeCleanupSecurity();
 
   if (req.method === 'OPTIONS') {
     return res.status(200).end();
@@ -1272,8 +1355,44 @@ export default async function handler(req: ApiRequest, res: ApiResponse): Promis
 
   const { action, userId } = parsedBody || {};
 
-  // Rate limiting
+  // Progressive rate limiting
   const identifier = getIdentifier(req, userId);
+  
+  // Verificar se IP está blacklistado
+  if (progressiveRateLimiter.isIPBlacklisted(identifier)) {
+    securityMonitor.recordRateLimitViolation();
+    const log = createSecureLog({
+      action: 'BLACKLISTED_IP_ATTEMPT',
+      ip: identifier,
+      statusCode: 403,
+      isSecurityEvent: true
+    });
+    console.log('🚨', JSON.stringify(log));
+    return res.status(403).json({ error: 'Access denied' });
+  }
+
+  // Check progressive rate limit
+  const rateLimitCheck = progressiveRateLimiter.checkProgressiveLimit(identifier, {
+    maxRequests: 10,
+    windowMs: 60_000,
+    actionType: action
+  });
+
+  if (!rateLimitCheck.allowed) {
+    securityMonitor.recordRateLimitViolation();
+    const log = createSecureLog({
+      action: 'RATE_LIMIT_EXCEEDED',
+      userId,
+      ip: identifier,
+      statusCode: 429,
+      isSecurityEvent: true
+    });
+    console.log('⚠️', JSON.stringify(log));
+    return res.status(429).json({ 
+      error: 'Too many requests',
+      retryAfter: Math.ceil((rateLimitCheck.remainingTime || 60000) / 1000)
+    });
+  }
   const { maxRequests, windowMs } = getShopRateLimitConfig();
 
   const now = Date.now();

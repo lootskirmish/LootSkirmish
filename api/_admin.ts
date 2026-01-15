@@ -12,6 +12,7 @@ import {
   incrementWindowCounter,
   isWindowLimitExceeded,
   logAudit,
+  updatePlayerDiamonds,
 } from './_utils.js';
 import { applyReferralDiamondBonus } from './_referrals.js';
 dotenv.config();
@@ -150,86 +151,6 @@ async function validateAdminSession(authToken: string, expectedUserId: string, i
     const error = err as Error;
     console.error('Admin validation error:', error.message);
     return { valid: false, error: 'Validation failed' };
-  }
-}
-
-// ============================================================
-// 💎 FUNÇÃO PARA ATUALIZAR DIAMANTES (COM TRANSAÇÃO)
-// ============================================================
-async function updatePlayerDiamonds(userId: string, amount: number, reason: string, req: ApiRequest | null = null): Promise<number> {
-  try {
-    // Validar entrada
-    if (!userId || typeof userId !== 'string') {
-      throw new Error('Invalid userId');
-    }
-    
-    if (typeof amount !== 'number' || isNaN(amount)) {
-      throw new Error('Invalid amount');
-    }
-    
-    // Buscar saldo atual COM LOCK
-    const { data: currentStats, error: fetchError } = await supabase
-      .from('player_stats')
-      .select('diamonds, user_id')
-      .eq('user_id', userId)
-      .single();
-
-    if (fetchError || !currentStats) {
-      throw new Error('Failed to fetch player stats');
-    }
-
-    const currentDiamonds = currentStats.diamonds || 0;
-    const newDiamonds = currentDiamonds + amount;
-
-    if (newDiamonds < 0) {
-      throw new Error('Insufficient diamonds');
-    }
-
-    // Atualizar com verificação de integridade
-    const { data: updateResult, error: updateError } = await supabase
-      .from('player_stats')
-      .update({ 
-        diamonds: newDiamonds,
-        updated_at: new Date().toISOString()
-      })
-      .eq('user_id', userId)
-      .eq('diamonds', currentDiamonds) // Lock otimista
-      .select('diamonds, user_id');
-
-    if (updateError) {
-      throw new Error('Failed to update diamonds');
-    }
-
-    if (!updateResult || updateResult.length === 0) {
-      throw new Error('Concurrent modification detected');
-    }
-
-    const finalDiamonds = updateResult[0].diamonds;
-
-    // Registrar transação (não bloqueante)
-    Promise.all([
-      supabase.from('diamond_transactions').insert({
-        user_id: userId,
-        amount: amount,
-        reason: reason,
-        balance_after: finalDiamonds,
-        created_at: new Date().toISOString()
-      }),
-      req ? logAction(userId, 'DIAMONDS_UPDATED', { 
-        amount, 
-        reason, 
-        newBalance: finalDiamonds 
-      }, req) : Promise.resolve()
-    ]).catch(err => {
-      console.error('⚠️ Transaction logging error:', err);
-    });
-    
-    return finalDiamonds;
-    
-  } catch (error) {
-    const err = error as Error;
-    console.error('💥 updatePlayerDiamonds error:', err.message);
-    throw err;
   }
 }
 
@@ -467,9 +388,11 @@ async function handleApproveOrder(req: ApiRequest, res: ApiResponse, validation:
     let newBalance;
     try {
       newBalance = await updatePlayerDiamonds(
+        supabase,
         order.user_id,
         totalDiamonds,
         `Purchase order #${orderId.slice(0, 8)} approved by admin`,
+        true,
         req
       );
     } catch (error) {

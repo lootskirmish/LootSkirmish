@@ -1,31 +1,47 @@
 // ============================================================
 // API/CASEOPENING.TS - BACKEND (FIXED & COMPLETE)
-// ============================================================
 
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import crypto from 'crypto';
-import { applyCors, validateSessionAndFetchPlayerStats, logMoneyTransactionAsync } from './_utils.js';
-import { applyReferralCommissionForSpend } from './_referrals.js';
+import { applyCors, createSecureLog, updatePlayerBalance, validateSessionAndFetchPlayerStats, ValidationSchemas } from './_utils.js';
 
 import dotenv from 'dotenv';
 dotenv.config();
 
-// ============================================================
-// TYPES
-// ============================================================
+interface PassConfig {
+  enabled: boolean;
+  cost?: number;
+}
+
+interface OpenedItem {
+  name: string;
+  icon: string;
+  value: number;
+  rarity: string;
+  rarityColor: string;
+  rarityIcon: string;
+  color?: string;
+}
 
 interface ApiRequest {
   method?: string;
-  body?: any;
+  body?: {
+    action?: string;
+    userId?: string;
+    authToken?: string;
+    caseId?: string;
+    quantity?: number;
+    passTier?: string;
+    [key: string]: any;
+  };
   headers?: Record<string, string | string[] | undefined>;
   connection?: { remoteAddress?: string };
 }
 
 interface ApiResponse {
   status: (code: number) => ApiResponse;
-  json: (data: any) => void;
-  end: (data?: any) => void;
-  setHeader: (key: string, value: string) => void;
+  json: (body: any) => ApiResponse;
+  setHeader: (name: string, value: string) => void;
 }
 
 interface Rarity {
@@ -52,29 +68,14 @@ interface CaseDefinition {
   items: CaseItem[];
 }
 
-interface PassConfig {
+interface PassesConfigEntry {
   id: string;
   name: string;
   cost: number;
   requires: string | null;
 }
 
-interface PassesConfig {
-  quick_roll: PassConfig;
-  multi_2x: PassConfig;
-  multi_3x: PassConfig;
-  multi_4x: PassConfig;
-}
-
-interface OpenedItem {
-  name: string;
-  icon: string;
-  value: number;
-  rarity: string;
-  rarityColor: string;
-  rarityIcon: string;
-  color?: string;
-}
+type PassesConfig = Record<string, PassesConfigEntry>;
 
 const supabase: SupabaseClient = createClient(
   process.env.SUPABASE_URL!,
@@ -428,118 +429,6 @@ function generateItemSeeded(caseData: CaseDefinition, seed: string | number): Op
 }
 
 // ============================================================
-// BALANCE MANAGEMENT
-// ============================================================
-
-async function updatePlayerBalance(userId: string, amount: number, reason: string, casesOpened: number = 0): Promise<number> {
-  try {
-    if (!userId || typeof userId !== 'string') {
-      throw new Error('Invalid userId');
-    }
-    
-    if (typeof amount !== 'number' || isNaN(amount)) {
-      throw new Error('Invalid amount');
-    }
-    
-    const { data: rpcResult, error: updateError } = await supabase
-      .rpc('update_player_money', {
-        p_user_id: userId,
-        p_money_change: amount,
-        p_cases_opened: casesOpened
-      });
-
-    if (updateError) {
-      console.error('❌ RPC Error:', updateError);
-      
-      if (updateError.message?.includes('Insufficient funds')) {
-        throw new Error('Insufficient funds');
-      }
-      if (updateError.code === '23514' || updateError.message?.includes('constraint')) {
-        throw new Error('Balance changed. Please try again.');
-      }
-      throw new Error('Failed to update balance: ' + updateError.message);
-    }
-
-    if (!rpcResult || rpcResult.length === 0) {
-      console.error('❌ RPC returned no data');
-      throw new Error('RPC returned no data');
-    }
-
-    const newBalance = (rpcResult[0] as any).new_money;
-    
-    // Registrar transação na nova estrutura otimizada (non-blocking)
-    logMoneyTransactionAsync(supabase, userId, amount, reason, newBalance);
-
-    if (amount > 0) {
-      await applyReferralCommissionForSpend({
-        supabase,
-        spenderId: userId,
-        amountSpent: amount,
-        reason,
-        source: 'case_opening'
-      });
-    }
-    
-    return newBalance;
-    
-  } catch (error) {
-    console.error('💥 updatePlayerBalance error:', error instanceof Error ? error.message : error);
-    throw error;
-  }
-}
-
-// ============================================================
-// SESSION VALIDATION
-// ============================================================
-
-async function validateSession(authToken: string, expectedUserId: string): Promise<any> {
-  return validateSessionAndFetchPlayerStats(supabase, authToken, expectedUserId, { select: 'user_id' });
-}
-
-// ============================================================
-// PREVIEW GENERATION (NOVO)
-// ============================================================
-
-export async function handleGeneratePreview(req: ApiRequest, res: ApiResponse) {
-  try {
-    const { caseId, quantity } = req.body;
-    
-    if (!caseId || !quantity) {
-      return res.status(400).json({ error: 'Missing required fields' });
-    }
-    
-    const caseData = getCaseById(caseId);
-    if (!caseData) {
-      return res.status(404).json({ error: 'Case not found' });
-    }
-    
-    const timestamp = Date.now();
-    const previewSeed = `preview-${caseId}-${timestamp}`;
-    
-    const previews = [];
-    for (let slot = 0; slot < quantity; slot++) {
-      const items = [];
-      for (let i = 0; i < 96; i++) {
-        const itemSeed = `${previewSeed}-slot${slot}-item${i}`;
-        const item = generateItemSeeded(caseData, itemSeed);
-        items.push(item);
-      }
-      previews.push(items);
-    }
-    
-    return res.status(200).json({
-      success: true,
-      previews: previews
-    });
-    
-  } catch (error) {
-    console.error('💥 Preview generation error:', error);
-    return res.status(500).json({ error: 'Failed to generate preview' });
-  }
-}
-
-
-// ============================================================
 // INVENTORY CAPACITY CHECK
 // ============================================================
 
@@ -610,6 +499,20 @@ async function checkInventoryCapacity(userId: string, quantity: number, provided
 export async function handleOpenCases(req: ApiRequest, res: ApiResponse) {
   try {
     const { userId, authToken, caseId, quantity } = req.body;
+
+    // Validação de quantidade com schema
+    const qtyValidation = ValidationSchemas.diamonds.validate(quantity);
+    if (!qtyValidation.success || !qtyValidation.data || qtyValidation.data < 1 || qtyValidation.data > 4) {
+      const log = createSecureLog({
+        action: 'INVALID_CASE_QUANTITY',
+        userId,
+        statusCode: 400,
+        details: { quantity },
+        isSecurityEvent: true
+      });
+      console.log('⚠️', JSON.stringify(log));
+      return res.status(400).json({ error: 'Invalid quantity (1-4)' });
+    }
 
     if (!userId || !caseId || quantity === undefined || quantity === null) {
       return res.status(400).json({ error: 'Missing required fields' });
@@ -688,10 +591,11 @@ export async function handleOpenCases(req: ApiRequest, res: ApiResponse) {
     let newBalance;
     try {
       newBalance = await updatePlayerBalance(
+        supabase,
         userId,
         -totalCost,
         `Opened ${qty}x ${caseData.name}`,
-        qty
+        { casesOpened: qty, req }
       );
     } catch (error) {
       console.error('❌ Failed to deduct cost:', error instanceof Error ? error.message : error);
@@ -758,10 +662,11 @@ export async function handleOpenCases(req: ApiRequest, res: ApiResponse) {
         console.error('❌ Failed to add items to inventory:', invError);
         try {
           const refundedBalance = await updatePlayerBalance(
+            supabase,
             userId,
             totalCost,
             `Refund: failed to add items for ${qty}x ${caseData.name}`,
-            0
+            { casesOpened: 0, req }
           );
           return res.status(500).json({
             error: 'Failed to add items to inventory',
@@ -781,10 +686,11 @@ export async function handleOpenCases(req: ApiRequest, res: ApiResponse) {
       console.error('❌ Inventory error:', error);
       try {
         const refundedBalance = await updatePlayerBalance(
+          supabase,
           userId,
           totalCost,
           `Refund: inventory exception for ${qty}x ${caseData.name}`,
-          0
+          { casesOpened: 0, req }
         );
         return res.status(500).json({
           error: 'Failed to add items to inventory',
@@ -1076,10 +982,11 @@ export async function handleUpgradeCaseDiscount(req: ApiRequest, res: ApiRespons
     let newBalance;
     try {
       newBalance = await updatePlayerBalance(
+        supabase,
         userId,
         -cost,
         `Case discount upgrade to ${currentLevel + 1}`,
-        0
+        { casesOpened: 0, req }
       );
     } catch (err) {
       console.error('❌ Failed to charge discount upgrade:', err instanceof Error ? err.message : err);
@@ -1106,10 +1013,11 @@ export async function handleUpgradeCaseDiscount(req: ApiRequest, res: ApiRespons
       // tentar reembolsar
       try {
         await updatePlayerBalance(
+          supabase,
           userId,
           cost,
           `Refund: failed upgrade to ${newLevel}`,
-          0
+          { casesOpened: 0, req }
         );
       } catch (refundErr) {
         console.error('💥 Refund failed after upgrade persist error:', refundErr instanceof Error ? refundErr.message : refundErr);

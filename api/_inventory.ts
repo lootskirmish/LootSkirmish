@@ -11,6 +11,7 @@ import {
   logAudit,
   validateSessionAndFetchPlayerStats,
   logMoneyTransactionAsync,
+  updatePlayerBalance,
 } from './_utils.js';
 import { applyReferralCommissionForSpend } from './_referrals.js';
 
@@ -83,62 +84,6 @@ function maybeCleanupRateLimits(): void {
 // ============================================================
 async function logAction(userId: string, action: string, details: any, req: ApiRequest): Promise<void> {
   return logAudit(supabase, userId, action, details, req as any);
-}
-
-// ============================================================
-// 💰 ATUALIZAR SALDO
-// ============================================================
-async function updatePlayerBalance(userId: string, amount: number, reason: string, casesOpened: number = 0, req: ApiRequest | null = null): Promise<number> {
-  try {
-    const { data: rpcResult, error: updateError } = await supabase
-      .rpc('update_player_money', {
-        p_user_id: userId,
-        p_money_change: amount,
-        p_cases_opened: casesOpened
-      });
-
-    if (updateError) {
-      if (updateError.message.includes('Insufficient funds')) {
-        throw new Error('Insufficient funds');
-      }
-      if (updateError.code === '23514' || updateError.message.includes('constraint')) {
-        throw new Error('Balance changed. Please try again.');
-      }
-      throw new Error('Failed to update balance');
-    }
-
-    if (!rpcResult || rpcResult.length === 0) {
-      throw new Error('RPC returned no data');
-    }
-
-    const newBalance = rpcResult[0].new_money;
-    
-    // Registrar transação na nova estrutura otimizada (non-blocking)
-    logMoneyTransactionAsync(supabase, userId, amount, reason, newBalance);
-    
-    // Registrar auditoria
-    if (req) {
-      logAction(userId, 'BALANCE_UPDATED', { amount, reason, newBalance }, req).catch(() => {});
-    }
-
-    if (amount > 0) {
-      await applyReferralCommissionForSpend({
-        supabase,
-        spenderId: userId,
-        amountSpent: amount,
-        reason,
-        source: 'inventory',
-        req: req as any
-      });
-    }
-    
-    return newBalance;
-    
-  } catch (error) {
-    const err = error as Error;
-    console.error('💥 updatePlayerBalance error:', err.message);
-    throw error;
-  }
 }
 
 // ============================================================
@@ -279,11 +224,11 @@ async function handleSellItem(req: ApiRequest, res: ApiResponse, userId: string,
     let newBalance;
     try {
       newBalance = await updatePlayerBalance(
+        supabase,
         userId,
         itemValue,
         `Sold ${item.item_name}`,
-        0,
-        req
+        { casesOpened: 0, req }
       );
     } catch (error) {
       const err = error as Error;
@@ -387,12 +332,12 @@ async function handleSellSelected(req: ApiRequest, res: ApiResponse, userId: str
     
     let newBalance;
     try {
-      newBalance = await updatePlayerBalance(
-        userId,
-        totalValue,
-        `Sold ${validItems.length} items`,
-        0,
-        req
+        newBalance = await updatePlayerBalance(
+          supabase,
+          userId,
+          totalValue,
+          `Sold ${validItems.length} items (bulk)`,
+          { casesOpened: 0, req }
       );
     } catch (error) {
       const err = error as Error;
@@ -504,11 +449,11 @@ async function handleSellAll(req: ApiRequest, res: ApiResponse, userId: string, 
     let newBalance;
     try {
       newBalance = await updatePlayerBalance(
+        supabase,
         userId,
         totalValue,
         `Sold ${validItems.length} items (Sell All)`,
-        0,
-        req
+        { casesOpened: 0, req }
       );
     } catch (error) {
       const err = error as Error;

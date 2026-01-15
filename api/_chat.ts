@@ -3,7 +3,7 @@
 // ============================================================
 
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
-import { applyCors, validateSessionAndFetchPlayerStats, validateSupabaseSession } from './_utils.js';
+import { applyCors, validateSessionAndFetchPlayerStats, validateSupabaseSession, ValidationSchemas, createSecureLog } from './_utils.js';
 
 import dotenv from 'dotenv';
 dotenv.config();
@@ -108,7 +108,20 @@ async function handleSendMessage(req: ApiRequest, res: ApiResponse): Promise<voi
   try {
     const { userId, authToken, message } = req.body || {};
     
-    // 1. Validação básica
+    // 1. Validação de schema
+    const userIdValidation = ValidationSchemas.email.validate(userId) || { success: false };
+    if (!userIdValidation.success) {
+      const log = createSecureLog({
+        action: 'INVALID_USER_ID',
+        userId,
+        statusCode: 400,
+        isSecurityEvent: true
+      });
+      console.log('⚠️', JSON.stringify(log));
+      return res.status(400).json({ error: 'Invalid user ID' });
+    }
+    
+    // 2. Validação básica
     if (!userId || !message || !authToken) {
       return res.status(400).json({ error: 'Missing required fields' });
     }
@@ -127,7 +140,7 @@ async function handleSendMessage(req: ApiRequest, res: ApiResponse): Promise<voi
       return res.status(400).json({ error: 'Message too long (max 60 chars)' });
     }
     
-    // 2. Validar sessão
+    // 3. Validar sessão
     const { valid, error: sessionError, stats } = await validateSessionAndFetchPlayerStats(
       supabase,
       authToken,
@@ -142,7 +155,7 @@ async function handleSendMessage(req: ApiRequest, res: ApiResponse): Promise<voi
       return res.status(401).json({ error: 'Invalid session' });
     }
     
-    // 3. Rate limiting
+    // 4. Rate limiting
     const rateCheck = await checkRateLimit(userId);
     if (!rateCheck.allowed) {
       return res.status(429).json({ 

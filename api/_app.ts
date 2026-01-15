@@ -12,6 +12,7 @@ import {
   logAudit,
   validateSessionAndFetchPlayerStats,
   logMoneyTransactionAsync,
+  updatePlayerBalance,
 } from './_utils.js';
 import { applyReferralCommissionForSpend } from './_referrals.js';
 
@@ -79,70 +80,6 @@ function maybeCleanupRateLimits(): void {
 // ============================================================
 async function logAction(userId: string, action: string, details: unknown, req: ApiRequest | null): Promise<void> {
   return logAudit(supabase, userId, action, details, req ?? undefined);
-}
-
-// ============================================================
-// 💰 FUNÇÃO UTILITÁRIA CENTRALIZADA PARA ATUALIZAR SALDO
-// ============================================================
-/**
- * Atualiza saldo do jogador de forma atômica e registra tudo
- */
-async function updatePlayerBalance(
-  userId: string,
-  amount: number,
-  reason: string,
-  casesOpened = 0,
-  req: ApiRequest | null = null
-): Promise<number> {
-  try {
-    const { data: rpcResult, error: updateError } = (await supabase.rpc('update_player_money', {
-      p_user_id: userId,
-      p_money_change: amount,
-      p_cases_opened: casesOpened,
-    })) as PostgrestSingleResponse<UpdateMoneyRow[]>;
-
-    if (updateError) {
-      if (updateError.message.includes('Insufficient funds')) {
-        throw new Error('Insufficient funds');
-      }
-      if (updateError.code === '23514' || updateError.message.includes('constraint')) {
-        throw new Error('Balance changed. Please try again.');
-      }
-      throw new Error('Failed to update balance');
-    }
-
-    if (!rpcResult || rpcResult.length === 0) {
-      throw new Error('RPC returned no data');
-    }
-
-    const newBalance = rpcResult[0].new_money;
-
-    // Registrar transação na nova estrutura otimizada (non-blocking)
-    logMoneyTransactionAsync(supabase, userId, amount, reason, newBalance);
-
-    // Registrar auditoria
-    if (req) {
-      logAction(userId, 'BALANCE_UPDATED', { amount, reason, newBalance }, req).catch(() => {});
-    }
-
-    if (amount > 0) {
-      // Aguarda a criação do evento para que o painel de referrals veja imediatamente
-      await applyReferralCommissionForSpend({
-        supabase,
-        spenderId: userId,
-        amountSpent: amount,
-        reason,
-        source: 'app',
-        req: null,
-      });
-    }
-
-    return newBalance;
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    console.error('💥 updatePlayerBalance error:', message);
-    throw error;
-  }
 }
 
 // ============================================================

@@ -9,7 +9,11 @@ import {
   logAudit,
   getIdentifier,
   checkRateLimit,
-  cleanupOldEntries
+  cleanupOldEntries,
+  normalizeUsername,
+  isValidUsername,
+  usernameExists,
+  updatePlayerDiamonds
 } from './_utils.js';
 
 import dotenv from 'dotenv';
@@ -56,94 +60,6 @@ function getProfileRateLimitConfig(): { maxRequests: number; windowMs: number } 
   const maxRequests = parseInt(process.env.RATE_LIMIT_PROFILE_MAX_REQUESTS || process.env.RATE_LIMIT_MAX_REQUESTS || '') || 20;
   const windowMs = parseInt(process.env.RATE_LIMIT_PROFILE_WINDOW_MS || process.env.RATE_LIMIT_WINDOW_MS || '') || 60_000;
   return { maxRequests, windowMs };
-}
-
-// ============================================================
-// Helpers
-// ============================================================
-
-function normalizeUsername(raw: string): string {
-  if (!raw) return '';
-  return raw.trim();
-}
-
-function isValidUsername(username: string): boolean {
-  // 3-16 chars, letters/numbers/._- only (no spaces), must start with letter/number
-  return typeof username === 'string'
-    && username.length >= 3
-    && username.length <= 16
-    && /^[a-zA-Z0-9][a-zA-Z0-9._-]{2,15}$/.test(username);
-}
-
-async function usernameExists(username: string, excludeUserId: string): Promise<boolean> {
-  const escaped = username.replace(/([_%])/g, '\\$1');
-
-  const { data, error } = await supabase
-    .from('player_stats')
-    .select('user_id')
-    .ilike('username', escaped)
-    .neq('user_id', excludeUserId)
-    .limit(1);
-
-  if (error) {
-    throw new Error('Username lookup failed');
-  }
-
-  return Array.isArray(data) && data.length > 0;
-}
-
-async function updatePlayerDiamonds(userId: string, amount: number, reason: string, req?: ApiRequest): Promise<number> {
-  // Based on _admin.js but without role requirements
-  const { data: currentStats, error: fetchError } = await supabase
-    .from('player_stats')
-    .select('diamonds, user_id')
-    .eq('user_id', userId)
-    .single();
-
-  if (fetchError || !currentStats) {
-    throw new Error('Failed to fetch player stats');
-  }
-
-  const currentDiamonds = (currentStats as any).diamonds || 0;
-  const newDiamonds = currentDiamonds + amount;
-
-  if (newDiamonds < 0) {
-    throw new Error('Insufficient diamonds');
-  }
-
-  const { data: updateResult, error: updateError } = await supabase
-    .from('player_stats')
-    .update({
-      diamonds: newDiamonds,
-      updated_at: new Date().toISOString()
-    })
-    .eq('user_id', userId)
-    .eq('diamonds', currentDiamonds) // optimistic lock
-    .select('diamonds, user_id');
-
-  if (updateError) {
-    throw new Error('Failed to update diamonds');
-  }
-
-  if (!updateResult || updateResult.length === 0) {
-    throw new Error('Concurrent modification detected');
-  }
-
-  const finalDiamonds = (updateResult[0] as any).diamonds;
-
-  // Non-blocking log
-  Promise.all([
-    supabase.from('diamond_transactions').insert({
-      user_id: userId,
-      amount: amount,
-      reason,
-      balance_after: finalDiamonds,
-      created_at: new Date().toISOString()
-    }),
-    req ? logAudit(supabase, userId, 'DIAMONDS_UPDATED', { amount, reason, newBalance: finalDiamonds }, req) : Promise.resolve()
-  ]).catch((err) => console.error('⚠️ Transaction logging error:', err instanceof Error ? err.message : err));
-
-  return finalDiamonds;
 }
 
 // ============================================================
@@ -261,7 +177,7 @@ async function handleChangeUsername(req: ApiRequest, res: ApiResponse): Promise<
     }
 
     // Uniqueness check (case-insensitive)
-    const taken = await usernameExists(normalized, userId);
+    const taken = await usernameExists(supabase, normalized, userId);
     if (taken) {
       return res.status(400).json({ error: 'USERNAME_TAKEN' });
     }
@@ -275,7 +191,7 @@ async function handleChangeUsername(req: ApiRequest, res: ApiResponse): Promise<
         return res.status(400).json({ error: 'INSUFFICIENT_DIAMONDS', needed: cost - (stats.diamonds || 0) });
       }
       try {
-        await updatePlayerDiamonds(userId, -cost, 'Username change', req);
+        await updatePlayerDiamonds(supabase, userId, -cost, 'Username change', false, req);
       } catch (err) {
         if (err instanceof Error && err.message === 'Insufficient diamonds') {
           return res.status(400).json({ error: 'INSUFFICIENT_DIAMONDS', needed: cost });
@@ -301,7 +217,7 @@ async function handleChangeUsername(req: ApiRequest, res: ApiResponse): Promise<
       // Refund if update failed and we charged
       if (cost > 0) {
         try {
-          await updatePlayerDiamonds(userId, cost, 'Refund: username change failed', req);
+          await updatePlayerDiamonds(supabase, userId, cost, 'Refund: username change failed', false, req);
         } catch (refundErr) {
           console.error('Refund after username change failure failed:', refundErr instanceof Error ? refundErr.message : refundErr);
         }
@@ -893,3 +809,5 @@ async function handleRemoveFriend(req: ApiRequest, res: ApiResponse, body: any) 
 
   return res.status(200).json({ success: true, state: meState });
 }
+
+
