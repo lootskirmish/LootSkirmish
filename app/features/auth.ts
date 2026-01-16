@@ -447,26 +447,37 @@ async function renderHCaptcha(): Promise<void> {
   const hcaptcha = await loadHCaptchaScript();
   if (!hcaptcha) return;
 
+  // Aguardar um pouco para garantir que o hCaptcha está totalmente carregado
+  await new Promise(resolve => setTimeout(resolve, 100));
+
   const loginContainer = document.getElementById('login-hcaptcha');
   if (loginContainer && !loginContainer.dataset.rendered) {
-    const widgetId = hcaptcha.render(loginContainer, {
-      sitekey: HCAPTCHA_SITEKEY,
-      callback: token => { loginCaptchaToken = token; },
-      'expired-callback': () => { loginCaptchaToken = null; }
-    });
-    hcaptchaWidgets.login = widgetId;
-    loginContainer.dataset.rendered = '1';
+    try {
+      const widgetId = hcaptcha.render(loginContainer, {
+        sitekey: HCAPTCHA_SITEKEY,
+        callback: token => { loginCaptchaToken = token; },
+        'expired-callback': () => { loginCaptchaToken = null; }
+      });
+      hcaptchaWidgets.login = widgetId;
+      loginContainer.dataset.rendered = '1';
+    } catch (err) {
+      console.warn('Could not render login hCaptcha:', err);
+    }
   }
 
   const registerContainer = document.getElementById('register-hcaptcha');
   if (registerContainer && !registerContainer.dataset.rendered) {
-    const widgetId = hcaptcha.render(registerContainer, {
-      sitekey: HCAPTCHA_SITEKEY,
-      callback: token => { registerCaptchaToken = token; },
-      'expired-callback': () => { registerCaptchaToken = null; }
-    });
-    hcaptchaWidgets.register = widgetId;
-    registerContainer.dataset.rendered = '1';
+    try {
+      const widgetId = hcaptcha.render(registerContainer, {
+        sitekey: HCAPTCHA_SITEKEY,
+        callback: token => { registerCaptchaToken = token; },
+        'expired-callback': () => { registerCaptchaToken = null; }
+      });
+      hcaptchaWidgets.register = widgetId;
+      registerContainer.dataset.rendered = '1';
+    } catch (err) {
+      console.warn('Could not render register hCaptcha:', err);
+    }
   }
 }
 
@@ -972,7 +983,12 @@ export async function loadUserData(
     loadSavedColors ? Promise.resolve(loadSavedColors()) : Promise.resolve(),
     checkAndShowAdminButton ? checkAndShowAdminButton() : Promise.resolve(),
     applyTranslations ? Promise.resolve(applyTranslations()) : Promise.resolve(),
-    fetchCsrfToken(user.id, authToken).catch(err => console.error('Error fetching CSRF token:', err))
+    (async () => {
+      const { data: sessionData } = await supabase.auth.getSession();
+      if (sessionData?.session?.access_token) {
+        await fetchCsrfToken(user.id, sessionData.session.access_token);
+      }
+    })().catch(err => console.error('Error fetching CSRF token:', err))
   ]).catch(err => console.error('Error loading secondary data:', err));
 }
 
