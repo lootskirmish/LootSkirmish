@@ -683,6 +683,16 @@ export function maskUserId(userId: string): string {
   return userId.substring(0, 8) + '****';
 }
 
+export function maskIp(ip: string): string {
+  if (typeof ip !== 'string') return 'unknown';
+  const parts = ip.split('.');
+  if (parts.length === 4) {
+    return `${parts[0]}.${parts[1]}.***.***`;
+  }
+  // IPv6 ou outro formato
+  return ip.substring(0, 8) + '***';
+}
+
 export function maskToken(token: string): string {
   if (typeof token !== 'string') return '[TOKEN]';
   return token.substring(0, 10) + '...[REDACTED]';

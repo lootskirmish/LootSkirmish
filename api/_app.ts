@@ -17,6 +17,7 @@ import {
   buildLogAction,
   getRequestIp,
   createSecurityEvent,
+  maskIp,
   type RateLimitEntry,
 } from './_utils.js';
 import { applyReferralCommissionForSpend } from './_referrals.js';
