@@ -2,8 +2,8 @@
 // APP.TS - IMPORTS
 // ============================================================
 
-import './core/store'; // Importar store primeiro
-import './core/route-loader'; // Importar route loader
+import './core/persistence'; // Sistema unificado: Store + State + Persistence
+import './core/route-loader'; // Route loader
 
 import {
   handleLogout as authHandleLogout,
@@ -11,8 +11,7 @@ import {
   handleLogin,
   handleRegister,
   setupAuthStateListener,
-  switchTab,
-  initializeSupabase
+  switchTab
 } from './features/auth.js';
 
 import {
@@ -55,17 +54,20 @@ import {
   loadSavedColors
 } from './shared/themes';
 
-import {
-  initializeStateSystem
-} from './core/state';
-
 import './features/caseopening.js';
 import { bindGlobalClickSfx, bindGlobalHoverSfx } from './shared/sfx';
 
 import { initializeChat } from './features/chat.js';
 import { initializeFriends } from './features/friends.js';
-import { initializePersistence, shutdownPersistence, debounceSave } from './core/persistence.js';
-import { setupPersistenceMiddleware } from './core/persistence-middleware.js';
+import { 
+  initializePersistence, 
+  shutdownPersistence, 
+  debounceSave, 
+  addPersistenceHook,
+  initializeStateSystem,
+  setupPersistenceMiddleware,
+  store
+} from './core/persistence.js';
 
 import './features/leaderboard.js';
 
@@ -427,7 +429,7 @@ document.addEventListener('languageChanged', function() {
   tabs.forEach(t => t.classList.remove('active'));
   if (evt && evt.target) (evt.target as HTMLElement).classList.add('active');
   
-  switchTab(tab);
+  switchTab(tab as 'login' | 'register');
 };
 
 // Auth Actions
@@ -608,9 +610,8 @@ if (document.readyState === 'loading') {
 // ============ VENDER SELECIONADOS ============
 (window as any).sellSelected = async function() {
   if (!currentUser?.id) return;
-  await sellSelected(currentUser.id, async () => {
-    await renderInventory(currentUser.id);
-  });
+  await sellSelected();
+  await renderInventory(currentUser.id);
 };
 
 // ============ FILTROS ============
@@ -627,7 +628,7 @@ if (document.readyState === 'loading') {
 // ============ SELL ALL MODAL (MANTIDO) ============
 (window as any).openSellAllModal = async function() {
   if (!currentUser?.id) return;
-  await openSellAllModal(currentUser.id);
+  await openSellAllModal();
 };
 
 (window as any).closeSellAllModal = function() {
@@ -638,14 +639,13 @@ if (document.readyState === 'loading') {
 // ============ UPDATE SELL ALL SUMMARY - VERSÃO MELHORADA ============
 (window as any).confirmSellAll = async function() {
   if (!currentUser?.id) return;
-  await confirmSellAll(currentUser.id, async () => {
-    await renderInventory(currentUser.id);
-  });
+  await confirmSellAll();
+  await renderInventory(currentUser.id);
 };
 
 (window as any).updateSellAllSummary = async function() {
   if (!currentUser?.id) return;
-  await updateSellAllSummary(currentUser.id);
+  await updateSellAllSummary();
 };
 
 // ============================================================
@@ -655,14 +655,28 @@ if (document.readyState === 'loading') {
 window.addEventListener('DOMContentLoaded', async function() {
   await ensureThemeLoaded();
   await runTranslations();
+  
+  // Inicializar state lifecycle
   initializeStateSystem();
   
-  // Setup persistence middleware (detect Redux changes)
-  const { store } = await import('./core/store.js');
+  // Setup persistence middleware (conecta Redux ao sistema de persistência)
   setupPersistenceMiddleware(store);
   
-  await initializePersistence();
-  initLegal(); // Inicializar sistema de páginas legais
+  // Inicializar sistema unificado de persistência
+  await initializePersistence({
+    debug: false,
+    autoSaveInterval: 3000,
+    ttl: 30 * 60 * 1000,
+    compressionEnabled: true,
+    syncAcrossTabs: true,
+  });
+  
+  // Adicionar hooks personalizados se necessário
+  addPersistenceHook('beforeSave', () => {
+    // Hook personalizado
+  });
+  
+  initLegal();
 });
 
 document.addEventListener('languageChanged', async function() {

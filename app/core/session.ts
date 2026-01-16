@@ -496,8 +496,8 @@ export function addRequestSigningHeaders(
   headers: HeadersInit = {},
   signature: { timestamp: string; nonce: string; signature: string; bodyHash?: string }
 ): HeadersInit {
-  const sigHeaders: HeadersInit = {
-    ...headers,
+  const sigHeaders: Record<string, string> = {
+    ...(headers as Record<string, string>),
     'X-Request-Timestamp': signature.timestamp,
     'X-Request-Nonce': signature.nonce,
     'X-Request-Signature': signature.signature
