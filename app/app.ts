@@ -64,6 +64,8 @@ import { bindGlobalClickSfx, bindGlobalHoverSfx } from './shared/sfx';
 
 import { initializeChat } from './features/chat.js';
 import { initializeFriends } from './features/friends.js';
+import { initializePersistence, shutdownPersistence, debounceSave } from './core/persistence.js';
+import { setupPersistenceMiddleware } from './core/persistence-middleware.js';
 
 import './features/leaderboard.js';
 
@@ -654,11 +656,22 @@ window.addEventListener('DOMContentLoaded', async function() {
   await ensureThemeLoaded();
   await runTranslations();
   initializeStateSystem();
+  
+  // Setup persistence middleware (detect Redux changes)
+  const { store } = await import('./core/store.js');
+  setupPersistenceMiddleware(store);
+  
+  await initializePersistence();
   initLegal(); // Inicializar sistema de páginas legais
 });
 
 document.addEventListener('languageChanged', async function() {
   await runTranslations();
+});
+
+// Cleanup ao desmontar
+window.addEventListener('beforeunload', () => {
+  shutdownPersistence();
 });
 
 // ============================================================

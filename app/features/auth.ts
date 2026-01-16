@@ -5,7 +5,7 @@
 import { createClient, Session, User, AuthError } from '@supabase/supabase-js';
 import { showToast, showAlert } from '../shared/effects';
 import { store, authActions, dataActions } from '../core/store';
-import { clearActiveUser, setActiveUser, fetchCsrfToken, clearCsrfTokenOnServer, getActiveUser } from '../core/session';
+import { clearActiveUser, setActiveUser, fetchCsrfToken, clearCsrfTokenOnServer, getActiveUser, isCsrfTokenValid } from '../core/session';
 
 // ============ TYPE DEFINITIONS ============
 interface PendingReferral {
@@ -81,6 +81,21 @@ let loginCaptchaToken: string | null = null;
 let registerCaptchaToken: string | null = null;
 let hcaptchaWidgets: HCaptchaWidgets = { login: null, register: null };
 let hcaptchaScriptPromise: Promise<HCaptchaInstance> | null = null;
+
+// ============================================================
+// CSRF HELPERS
+// ============================================================
+
+async function ensureCsrfForSession(session: Session | null): Promise<void> {
+  if (!session?.user || !session.access_token) return;
+  // Mantém o token atual se ainda for válido (evita troca desnecessária)
+  if (isCsrfTokenValid()) return;
+  try {
+    await fetchCsrfToken(session.user.id, session.access_token);
+  } catch (err) {
+    console.error('[CSRF] Failed to refresh token for session:', err);
+  }
+}
 
 // ============ HELPERS ============
 
@@ -951,11 +966,15 @@ export function setupAuthStateListener(loadUserDataCallback: (user: User) => voi
 
   const { data } = supabase.auth.onAuthStateChange((event, session) => {
     if (event === 'TOKEN_REFRESHED') {
+      // Reusar token se válido; caso ausente/expirado, busca novo
+      ensureCsrfForSession(session);
       return;
     }
 
     // Em refresh com sessão persistida, Supabase dispara INITIAL_SESSION
     if ((event === 'INITIAL_SESSION' || event === 'SIGNED_IN') && session?.user) {
+      // Garante CSRF após auto-login/refresh
+      ensureCsrfForSession(session);
       loadUserDataCallback(session.user);
       return;
     }

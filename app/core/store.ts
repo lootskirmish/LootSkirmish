@@ -122,17 +122,27 @@ const dataSlice = createSlice({
     },
   } as DataState,
   reducers: {
-    setInventory: (state, action: PayloadAction<DataItem[]>) => {
-      state.inventory.data = action.payload;
-      state.inventory.isLoaded = true;
+    setInventory: (state, action: PayloadAction<DataItem[] | {data: DataItem[], isLoaded: boolean}>) => {
+      if (Array.isArray(action.payload)) {
+        state.inventory.data = action.payload;
+        state.inventory.isLoaded = true;
+      } else {
+        state.inventory.data = action.payload.data;
+        state.inventory.isLoaded = action.payload.isLoaded;
+      }
       state.inventory.isLoading = false;
     },
     setInventoryLoading: (state, action: PayloadAction<boolean>) => {
       state.inventory.isLoading = action.payload;
     },
-    setLeaderboard: (state, action: PayloadAction<DataItem[]>) => {
-      state.leaderboard.data = action.payload;
-      state.leaderboard.isLoaded = true;
+    setLeaderboard: (state, action: PayloadAction<DataItem[] | {data: DataItem[], isLoaded: boolean}>) => {
+      if (Array.isArray(action.payload)) {
+        state.leaderboard.data = action.payload;
+        state.leaderboard.isLoaded = true;
+      } else {
+        state.leaderboard.data = action.payload.data;
+        state.leaderboard.isLoaded = action.payload.isLoaded;
+      }
       state.leaderboard.isLoading = false;
     },
     setLeaderboardLoading: (state, action: PayloadAction<boolean>) => {
@@ -146,17 +156,27 @@ const dataSlice = createSlice({
     setCasesLoading: (state, action: PayloadAction<boolean>) => {
       state.cases.isLoading = action.payload;
     },
-    setProfile: (state, action: PayloadAction<DataItem | null>) => {
-      state.profile.data = action.payload;
-      state.profile.isLoaded = true;
+    setProfile: (state, action: PayloadAction<(DataItem | null) | {data: (DataItem | null), isLoaded: boolean}>) => {
+      if (typeof action.payload === 'object' && 'data' in action.payload) {
+        state.profile.data = action.payload.data;
+        state.profile.isLoaded = action.payload.isLoaded;
+      } else {
+        state.profile.data = action.payload;
+        state.profile.isLoaded = true;
+      }
       state.profile.isLoading = false;
     },
     setProfileLoading: (state, action: PayloadAction<boolean>) => {
       state.profile.isLoading = action.payload;
     },
-    setShop: (state, action: PayloadAction<DataItem[]>) => {
-      state.shop.data = action.payload;
-      state.shop.isLoaded = true;
+    setShop: (state, action: PayloadAction<DataItem[] | {data: DataItem[], isLoaded: boolean}>) => {
+      if (Array.isArray(action.payload)) {
+        state.shop.data = action.payload;
+        state.shop.isLoaded = true;
+      } else {
+        state.shop.data = action.payload.data;
+        state.shop.isLoaded = action.payload.isLoaded;
+      }
       state.shop.isLoading = false;
     },
     setShopLoading: (state, action: PayloadAction<boolean>) => {
