@@ -8,11 +8,6 @@ import { store, authActions, dataActions } from '../core/store';
 import { clearActiveUser, setActiveUser, fetchCsrfToken, clearCsrfTokenOnServer, getActiveUser } from '../core/session';
 
 // ============ TYPE DEFINITIONS ============
-interface RememberedCredentials {
-  email: string;
-  password: string;
-}
-
 interface PendingReferral {
   code: string;
   userId?: string;
@@ -56,10 +51,12 @@ declare global {
 }
 
 // ============ SUPABASE CONFIG ============
-const SUPABASE_URL = 'https://xgcseugigsdgmyrfrofj.supabase.co';
-const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhnY3NldWdpZ3NkZ215cmZyb2ZqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjM3NzAwNjcsImV4cCI6MjA3OTM0NjA2N30.lzDmtmxi1D88MihkfSBnHeHpyfiqeo9C5XDqshQNOso';
-const REMEMBER_KEY = 'ls-remembered-auth';
+// 🔒 Usando variáveis de ambiente para segurança
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || '';
+const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+const LAST_ACTIVITY_KEY = 'ls-last-activity';
 const PENDING_REFERRAL_KEY = 'pending-referral-link';
+const AUTO_LOGIN_EXPIRY_DAYS = 3; // Forçar login manual após 3 dias de inatividade
 // Vite substitui import.meta.env em build; fallback para window.* caso seja injetado manualmente
 const HCAPTCHA_SITEKEY = (import.meta.env?.VITE_HCAPTCHA_SITEKEY ?? null)
   || window.HCAPTCHA_SITEKEY
@@ -90,51 +87,50 @@ let hcaptchaScriptPromise: Promise<HCaptchaInstance> | null = null;
 
 // ============ HELPERS ============
 
-function getRememberedCredentials(): RememberedCredentials | null {
+/**
+ * Atualiza timestamp de última atividade
+ */
+function updateLastActivity(): void {
   try {
-    const raw = localStorage.getItem(REMEMBER_KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw);
-    if (!parsed?.email || !parsed?.password) return null;
-    return {
-      email: parsed.email,
-      password: atob(parsed.password)
-    };
-  } catch (err) {
-    console.warn('Could not read remembered credentials', err);
-    return null;
+    localStorage.setItem(LAST_ACTIVITY_KEY, Date.now().toString());
+  } catch {
+    // Ignore storage errors
   }
 }
 
-function persistRememberedCredentials(email: string, password: string, remember: boolean): void {
-  if (!remember || !email || !password) {
-    localStorage.removeItem(REMEMBER_KEY);
-    return;
-  }
-
+/**
+ * Verifica se a sessão expirou por inatividade (3 dias)
+ * Retorna true se precisa login manual
+ */
+function shouldForceRelogin(): boolean {
   try {
-    localStorage.setItem(
-      REMEMBER_KEY,
-      JSON.stringify({ email, password: btoa(password) })
-    );
-  } catch (err) {
-    console.warn('Could not persist remembered credentials', err);
+    const lastActivity = localStorage.getItem(LAST_ACTIVITY_KEY);
+    if (!lastActivity) return false;
+    
+    const lastActivityTime = parseInt(lastActivity, 10);
+    const threeDaysMs = AUTO_LOGIN_EXPIRY_DAYS * 24 * 60 * 60 * 1000;
+    const elapsed = Date.now() - lastActivityTime;
+    
+    if (elapsed > threeDaysMs) {
+      console.log('[AUTH] Sessão inativa por mais de 3 dias - forçando login manual');
+      return true;
+    }
+    
+    return false;
+  } catch {
+    return false;
   }
 }
 
-function hydrateAuthForm(): void {
-  const remembered = getRememberedCredentials();
-  const emailEl = document.getElementById('login-email');
-  const passwordEl = document.getElementById('login-password');
-  const rememberEl = document.getElementById('remember-me');
-
-  if (rememberEl) {
-    rememberEl.checked = true;
-  }
-
-  if (remembered && emailEl && passwordEl) {
-    emailEl.value = remembered.email;
-    passwordEl.value = remembered.password;
+/**
+ * Limpa dados de sessão ao forçar relogin
+ */
+function clearSessionData(): void {
+  try {
+    localStorage.removeItem(LAST_ACTIVITY_KEY);
+    localStorage.removeItem('sb-auth-token');
+  } catch {
+    // Ignore
   }
 }
 
@@ -508,14 +504,12 @@ export async function handleLogin(): Promise<void> {
   const emailEl = document.getElementById('login-email');
   const passwordEl = document.getElementById('login-password');
   const errorEl = document.getElementById('login-error');
-  const rememberEl = document.getElementById('remember-me');
   const termsEl = document.getElementById('login-terms-accept');
   const loginBtn = document.querySelector('#login-form button');
   if (!emailEl || !passwordEl || !errorEl) return;
 
   const email = emailEl.value;
   const password = passwordEl.value;
-  const remember = !!rememberEl?.checked;
   const termsAccepted = !!termsEl?.checked;
   const captchaToken = CAPTCHA_REQUIRED ? loginCaptchaToken : null;
 
@@ -573,7 +567,8 @@ export async function handleLogin(): Promise<void> {
     return;
   }
   
-  persistRememberedCredentials(email, password, remember);
+  // ✅ Atualizar timestamp de última atividade
+  updateLastActivity();
   
   // Salvar aceitação dos termos e atualizar email
   if (data?.user) {
@@ -1014,6 +1009,19 @@ export function setupAuthStateListener(loadUserDataCallback: (user: User) => voi
 
     // Em refresh com sessão persistida, Supabase dispara INITIAL_SESSION
     if ((event === 'INITIAL_SESSION' || event === 'SIGNED_IN') && session?.user) {
+      // 🔒 Verificar se precisa forçar relogin por inatividade (3 dias)
+      if (shouldForceRelogin()) {
+        console.log('[AUTH] Forçando relogin por inatividade de 3 dias');
+        supabase.auth.signOut();
+        clearSessionData();
+        clearActiveUser();
+        showAlert('info', '🔐 Sessão Expirada', 'Sua sessão expirou por inatividade. Por favor, faça login novamente.');
+        return;
+      }
+      
+      // ✅ Atualizar timestamp de atividade
+      updateLastActivity();
+      
       loadUserDataCallback(session.user);
       return;
     }
