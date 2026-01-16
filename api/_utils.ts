@@ -393,29 +393,64 @@ export function generateCsrfToken(userId: string): string {
 }
 
 /**
- * Valida se o token CSRF enviado é válido para o usuário
+ * Valida se o token CSRF enviado é válido para o usuário com validação rigorosa
  */
 export function validateCsrfToken(userId: string, token: string | undefined): boolean {
-  if (!token || typeof token !== 'string') {
+  // Validação de parâmetros
+  if (!userId || typeof userId !== 'string') {
+    console.error('[CSRF] UserId inválido ou ausente');
     return false;
   }
   
+  if (!token || typeof token !== 'string') {
+    console.error(`[CSRF] ❌ Token ausente ou inválido para user ${userId}`);
+    return false;
+  }
+  
+  // Validação de tamanho mínimo do token
+  if (token.length < 32) {
+    console.error(`[CSRF] ❌ Token muito curto (${token.length} chars) para user ${userId}`);
+    return false;
+  }
+  
+  // Busca o token armazenado
   const entry = csrfTokens.get(userId);
   if (!entry) {
+    console.error(`[CSRF] ❌ Token não encontrado no servidor para user ${userId}`);
     return false;
   }
   
   // Verifica se o token expirou
   if (Date.now() > entry.expiresAt) {
+    console.warn(`[CSRF] ⏰ Token expirado para user ${userId}`);
     csrfTokens.delete(userId);
     return false;
   }
   
+  // Validação de tamanho para timing-safe comparison
+  if (token.length !== entry.token.length) {
+    console.error(`[CSRF] ❌ Token com tamanho incorreto para user ${userId}`);
+    return false;
+  }
+  
   // Compara tokens usando timing-safe comparison para evitar timing attacks
-  return crypto.timingSafeEqual(
-    Buffer.from(token),
-    Buffer.from(entry.token)
-  );
+  try {
+    const isValid = crypto.timingSafeEqual(
+      Buffer.from(token),
+      Buffer.from(entry.token)
+    );
+    
+    if (isValid) {
+      console.log(`[CSRF] ✅ Token válido para user ${userId}`);
+    } else {
+      console.error(`[CSRF] ❌ Token inválido (não corresponde) para user ${userId}`);
+    }
+    
+    return isValid;
+  } catch (err) {
+    console.error(`[CSRF] ❌ Erro ao comparar tokens para user ${userId}:`, err);
+    return false;
+  }
 }
 
 /**

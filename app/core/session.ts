@@ -147,21 +147,74 @@ export function clearActiveUser(): void {
 const CSRF_TOKEN_KEY = 'ls-csrf-token';
 
 /**
- * Armazena o token CSRF no localStorage
+ * Armazena o token CSRF no localStorage com timestamp de expiração
  */
 export function setCsrfToken(token: string): void {
   if (!token || typeof token !== 'string') {
-    console.warn('Invalid CSRF token provided');
+    console.warn('[CSRF] Token inválido fornecido');
     return;
   }
-  safeSetItem(CSRF_TOKEN_KEY, token);
+  
+  if (token.length < 32) {
+    console.warn('[CSRF] Token muito curto - rejeitado');
+    return;
+  }
+  
+  const tokenData = {
+    token,
+    timestamp: Date.now(),
+    expiresAt: Date.now() + (2 * 60 * 60 * 1000) // 2 horas
+  };
+  
+  safeSetItem(CSRF_TOKEN_KEY, JSON.stringify(tokenData));
+  console.log('[CSRF] Token armazenado com sucesso');
 }
 
 /**
- * Recupera o token CSRF armazenado
+ * Recupera o token CSRF armazenado com validação de expiração
  */
 export function getCsrfToken(): string | null {
-  return safeGetItem(CSRF_TOKEN_KEY);
+  const stored = safeGetItem(CSRF_TOKEN_KEY);
+  if (!stored) return null;
+  
+  try {
+    const tokenData = JSON.parse(stored);
+    
+    // Validação de formato
+    if (!tokenData.token || typeof tokenData.token !== 'string') {
+      console.warn('[CSRF] Token inválido - formato incorreto');
+      clearCsrfToken();
+      return null;
+    }
+    
+    // Validação de tamanho (tokens CSRF devem ter pelo menos 32 caracteres)
+    if (tokenData.token.length < 32) {
+      console.warn('[CSRF] Token inválido - tamanho insuficiente');
+      clearCsrfToken();
+      return null;
+    }
+    
+    // Validação de expiração
+    if (tokenData.expiresAt && Date.now() > tokenData.expiresAt) {
+      console.warn('[CSRF] Token expirado - será regenerado no próximo fetch');
+      clearCsrfToken();
+      return null;
+    }
+    
+    return tokenData.token;
+  } catch (err) {
+    console.error('[CSRF] Erro ao parsear token:', err);
+    clearCsrfToken();
+    return null;
+  }
+}
+
+/**
+ * Verifica se o token CSRF está válido (existe e não expirou)
+ */
+export function isCsrfTokenValid(): boolean {
+  const token = getCsrfToken();
+  return token !== null && token.length >= 32;
 }
 
 /**
@@ -172,13 +225,25 @@ export function clearCsrfToken(): void {
 }
 
 /**
- * Busca um novo token CSRF do servidor após login
+ * Busca um novo token CSRF do servidor após login com validação rigorosa
  * @param userId - ID do usuário autenticado
  * @param authToken - Token de autenticação do Supabase
  * @returns Promise com o token CSRF ou null em caso de erro
  */
 export async function fetchCsrfToken(userId: string, authToken: string): Promise<string | null> {
+  // Validação de parâmetros obrigatórios
+  if (!userId || typeof userId !== 'string') {
+    console.error('[CSRF] userId inválido ou ausente');
+    return null;
+  }
+  
+  if (!authToken || typeof authToken !== 'string') {
+    console.error('[CSRF] authToken inválido ou ausente');
+    return null;
+  }
+  
   try {
+    console.log('[CSRF] Buscando novo token do servidor...');
     const response = await fetch('/api/_profile', {
       method: 'POST',
       headers: {
@@ -192,21 +257,38 @@ export async function fetchCsrfToken(userId: string, authToken: string): Promise
     });
 
     if (!response.ok) {
-      console.error('Failed to fetch CSRF token:', response.status);
+      console.error(`[CSRF] Erro HTTP ${response.status}`);
       return null;
     }
 
     const data = await response.json();
     if (data.success && data.csrfToken) {
+      // Validação do token recebido
+      if (typeof data.csrfToken !== 'string' || data.csrfToken.length < 32) {
+        console.error('[CSRF] Token recebido do servidor é inválido');
+        return null;
+      }
+      
       setCsrfToken(data.csrfToken);
+      console.log('[CSRF] ✅ Token obtido e armazenado com sucesso');
       return data.csrfToken;
     }
 
+    console.warn('[CSRF] Resposta do servidor não contém token válido');
     return null;
   } catch (error) {
-    console.error('Error fetching CSRF token:', error);
+    console.error('[CSRF] Erro ao buscar token:', error);
     return null;
   }
+}
+
+/**
+ * Força renovação do token CSRF
+ */
+export async function renewCsrfToken(userId: string, authToken: string): Promise<string | null> {
+  console.log('[CSRF] Forçando renovação do token...');
+  clearCsrfToken();
+  return await fetchCsrfToken(userId, authToken);
 }
 
 /**
@@ -235,13 +317,13 @@ export async function clearCsrfTokenOnServer(userId: string, authToken: string):
 }
 
 /**
- * Adiciona o header X-CSRF-Token a um objeto de headers
+ * Adiciona o header X-CSRF-Token a um objeto de headers com validação rigorosa
  * Útil para adicionar proteção CSRF a chamadas de API
  */
 export function addCsrfHeader(headers: HeadersInit = {}): HeadersInit {
   const token = getCsrfToken();
   if (!token) {
-    console.warn('No CSRF token available');
+    console.error('[CSRF] ⚠️ CRÍTICO: Token CSRF não disponível! Requisição pode ser bloqueada.');
     return headers;
   }
 
