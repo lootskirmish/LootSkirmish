@@ -1362,14 +1362,14 @@ async function handleWebhook(req: ApiRequest, res: ApiResponse, { rawBody, parse
       }
 
       // Replay attack protection
-      if (webhookReplayProtection.hasBeenProcessed(event.id)) {
+      if (await webhookReplayProtection.hasBeenProcessed(event.id, supabase)) {
         console.warn('⚠️ Stripe webhook already processed:', event.id);
         securityMonitor.recordWebhookFailure();
         return res.status(200).json({ received: true, duplicate: true });
       }
 
       console.log('✅ Stripe webhook verified:', event.type);
-      webhookReplayProtection.markAsProcessed(event.id);
+      await webhookReplayProtection.markAsProcessed(event.id, supabase);
 
       if (event.type === 'checkout.session.completed') {
         const session = event.data.object;
@@ -1431,11 +1431,11 @@ async function handleWebhook(req: ApiRequest, res: ApiResponse, { rawBody, parse
 
       // Replay attack protection
       const webhookUniqueId = `mp_${notification.id}_${notificationId}`;
-      if (webhookReplayProtection.hasBeenProcessed(webhookUniqueId)) {
+      if (await webhookReplayProtection.hasBeenProcessed(webhookUniqueId, supabase)) {
         console.warn('⚠️ MercadoPago notification already processed:', webhookUniqueId);
         return res.status(200).json({ received: true, duplicate: true });
       }
-      webhookReplayProtection.markAsProcessed(webhookUniqueId);
+      await webhookReplayProtection.markAsProcessed(webhookUniqueId, supabase);
 
       // MercadoPago envia diferentes tipos de notificação
       // Tipo 'payment' é o que nos interessa
