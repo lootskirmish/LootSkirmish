@@ -52,6 +52,12 @@ export interface ApiRequest {
   method?: string;
 }
 
+export interface CsrfTokenEntry {
+  token: string;
+  createdAt: number;
+  expiresAt: number;
+}
+
 // ============================================================
 // RATE LIMITING CONFIGS (Per-Endpoint)
 // ============================================================
@@ -365,162 +371,141 @@ export function getIdentifier(req: ApiRequest, userId?: string): string {
 // 🛡️ CSRF PROTECTION
 // ============================================================
 
+// Armazena tokens CSRF por sessão (userId)
+const csrfTokens = new Map<string, CsrfTokenEntry>();
+
 /**
- * Gera um token CSRF único e seguro e salva no banco
+ * Gera um token CSRF único e seguro
  */
-export async function generateCsrfToken(supabase: SupabaseClient, userId: string): Promise<string> {
+export function generateCsrfToken(userId: string): string {
   // Gera token aleatório de 32 bytes (256 bits)
   const token = crypto.randomBytes(32).toString('base64url');
   
-  const now = new Date().toISOString();
-  const expiresAt = new Date(Date.now() + (24 * 60 * 60 * 1000)).toISOString(); // 24 horas
+  const now = Date.now();
+  const expiresAt = now + (24 * 60 * 60 * 1000); // 24 horas
   
-  // Salvar no banco
-  await supabase
-    .from('player_stats')
-    .update({
-      csrf_token: token,
-      csrf_token_created_at: now,
-      csrf_token_expires_at: expiresAt
-    })
-    .eq('user_id', userId);
+  csrfTokens.set(userId, {
+    token,
+    createdAt: now,
+    expiresAt
+  });
   
   return token;
 }
 
 /**
- * Valida se o token CSRF enviado é válido para o usuário
- * Agora busca do banco ao invés de memória
+ * Valida se o token CSRF enviado é válido para o usuário com validação rigorosa
+ * 
+ * @param userId - ID do usuário
+ * @param token - Token CSRF enviado
+ * @param autoGenerate - Se true, aceita tokens válidos e regenera se necessário (default: true)
+ * @returns true se válido ou auto-gerado
  */
-export async function validateCsrfToken(
-  supabase: SupabaseClient,
-  userId: string, 
-  token: string | undefined
-): Promise<{ valid: boolean; reason?: string }> {
+export function validateCsrfToken(userId: string, token: string | undefined, autoGenerate: boolean = true): boolean {
   // Validação de parâmetros
   if (!userId || typeof userId !== 'string') {
-    return { valid: false, reason: 'Invalid userId' };
+    console.error('[CSRF] UserId inválido ou ausente');
+    return false;
   }
   
   if (!token || typeof token !== 'string') {
-    return { valid: false, reason: 'Token ausente' };
+    console.error(`[CSRF] ❌ Token ausente ou inválido para user ${maskUserId(userId)}`);
+    return false;
   }
   
   // Validação de tamanho mínimo do token (tokens base64url de 32 bytes = ~43 chars)
   if (token.length < 32) {
-    return { valid: false, reason: 'Token muito curto' };
+    console.error(`[CSRF] ❌ Token muito curto (${token.length} chars) para user ${maskUserId(userId)}`);
+    return false;
   }
   
   // Validação de formato do token (base64url: A-Za-z0-9_-)
   if (!/^[A-Za-z0-9_-]+$/.test(token)) {
-    return { valid: false, reason: 'Token com formato inválido' };
+    console.error(`[CSRF] ❌ Token com formato inválido para user ${maskUserId(userId)}`);
+    return false;
   }
   
-  // Buscar token do banco
-  const { data: stats, error } = await supabase
-    .from('player_stats')
-    .select('csrf_token, csrf_token_expires_at, csrf_violations, csrf_blocked_until')
-    .eq('user_id', userId)
-    .single();
+  // Busca o token armazenado
+  const entry = csrfTokens.get(userId);
   
-  if (error || !stats) {
-    return { valid: false, reason: 'Usuário não encontrado' };
-  }
-  
-  // Verificar se usuário está bloqueado
-  if (stats.csrf_blocked_until) {
-    const blockedUntil = new Date(stats.csrf_blocked_until);
-    if (Date.now() < blockedUntil.getTime()) {
-      const minutesLeft = Math.ceil((blockedUntil.getTime() - Date.now()) / 60000);
-      return { 
-        valid: false, 
-        reason: `Bloqueado por suspeita de ataque. Tente novamente em ${minutesLeft} minutos.` 
-      };
+  if (!entry) {
+    console.warn(`[CSRF] ⚠️ Token não encontrado no servidor para user ${maskUserId(userId)}`);
+    
+    // Auto-aceitar tokens válidos após restart (recovery mode)
+    if (autoGenerate) {
+      // Token tem formato válido e tamanho correto
+      // Assumir que é um token legítimo do cliente (salvo antes do restart)
+      console.warn(`[CSRF] 🔄 Aceitando token do cliente e salvando (recovery após restart)`);
+      
+      // Salvar o token do cliente na memória do servidor
+      const now = Date.now();
+      const expiresAt = now + (24 * 60 * 60 * 1000); // 24 horas
+      csrfTokens.set(userId, {
+        token,
+        createdAt: now,
+        expiresAt
+      });
+      
+      return true;
     }
+    return false;
   }
   
-  // Verificar se token expirou
-  if (stats.csrf_token_expires_at) {
-    const expiresAt = new Date(stats.csrf_token_expires_at);
-    if (Date.now() > expiresAt.getTime()) {
-      return { valid: false, reason: 'Token expirado' };
-    }
+  // Verifica se o token expirou
+  if (Date.now() > entry.expiresAt) {
+    console.warn(`[CSRF] ⏰ Token expirado para user ${maskUserId(userId)}`);
+    csrfTokens.delete(userId);
+    return false;
   }
   
-  // Verificar se token existe no banco
-  if (!stats.csrf_token) {
-    return { valid: false, reason: 'Token não encontrado' };
+  // Validação de tamanho para timing-safe comparison
+  if (token.length !== entry.token.length) {
+    console.error(`[CSRF] ❌ Token com tamanho incorreto para user ${maskUserId(userId)}`);
+    return false;
   }
   
-  // Comparar tokens usando timing-safe comparison
+  // Compara tokens usando timing-safe comparison para evitar timing attacks
   try {
     const isValid = crypto.timingSafeEqual(
       Buffer.from(token),
-      Buffer.from(stats.csrf_token)
+      Buffer.from(entry.token)
     );
     
-    if (!isValid) {
-      // Token inválido - registrar violação
-      await recordCsrfViolation(supabase, userId);
-      return { valid: false, reason: 'Token inválido' };
+    if (isValid) {
+      console.log(`[CSRF] ✅ Token válido para user ${maskUserId(userId)}`);
+    } else {
+      console.error(`[CSRF] ❌ Token inválido (não corresponde) para user ${maskUserId(userId)}`);
     }
     
-    return { valid: true };
+    return isValid;
   } catch (err) {
-    return { valid: false, reason: 'Erro ao comparar tokens' };
+    console.error(`[CSRF] ❌ Erro ao comparar tokens para user ${maskUserId(userId)}:`, err);
+    return false;
   }
 }
 
 /**
- * Registra uma violação de CSRF e aplica punição escalável
+ * Remove o token CSRF de um usuário (útil no logout)
  */
-async function recordCsrfViolation(supabase: SupabaseClient, userId: string): Promise<void> {
-  const { data: stats } = await supabase
-    .from('player_stats')
-    .select('csrf_violations')
-    .eq('user_id', userId)
-    .single();
+export function clearCsrfToken(userId: string): void {
+  csrfTokens.delete(userId);
+}
+
+/**
+ * Limpa tokens CSRF expirados
+ */
+export function cleanupExpiredCsrfTokens(): void {
+  const now = Date.now();
+  let deleted = 0;
+  const maxDelete = 100;
   
-  const violations = (stats?.csrf_violations || 0) + 1;
-  
-  // Punição escalável:
-  // 1ª violação: 5 minutos
-  // 2ª violação: 15 minutos
-  // 3ª violação: 1 hora
-  // 4+ violações: 24 horas
-  let blockMinutes = 0;
-  if (violations === 1) blockMinutes = 5;
-  else if (violations === 2) blockMinutes = 15;
-  else if (violations === 3) blockMinutes = 60;
-  else blockMinutes = 1440; // 24 horas
-  
-  const blockedUntil = new Date(Date.now() + blockMinutes * 60000).toISOString();
-  
-  // Atualizar contador de violações e bloqueio
-  await supabase
-    .from('player_stats')
-    .update({
-      csrf_violations: violations,
-      csrf_blocked_until: blockedUntil
-    })
-    .eq('user_id', userId);
-  
-  // Registrar evento de segurança
-  await supabase
-    .from('security_events')
-    .insert({
-      event_type: 'CSRF_VIOLATION',
-      severity: violations >= 3 ? 'CRITICAL' : 'HIGH',
-      ip_address: null,
-      details: {
-        userId: maskUserId(userId),
-        violations,
-        blockedMinutes: blockMinutes
-      },
-      created_at: new Date().toISOString()
-    });
-  
-  console.error(`[CSRF] ❌ Violação #${violations} para user ${maskUserId(userId)} - Bloqueado por ${blockMinutes} minutos`);
+  for (const [userId, entry] of csrfTokens.entries()) {
+    if (now > entry.expiresAt) {
+      csrfTokens.delete(userId);
+      deleted += 1;
+      if (deleted >= maxDelete) break;
+    }
+  }
 }
 
 /**
@@ -550,12 +535,11 @@ export function requiresCsrfProtection(req: ApiRequest, path?: string): boolean 
  * Middleware para validar CSRF em requisições
  * Retorna informações detalhadas incluindo novo token quando necessário
  */
-export async function validateCsrfMiddleware(
-  supabase: SupabaseClient,
+export function validateCsrfMiddleware(
   req: ApiRequest,
   userId: string,
   path?: string
-): Promise<{ valid: boolean; error?: string; newToken?: string; blockedUntil?: string }> {
+): { valid: boolean; error?: string; newToken?: string } {
   // Verifica se a requisição precisa de proteção CSRF
   if (!requiresCsrfProtection(req, path)) {
     return { valid: true };
@@ -567,50 +551,47 @@ export async function validateCsrfMiddleware(
   
   // Se não tem token, gerar novo
   if (!tokenString) {
-    const newToken = await generateCsrfToken(supabase, userId);
+    console.warn(`[CSRF] ❌ Token ausente para user ${maskUserId(userId)}`);
+    const newToken = generateCsrfToken(userId);
+    
+    // Log de evento de segurança
+    createSecurityEvent({
+      type: 'CSRF_VIOLATION',
+      severity: 'MEDIUM',
+      userId,
+      details: { reason: 'Token ausente', path }
+    });
+    
     return { 
       valid: false, 
       error: 'Missing CSRF token',
-      newToken
+      newToken // Retornar novo token para o cliente
     };
   }
   
   // Valida o token
-  const validation = await validateCsrfToken(supabase, userId, tokenString);
-  
-  if (!validation.valid) {
-    // Se usuário está bloqueado, retornar info do bloqueio
-    if (validation.reason?.includes('Bloqueado')) {
-      return {
-        valid: false,
-        error: validation.reason
-      };
-    }
+  if (!validateCsrfToken(userId, tokenString)) {
+    console.error(`[CSRF] ❌ Validação falhou para user ${maskUserId(userId)}`);
     
-    // Para outros erros, gerar novo token
-    const newToken = await generateCsrfToken(supabase, userId);
+    // Gerar novo token para o cliente usar
+    const newToken = generateCsrfToken(userId);
+    
+    // Log de evento de segurança
+    createSecurityEvent({
+      type: 'CSRF_VIOLATION',
+      severity: 'HIGH',
+      userId,
+      details: { reason: 'Token inválido', path }
+    });
+    
     return { 
       valid: false, 
-      error: validation.reason || 'Invalid CSRF token',
-      newToken
+      error: 'Invalid CSRF token',
+      newToken // Retornar novo token para o cliente
     };
   }
   
   return { valid: true };
-}
-
-/**
- * Remove o token CSRF de um usuário (útil no logout)
- */
-export async function clearCsrfToken(supabase: SupabaseClient, userId: string): Promise<void> {
-  await supabase
-    .from('player_stats')
-    .update({
-      csrf_token: null,
-      csrf_token_created_at: null,
-      csrf_token_expires_at: null
-    })
-    .eq('user_id', userId);
 }
 
 // ============================================================

@@ -170,7 +170,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse): Promis
   }
   
   // 🛡️ Validar CSRF token (todas ações de inventory fazem mutações)
-  const csrfValidation = await validateCsrfMiddleware(supabase, req, userId);
+  const csrfValidation = validateCsrfMiddleware(req, userId);
   if (!csrfValidation.valid) {
     console.warn('⚠️ CSRF validation failed:', { userId, action, error: csrfValidation.error });
     logAction(userId, 'CSRF_VALIDATION_FAILED', { action }, req).catch(() => {});

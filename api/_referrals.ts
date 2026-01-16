@@ -663,7 +663,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse): Promis
   // 🛡️ Validar CSRF token (apenas para ações que fazem mutações)
   const mutationActions = ['registerReferral', 'withdrawEarnings'];
   if (mutationActions.includes(action)) {
-    const csrfValidation = await validateCsrfMiddleware(supabase, req, userId);
+    const csrfValidation = validateCsrfMiddleware(req, userId);
     if (!csrfValidation.valid) {
       console.warn('⚠️ CSRF validation failed:', { userId, action, error: csrfValidation.error });
       logAudit(supabase, userId, 'REFERRAL_CSRF_VALIDATION_FAILED', { action }, req as any).catch(() => {});

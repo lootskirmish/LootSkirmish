@@ -190,7 +190,7 @@ async function handleSendMessage(req: ApiRequest, res: ApiResponse): Promise<voi
     }
     
     // 🛡️ Validar CSRF token
-    const csrfValidation = await validateCsrfMiddleware(supabase, req, userId);
+    const csrfValidation = validateCsrfMiddleware(req, userId);
     if (!csrfValidation.valid) {
       console.warn('⚠️ CSRF validation failed:', { userId, error: csrfValidation.error });
       return res.status(403).json({ error: 'Security validation failed' });
