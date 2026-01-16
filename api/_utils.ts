@@ -403,33 +403,33 @@ export function validateCsrfToken(userId: string, token: string | undefined): bo
   }
   
   if (!token || typeof token !== 'string') {
-    console.error(`[CSRF] ❌ Token ausente ou inválido para user ${userId}`);
+    console.error(`[CSRF] ❌ Token ausente ou inválido para user ${maskUserId(userId)}`);
     return false;
   }
   
   // Validação de tamanho mínimo do token
   if (token.length < 32) {
-    console.error(`[CSRF] ❌ Token muito curto (${token.length} chars) para user ${userId}`);
+    console.error(`[CSRF] ❌ Token muito curto (${token.length} chars) para user ${maskUserId(userId)}`);
     return false;
   }
   
   // Busca o token armazenado
   const entry = csrfTokens.get(userId);
   if (!entry) {
-    console.error(`[CSRF] ❌ Token não encontrado no servidor para user ${userId}`);
+    console.error(`[CSRF] ❌ Token não encontrado no servidor para user ${maskUserId(userId)}`);
     return false;
   }
   
   // Verifica se o token expirou
   if (Date.now() > entry.expiresAt) {
-    console.warn(`[CSRF] ⏰ Token expirado para user ${userId}`);
+    console.warn(`[CSRF] ⏰ Token expirado para user ${maskUserId(userId)}`);
     csrfTokens.delete(userId);
     return false;
   }
   
   // Validação de tamanho para timing-safe comparison
   if (token.length !== entry.token.length) {
-    console.error(`[CSRF] ❌ Token com tamanho incorreto para user ${userId}`);
+    console.error(`[CSRF] ❌ Token com tamanho incorreto para user ${maskUserId(userId)}`);
     return false;
   }
   
@@ -441,14 +441,14 @@ export function validateCsrfToken(userId: string, token: string | undefined): bo
     );
     
     if (isValid) {
-      console.log(`[CSRF] ✅ Token válido para user ${userId}`);
+      console.log(`[CSRF] ✅ Token válido para user ${maskUserId(userId)}`);
     } else {
-      console.error(`[CSRF] ❌ Token inválido (não corresponde) para user ${userId}`);
+      console.error(`[CSRF] ❌ Token inválido (não corresponde) para user ${maskUserId(userId)}`);
     }
     
     return isValid;
   } catch (err) {
-    console.error(`[CSRF] ❌ Erro ao comparar tokens para user ${userId}:`, err);
+    console.error(`[CSRF] ❌ Erro ao comparar tokens para user ${maskUserId(userId)}:`, err);
     return false;
   }
 }
@@ -542,7 +542,7 @@ export async function registerMoneyTransaction(
 ): Promise<void> {
   try {
     if (!userId || typeof userId !== 'string') {
-      console.error('⚠️ Invalid userId for transaction:', userId);
+      console.error('⚠️ Invalid userId for transaction:', userId ? maskUserId(userId) : 'undefined');
       return;
     }
 
@@ -1447,13 +1447,38 @@ const BLOCKED_COUNTRIES = new Set<string>([
 ]);
 
 /**
- * Verifica geolocalização de um IP usando API gratuita
+ * Verifica geolocalização de um IP usando API gratuita com cache no banco
  * @param ip - Endereço IP a verificar
+ * @param supabase - Cliente Supabase para cache
  * @returns Informações de geolocalização
  */
-export async function checkIpGeolocation(ip: string): Promise<GeolocationResult> {
+export async function checkIpGeolocation(
+  ip: string, 
+  supabase?: SupabaseClient
+): Promise<GeolocationResult> {
   try {
-    // Usar API gratuita ipapi.co (1000 req/dia grátis)
+    // Se temos supabase, verificar cache primeiro (24h)
+    if (supabase) {
+      const cacheExpiry = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+      const { data: cached } = await supabase
+        .from('ip_geolocation_cache')
+        .select('*')
+        .eq('ip_address', ip)
+        .gt('created_at', cacheExpiry)
+        .single();
+
+      if (cached) {
+        return {
+          country: cached.country,
+          city: cached.city,
+          region: cached.region,
+          isBlocked: cached.is_blocked,
+          reason: cached.block_reason
+        };
+      }
+    }
+
+    // Fazer requisição à API externa
     const response = await fetch(`https://ipapi.co/${ip}/json/`, {
       headers: {
         'User-Agent': 'LootSkirmish/1.0'
@@ -1474,14 +1499,35 @@ export async function checkIpGeolocation(ip: string): Promise<GeolocationResult>
     
     // Verificar se país está bloqueado
     const isBlocked = BLOCKED_COUNTRIES.has(data.country_code || '');
-
-    return {
+    
+    const result: GeolocationResult = {
       country: data.country_name || null,
       city: data.city || null,
       region: data.region || null,
       isBlocked,
       reason: isBlocked ? `Country ${data.country_name || 'Unknown'} is blocked` : undefined
     };
+
+    // Salvar no cache se temos supabase
+    if (supabase) {
+      await supabase
+        .from('ip_geolocation_cache')
+        .upsert({
+          ip_address: ip,
+          country: result.country,
+          city: result.city,
+          region: result.region,
+          is_blocked: result.isBlocked,
+          block_reason: result.reason || null,
+          created_at: new Date().toISOString()
+        }, {
+          onConflict: 'ip_address'
+        })
+        .select()
+        .single();
+    }
+
+    return result;
   } catch (error) {
     console.error('Geolocation check failed:', error);
     return {

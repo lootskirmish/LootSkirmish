@@ -228,11 +228,40 @@ class PendingOrderManager {
 class WebhookReplayProtection {
   private processedWebhooks = new Map<string, number>();
 
-  hasBeenProcessed(webhookId: string): boolean {
+  async hasBeenProcessed(webhookId: string, supabase: any): Promise<boolean> {
+    // Verificar no banco primeiro (proteção contra múltiplas instâncias)
+    try {
+      const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+      const { data } = await supabase
+        .from('processed_webhooks')
+        .select('webhook_id')
+        .eq('webhook_id', webhookId)
+        .gt('processed_at', oneDayAgo)
+        .single();
+      
+      if (data) return true;
+    } catch (err) {
+      // Se não encontrar no banco, verificar cache local
+    }
+    
+    // Fallback: verificar cache em memória
     return this.processedWebhooks.has(webhookId);
   }
 
-  markAsProcessed(webhookId: string): void {
+  async markAsProcessed(webhookId: string, supabase: any): Promise<void> {
+    // Armazenar no banco (persistente entre instâncias)
+    try {
+      await supabase
+        .from('processed_webhooks')
+        .insert({
+          webhook_id: webhookId,
+          processed_at: new Date().toISOString()
+        });
+    } catch (err) {
+      console.error('Error saving webhook to database:', err);
+    }
+    
+    // Também armazenar em memória para acesso rápido
     this.processedWebhooks.set(webhookId, Date.now());
   }
 

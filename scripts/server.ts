@@ -79,11 +79,40 @@ app.use((req: Request, res: Response, next) => {
   res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
   res.setHeader('Permissions-Policy', 'geolocation=(), microphone=(), camera=()');
   
+  // Additional Helmet-like headers
+  res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+  res.setHeader('X-Download-Options', 'noopen');
+  res.setHeader('X-Permitted-Cross-Domain-Policies', 'none');
+  res.setHeader('Cross-Origin-Embedder-Policy', 'require-corp');
+  res.setHeader('Cross-Origin-Opener-Policy', 'same-origin');
+  res.setHeader('Cross-Origin-Resource-Policy', 'same-origin');
+  
+  next();
+});
+
+// ============================================================
+// REQUEST SIZE LIMIT PROTECTION (10MB)
+// ============================================================
+const MAX_BODY_SIZE = 10 * 1024 * 1024; // 10MB
+
+app.use((req: Request, res: Response, next) => {
+  let size = 0;
+  req.on('data', (chunk) => {
+    size += chunk.length;
+    if (size > MAX_BODY_SIZE) {
+      res.status(413).json({
+        error: 'Payload too large',
+        message: 'Request body exceeds 10MB limit'
+      });
+      req.destroy();
+    }
+  });
   next();
 });
 
 // Preserve raw body for webhooks (Stripe/MercadoPago) while still parsing JSON normally.
 app.use(express.json({
+  limit: '10mb',
   verify: (req: VercelRequest, res: Response, buf: Buffer) => {
     req.rawBody = Buffer.from(buf);
   }
@@ -91,6 +120,7 @@ app.use(express.json({
 
 app.use(express.urlencoded({
   extended: true,
+  limit: '10mb',
   verify: (req: VercelRequest, res: Response, buf: Buffer) => {
     req.rawBody = Buffer.from(buf);
   }
