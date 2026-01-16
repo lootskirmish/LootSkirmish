@@ -11,7 +11,8 @@ import {
   handleLogin,
   handleRegister,
   setupAuthStateListener,
-  switchTab
+  switchTab,
+  initializeSupabase
 } from './features/auth.js';
 
 import {
@@ -498,8 +499,27 @@ async function loadUserData(user: any): Promise<void> {
   }
 }
 
-// Auth State Listener
-setupAuthStateListener(loadUserData);
+// 🔐 INICIALIZAR SUPABASE DO BACKEND (ANTES de usar auth)
+async function initializeApp(): Promise<void> {
+  try {
+    const success = await initializeSupabase();
+    if (!success) {
+      console.error('[APP] Falha ao inicializar Supabase');
+      // Mostrar tela de erro em branco ou mensagem
+      document.body.innerHTML = '<h1 style="text-align: center; margin-top: 100px; color: #666;">⚠️ Unable to initialize application. Please refresh the page.</h1>';
+      return;
+    }
+    
+    // ✅ Agora que Supabase está pronto, configurar auth listener
+    setupAuthStateListener(loadUserData);
+  } catch (err) {
+    console.error('[APP] Erro durante inicialização:', err);
+    document.body.innerHTML = '<h1 style="text-align: center; margin-top: 100px; color: #666;">⚠️ Initialization error. Please refresh the page.</h1>';
+  }
+}
+
+// Iniciar aplicação
+initializeApp();
 
 let themeInitPromise: Promise<void> | null = null;
 function ensureThemeLoaded({ force = false } = {}): Promise<void> {

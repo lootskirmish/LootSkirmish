@@ -96,6 +96,15 @@ export default async function handler(req: ApiRequest, res: ApiResponse): Promis
     return;
   }
 
+  // 🔐 ENDPOINT DE CONFIGURAÇÃO - Servir credenciais do Supabase de forma segura
+  // Apenas POST para evitar cache e deixar claro que é uma ação
+  if (req.method === 'POST' && req.body?.action === 'getConfig') {
+    return res.status(200).json({
+      supabaseUrl: process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL,
+      supabaseKey: process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY
+    });
+  }
+
   // CSP VIOLATION REPORTING ENDPOINT
   if (req.method === 'POST' && req.body && typeof req.body === 'object') {
     const body = req.body as any;

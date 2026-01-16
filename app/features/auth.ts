@@ -51,9 +51,9 @@ declare global {
 }
 
 // ============ SUPABASE CONFIG ============
-// 🔒 Usando variáveis de ambiente para segurança
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || '';
-const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+// 🔒 NUNCA hardcoded - sempre carregado do backend de forma segura
+let SUPABASE_URL: string | null = null;
+let SUPABASE_KEY: string | null = null;
 const LAST_ACTIVITY_KEY = 'ls-last-activity';
 const PENDING_REFERRAL_KEY = 'pending-referral-link';
 const AUTO_LOGIN_EXPIRY_DAYS = 3; // Forçar login manual após 3 dias de inatividade
@@ -63,21 +63,66 @@ const HCAPTCHA_SITEKEY = (import.meta.env?.VITE_HCAPTCHA_SITEKEY ?? null)
   || null;
 const CAPTCHA_REQUIRED = Boolean(HCAPTCHA_SITEKEY);
 
-export const supabase = createClient(SUPABASE_URL, SUPABASE_KEY, {
-  auth: {
-    autoRefreshToken: true,
-    persistSession: true,
-    detectSessionInUrl: true, // 🔥 PRECISA TRUE para pegar tokens do reset link
-    storage: window.localStorage,
-    storageKey: 'sb-auth-token',
-    flowType: 'implicit' // 🔥 MUDEI PARA IMPLICIT (mais simples)
-  },
-  global: {
-    headers: {
-      'X-Client-Info': 'loot-skirmish-web'
+// 🔐 Placeholder - será preenchido após carregar do backend
+export let supabase: any = null;
+
+/**
+ * Carrega credenciais do Supabase do backend de forma segura
+ * DEVE ser chamado antes de qualquer operação de auth
+ */
+export async function initializeSupabase(): Promise<boolean> {
+  if (supabase) return true; // Já inicializado
+  
+  try {
+    console.log('[AUTH] Carregando credenciais do Supabase...');
+    
+    // 🔐 Chamar backend para obter credenciais
+    const response = await fetch('/api/app', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'getConfig' })
+    });
+    
+    if (!response.ok) {
+      throw new Error(`Backend retornou ${response.status}`);
     }
+    
+    const config = await response.json();
+    
+    if (!config.supabaseUrl || !config.supabaseKey) {
+      throw new Error('Configuração incompleta do backend');
+    }
+    
+    SUPABASE_URL = config.supabaseUrl;
+    SUPABASE_KEY = config.supabaseKey;
+    
+    console.log('[AUTH] ✅ Credenciais carregadas com sucesso');
+    
+    // Criar cliente Supabase
+    supabase = createClient(SUPABASE_URL, SUPABASE_KEY, {
+      auth: {
+        autoRefreshToken: true,
+        persistSession: true,
+        detectSessionInUrl: true,
+        storage: window.localStorage,
+        storageKey: 'sb-auth-token',
+        flowType: 'implicit'
+      },
+      global: {
+        headers: {
+          'X-Client-Info': 'loot-skirmish-web'
+        }
+      }
+    });
+    
+    return true;
+  } catch (err) {
+    console.error('[AUTH] ❌ Erro ao carregar credenciais:', err);
+    showAlert('error', '🔐 Erro de Segurança', 
+      'Não foi possível estabelecer conexão segura com o servidor. Por favor, recarregue a página.');
+    return false;
   }
-});
+}
 
 let authStateSubscription: { unsubscribe: () => void } | null = null;
 let loginCaptchaToken: string | null = null;
@@ -86,6 +131,17 @@ let hcaptchaWidgets: HCaptchaWidgets = { login: null, register: null };
 let hcaptchaScriptPromise: Promise<HCaptchaInstance> | null = null;
 
 // ============ HELPERS ============
+
+/**
+ * Verifica se Supabase está inicializado e pronto
+ * Lança erro se não estiver
+ */
+export function ensureSupabaseInitialized(): any {
+  if (!supabase) {
+    throw new Error('[AUTH] Supabase não foi inicializado. Chame initializeSupabase() primeiro.');
+  }
+  return supabase;
+}
 
 /**
  * Atualiza timestamp de última atividade
