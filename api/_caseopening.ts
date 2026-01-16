@@ -571,8 +571,11 @@ export async function handleOpenCases(req: ApiRequest, res: ApiResponse) {
     const csrfValidation = validateCsrfMiddleware(req, userId);
     if (!csrfValidation.valid) {
       console.warn('⚠️ CSRF validation failed:', { userId, error: csrfValidation.error });
-      // CSRF validation failed - logged elsewhere
-      return res.status(403).json({ error: 'Security validation failed' });
+      // Retornar novo token para o cliente usar
+      return res.status(403).json({ 
+        error: 'Security validation failed',
+        csrfToken: csrfValidation.newToken // Novo token para o cliente
+      });
     }
 
     // 🔥 Verificar capacidade do inventário
@@ -851,7 +854,11 @@ export async function handlePurchasePass(req: ApiRequest, res: ApiResponse) {
     const csrfValidation = validateCsrfMiddleware(req, userId);
     if (!csrfValidation.valid) {
       console.warn('⚠️ CSRF validation failed:', { userId, error: csrfValidation.error });
-      return res.status(403).json({ error: 'Security validation failed' });
+      // Retornar novo token para o cliente usar
+      return res.status(403).json({ 
+        error: 'Security validation failed',
+        csrfToken: csrfValidation.newToken // Novo token para o cliente
+      });
     }
 
     // Validar configuração do pass
