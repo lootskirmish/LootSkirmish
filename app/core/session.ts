@@ -144,10 +144,18 @@ export function clearActiveUser(): void {
 // 🛡️ CSRF TOKEN MANAGEMENT
 // ============================================================
 
-const CSRF_TOKEN_KEY = 'ls-csrf-token';
+/**
+ * Interface para armazenar dados do token CSRF na memória
+ */
+interface CsrfTokenData {
+  token: string;
+  timestamp: number;
+  expiresAt: number;
+}
 
 /**
- * Armazena o token CSRF no localStorage com timestamp de expiração
+ * Armazena o token CSRF na memória (window.currentCsrfToken) usando a sessão do Supabase
+ * Não usa localStorage para maior segurança
  */
 export function setCsrfToken(token: string): void {
   if (!token || typeof token !== 'string') {
@@ -160,53 +168,54 @@ export function setCsrfToken(token: string): void {
     return;
   }
   
-  const tokenData = {
+  const tokenData: CsrfTokenData = {
     token,
     timestamp: Date.now(),
     expiresAt: Date.now() + (2 * 60 * 60 * 1000) // 2 horas
   };
   
-  safeSetItem(CSRF_TOKEN_KEY, JSON.stringify(tokenData));
-  console.log('[CSRF] Token armazenado com sucesso');
+  // Armazenar na memória (window)
+  if (typeof window !== 'undefined') {
+    (window as any).currentCsrfToken = token;
+    (window as any).__csrfTokenData = tokenData;
+  }
+  console.log('[CSRF] Token armazenado em memória com sucesso');
 }
 
 /**
- * Recupera o token CSRF armazenado com validação de expiração
+ * Recupera o token CSRF da memória com validação de expiração
+ * Usa a sessão ativa do Supabase como fonte de verdade
  */
 export function getCsrfToken(): string | null {
-  const stored = safeGetItem(CSRF_TOKEN_KEY);
-  if (!stored) return null;
+  if (typeof window === 'undefined') return null;
   
-  try {
-    const tokenData = JSON.parse(stored);
-    
-    // Validação de formato
-    if (!tokenData.token || typeof tokenData.token !== 'string') {
-      console.warn('[CSRF] Token inválido - formato incorreto');
-      clearCsrfToken();
-      return null;
-    }
-    
-    // Validação de tamanho (tokens CSRF devem ter pelo menos 32 caracteres)
-    if (tokenData.token.length < 32) {
-      console.warn('[CSRF] Token inválido - tamanho insuficiente');
-      clearCsrfToken();
-      return null;
-    }
-    
-    // Validação de expiração
-    if (tokenData.expiresAt && Date.now() > tokenData.expiresAt) {
-      console.warn('[CSRF] Token expirado - será regenerado no próximo fetch');
-      clearCsrfToken();
-      return null;
-    }
-    
-    return tokenData.token;
-  } catch (err) {
-    console.error('[CSRF] Erro ao parsear token:', err);
+  const tokenData = (window as any).__csrfTokenData as CsrfTokenData | undefined;
+  const token = (window as any).currentCsrfToken as string | undefined;
+  
+  if (!token || !tokenData) return null;
+  
+  // Validação de formato
+  if (typeof token !== 'string') {
+    console.warn('[CSRF] Token inválido - formato incorreto');
     clearCsrfToken();
     return null;
   }
+  
+  // Validação de tamanho (tokens CSRF devem ter pelo menos 32 caracteres)
+  if (token.length < 32) {
+    console.warn('[CSRF] Token inválido - tamanho insuficiente');
+    clearCsrfToken();
+    return null;
+  }
+  
+  // Validação de expiração
+  if (tokenData.expiresAt && Date.now() > tokenData.expiresAt) {
+    console.warn('[CSRF] Token expirado - será regenerado no próximo fetch');
+    clearCsrfToken();
+    return null;
+  }
+  
+  return token;
 }
 
 /**
@@ -218,10 +227,13 @@ export function isCsrfTokenValid(): boolean {
 }
 
 /**
- * Remove o token CSRF (útil no logout)
+ * Remove o token CSRF da memória (útil no logout)
  */
 export function clearCsrfToken(): void {
-  safeRemoveItem(CSRF_TOKEN_KEY);
+  if (typeof window !== 'undefined') {
+    (window as any).currentCsrfToken = null;
+    (window as any).__csrfTokenData = null;
+  }
 }
 
 /**

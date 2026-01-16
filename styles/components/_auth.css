@@ -153,26 +153,6 @@
   gap: 6px;
 }
 
-.remember-me {
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-  color: #dfe1ff;
-  font-size: 0.95rem;
-  cursor: pointer;
-  user-select: none;
-}
-
-.remember-me input {
-  width: 18px;
-  height: 18px;
-  flex-shrink: 0;
-  accent-color: var(--primary);
-  border: 2px solid var(--input-border);
-  border-radius: 6px;
-  background: var(--input-background);
-}
-
 .auth-helper {
   color: #cfd2ff;
   font-size: 0.85rem;
