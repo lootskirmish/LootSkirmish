@@ -62,7 +62,7 @@ app.use((req: Request, res: Response, next) => {
       "style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://fonts.googleapis.com",
       "img-src 'self' data: https: blob:",
       "font-src 'self' https://cdnjs.cloudflare.com https://fonts.gstatic.com data:",
-      "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://ipapi.co https://hcaptcha.com https://*.hcaptcha.com",
+      "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://unpkg.com https://ipapi.co https://hcaptcha.com https://*.hcaptcha.com",
       "frame-src 'self' https://hcaptcha.com https://*.hcaptcha.com",
       "media-src 'self' blob:",
       "object-src 'none'",
