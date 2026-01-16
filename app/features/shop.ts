@@ -371,8 +371,8 @@ function renderShop(): void {
     packagesGrid.appendChild(card);
   });
 
-  // Renderizar Assinaturas
-  SUBSCRIPTIONS.forEach(sub => {
+  // Renderizar Assinaturas (apenas sub_premium, não mostrar sub_premium_bp como card separado)
+  SUBSCRIPTIONS.filter(sub => sub.id === 'sub_premium').forEach(sub => {
     const card = createSubscriptionCard(sub);
     subsGrid.appendChild(card);
   });
@@ -733,6 +733,18 @@ function openPaymentModal(productId: string, type: 'package' | 'subscription'): 
     });
   });
 
+  // Bind evento de fechar modal
+  const closeBtn = modal.querySelector('.payment-close-btn');
+  if (closeBtn) {
+    const newCloseBtn = closeBtn.cloneNode(true) as HTMLElement;
+    closeBtn.parentNode?.replaceChild(newCloseBtn, closeBtn);
+    newCloseBtn.addEventListener('click', () => {
+      if (window.closeShopPaymentModal) {
+        window.closeShopPaymentModal();
+      }
+    });
+  }
+  
   // Mostrar modal
   modal.classList.add('active');
   
@@ -769,6 +781,12 @@ function toggleBattlePassAddon(baseProduct: any, enabled: boolean): void {
   const productNameEl = document.querySelector('.subscription-product-name');
   if (productNameEl) {
     productNameEl.textContent = newProduct.name;
+  }
+  
+  // Atualizar benefícios
+  const featuresEl = document.querySelector('.subscription-features');
+  if (featuresEl) {
+    featuresEl.innerHTML = newProduct.benefits?.map((b: string) => `<div class="feature-item">✓ ${b}</div>`).join('') || '';
   }
   
   // Atualizar preços nos métodos de pagamento com animação
