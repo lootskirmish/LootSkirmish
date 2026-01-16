@@ -34,6 +34,7 @@ type ApiRequestBody = {
   action?: string;
   userId?: string;
   authToken?: string;
+  [key: string]: unknown;
 };
 
 export interface ApiRequest {
@@ -121,39 +122,40 @@ export default async function handler(req: ApiRequest, res: ApiResponse): Promis
     // CSP VIOLATION REPORTING ENDPOINT
     if (body && typeof body === 'object') {
       // Detectar se é um CSP report
-      if (body['csp-report'] || body.documentUri || body['violated-directive']) {
+      if ('csp-report' in body || 'documentUri' in body || 'violated-directive' in body) {
         try {
-          const violation = body['csp-report'] || body;
-        const ip = getRequestIp(req);
+          const violation = (body['csp-report'] as Record<string, unknown>) || body;
+          const ip = getRequestIp(req);
         
-        // Log estruturado
-        const securityEvent = createSecurityEvent({
-          type: 'CSP_VIOLATION',
-          severity: 'MEDIUM',
-          ip,
-          details: {
-            documentUri: violation['document-uri'] || violation.documentUri,
-            violatedDirective: violation['violated-directive'] || violation.violatedDirective,
-            blockedUri: violation['blocked-uri'] || violation.blockedUri,
-            effectiveDirective: violation['effective-directive'] || violation.effectiveDirective
-          }
-        });
-
-        // Salvar no banco (ignorar erros silenciosamente)
-        supabase
-          .from('security_events')
-          .insert({
-            event_type: 'CSP_VIOLATION',
+          // Log estruturado
+          const securityEvent = createSecurityEvent({
+            type: 'CSP_VIOLATION',
             severity: 'MEDIUM',
-            ip_address: ip,
-            details: securityEvent.details,
-            created_at: new Date().toISOString()
-          })
-          .then(() => {}, () => {});
+            ip,
+            details: {
+              documentUri: (violation['document-uri'] as string) || (violation.documentUri as string),
+              violatedDirective: (violation['violated-directive'] as string) || (violation.violatedDirective as string),
+              blockedUri: (violation['blocked-uri'] as string) || (violation.blockedUri as string),
+              effectiveDirective: (violation['effective-directive'] as string) || (violation.effectiveDirective as string)
+            }
+          });
 
-        return res.status(204).end();
-      } catch {
-        return res.status(204).end();
+          // Salvar no banco (ignorar erros silenciosamente)
+          supabase
+            .from('security_events')
+            .insert({
+              event_type: 'CSP_VIOLATION',
+              severity: 'MEDIUM',
+              ip_address: ip,
+              details: securityEvent.details,
+              created_at: new Date().toISOString()
+            })
+            .then(() => {}, () => {});
+
+          return res.status(204).end();
+        } catch {
+          return res.status(204).end();
+        }
       }
     }
   }
