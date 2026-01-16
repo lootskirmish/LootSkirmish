@@ -68,7 +68,8 @@ app.use((req: Request, res: Response, next) => {
       "object-src 'none'",
       "base-uri 'self'",
       "form-action 'self'",
-      "frame-ancestors 'none'"
+      "frame-ancestors 'none'",
+      "report-uri /api/csp-report"
     ].join('; ')
   );
   

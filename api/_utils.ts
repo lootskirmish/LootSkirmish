@@ -151,7 +151,8 @@ export function applyContentSecurityPolicy(res: any): void {
     "base-uri 'self'",
     "form-action 'self'",
     "frame-ancestors 'none'",
-    "upgrade-insecure-requests"
+    "upgrade-insecure-requests",
+    "report-uri /api/csp-report"
   ];
   
   res.setHeader('Content-Security-Policy', cspDirectives.join('; '));
@@ -803,12 +804,15 @@ export async function usernameExists(
   username: string,
   excludeUserId: string
 ): Promise<boolean> {
-  const escaped = username.replace(/([_%])/g, '\\$1');
+  const sanitized = sanitizeSqlInput(username, 256);
+  if (!sanitized) {
+    throw new Error('Invalid username format');
+  }
 
   const { data, error } = await supabase
     .from('player_stats')
     .select('user_id')
-    .ilike('username', escaped)
+    .ilike('username', sanitized)
     .neq('user_id', excludeUserId)
     .limit(1);
 
@@ -2256,4 +2260,240 @@ export function logEnvironmentValidation(
   if (!result.valid && throwOnError) {
     throw new Error('Environment validation failed. Please check the logs above.');
   }
+}
+
+// ============================================================
+// 🔒 ADVANCED SECURITY FEATURES
+// ============================================================
+
+/**
+ * Escapa caracteres especiais para prevenir SQL Injection em queries .ilike()
+ * 
+ * @param {string} input - String de entrada do usuário
+ * @returns {string} String escapada segura para usar em queries
+ * 
+ * @example
+ * ```typescript
+ * const userInput = "test%_\\";
+ * const safe = escapeSqlLikePattern(userInput);
+ * // safe = "test\\%\\_\\\\"
+ * ```
+ */
+export function escapeSqlLikePattern(input: string): string {
+  if (!input || typeof input !== 'string') return '';
+  
+  // Escapar caracteres especiais do LIKE: %, _, \
+  return input
+    .replace(/\\/g, '\\\\')  // Backslash primeiro
+    .replace(/%/g, '\\%')    // Percent
+    .replace(/_/g, '\\_');   // Underscore
+}
+
+/**
+ * Valida e sanitiza input para uso em queries .ilike()
+ * 
+ * @param {string} input - String de entrada do usuário
+ * @param {number} maxLength - Tamanho máximo permitido (default: 256)
+ * @returns {string | null} String sanitizada ou null se inválida
+ */
+export function sanitizeSqlInput(input: string, maxLength: number = 256): string | null {
+  if (!input || typeof input !== 'string') return null;
+  
+  const trimmed = input.trim();
+  
+  // Verificar tamanho
+  if (trimmed.length === 0 || trimmed.length > maxLength) return null;
+  
+  // Remover caracteres de controle e não-ASCII perigosos
+  const cleaned = trimmed.replace(/[\x00-\x1F\x7F]/g, '');
+  
+  // Escapar padrões LIKE
+  return escapeSqlLikePattern(cleaned);
+}
+
+/**
+ * Verifica se as API keys estão próximas da expiração recomendada
+ * 
+ * @param {Date} lastRotation - Data da última rotação
+ * @param {number} maxDays - Dias máximos recomendados (default: 90)
+ * @returns {boolean} true se precisa rotacionar
+ */
+export function shouldRotateApiKeys(lastRotation: Date, maxDays: number = 90): boolean {
+  const daysSinceRotation = (Date.now() - lastRotation.getTime()) / (1000 * 60 * 60 * 24);
+  return daysSinceRotation >= maxDays;
+}
+
+/**
+ * Interface para eventos de segurança que devem ser monitorados
+ */
+export interface SecurityEvent {
+  type: 'RATE_LIMIT_EXCEEDED' | 'BRUTE_FORCE_ATTEMPT' | 'SQL_INJECTION_ATTEMPT' | 
+        'XSS_ATTEMPT' | 'CSRF_VIOLATION' | 'WEBHOOK_REPLAY' | 'SUSPICIOUS_IP' | 
+        'API_KEY_ROTATION_NEEDED' | 'CSP_VIOLATION' | 'AUTH_FAILURE';
+  severity: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+  userId?: string;
+  ip?: string;
+  details: Record<string, any>;
+  timestamp: string;
+}
+
+/**
+ * Cria um evento de segurança estruturado para logging/monitoring
+ * 
+ * @param {SecurityEvent} event - Dados do evento de segurança
+ * @returns {Record<string, any>} Evento estruturado para logging
+ * 
+ * @example
+ * ```typescript
+ * const event = createSecurityEvent({
+ *   type: 'BRUTE_FORCE_ATTEMPT',
+ *   severity: 'HIGH',
+ *   userId: 'user123',
+ *   ip: '192.168.1.1',
+ *   details: { endpoint: '/api/login', attempts: 5 }
+ * });
+ * 
+ * // Enviar para sistema de monitoring (Sentry, DataDog, etc)
+ * if (process.env.SENTRY_DSN) {
+ *   Sentry.captureEvent(event);
+ * }
+ * ```
+ */
+export function createSecurityEvent(event: Omit<SecurityEvent, 'timestamp'>): SecurityEvent {
+  const securityEvent: SecurityEvent = {
+    ...event,
+    timestamp: new Date().toISOString()
+  };
+  
+  // Mascarar dados sensíveis
+  if (securityEvent.userId) {
+    securityEvent.userId = maskUserId(securityEvent.userId);
+  }
+  if (securityEvent.ip) {
+    securityEvent.ip = maskIp(securityEvent.ip);
+  }
+  
+  // Log estruturado
+  console.warn('🚨 SECURITY EVENT:', JSON.stringify(securityEvent));
+  
+  // TODO: Integrar com serviço de monitoring externo
+  // if (process.env.SENTRY_DSN) {
+  //   Sentry.captureEvent(securityEvent);
+  // }
+  
+  return securityEvent;
+}
+
+/**
+ * Rastreador de tentativas de login falhadas por IP/userId
+ * Usado para implementar proteção contra brute-force
+ */
+export class BruteForceTracker {
+  private attempts: Map<string, { count: number; firstAttempt: number; requiresCaptcha: boolean }> = new Map();
+  private readonly maxAttempts: number;
+  private readonly windowMs: number;
+  private readonly captchaThreshold: number;
+  
+  constructor(maxAttempts: number = 5, windowMs: number = 300_000, captchaThreshold: number = 3) {
+    this.maxAttempts = maxAttempts;
+    this.windowMs = windowMs; // 5 minutos padrão
+    this.captchaThreshold = captchaThreshold;
+  }
+  
+  /**
+   * Registra uma tentativa falhada
+   * @returns {boolean} true se deve bloquear (excedeu limite)
+   */
+  recordFailedAttempt(identifier: string): boolean {
+    const now = Date.now();
+    const entry = this.attempts.get(identifier);
+    
+    if (!entry || now - entry.firstAttempt > this.windowMs) {
+      // Nova janela de tentativas
+      this.attempts.set(identifier, {
+        count: 1,
+        firstAttempt: now,
+        requiresCaptcha: false
+      });
+      return false;
+    }
+    
+    // Incrementar contador
+    entry.count += 1;
+    
+    // Exigir captcha após threshold
+    if (entry.count >= this.captchaThreshold) {
+      entry.requiresCaptcha = true;
+    }
+    
+    // Bloquear se exceder máximo
+    if (entry.count >= this.maxAttempts) {
+      createSecurityEvent({
+        type: 'BRUTE_FORCE_ATTEMPT',
+        severity: 'HIGH',
+        details: { identifier, attempts: entry.count }
+      });
+      return true;
+    }
+    
+    return false;
+  }
+  
+  /**
+   * Verifica se deve exigir captcha para este identificador
+   */
+  requiresCaptcha(identifier: string): boolean {
+    const entry = this.attempts.get(identifier);
+    return entry?.requiresCaptcha ?? false;
+  }
+  
+  /**
+   * Limpa as tentativas após login bem-sucedido
+   */
+  clearAttempts(identifier: string): void {
+    this.attempts.delete(identifier);
+  }
+  
+  /**
+   * Limpa tentativas antigas
+   */
+  cleanup(): void {
+    const now = Date.now();
+    for (const [key, entry] of this.attempts.entries()) {
+      if (now - entry.firstAttempt > this.windowMs) {
+        this.attempts.delete(key);
+      }
+    }
+  }
+}
+
+/**
+ * Validador de rotação de API keys
+ * Monitora e alerta sobre keys que precisam ser rotacionadas
+ */
+export interface ApiKeyInfo {
+  name: string;
+  lastRotated: Date;
+  rotationIntervalDays: number;
+}
+
+export function checkApiKeysRotation(keys: ApiKeyInfo[]): {
+  needsRotation: ApiKeyInfo[];
+  warnings: string[];
+} {
+  const needsRotation: ApiKeyInfo[] = [];
+  const warnings: string[] = [];
+  
+  for (const key of keys) {
+    const daysSinceRotation = (Date.now() - key.lastRotated.getTime()) / (1000 * 60 * 60 * 24);
+    
+    if (daysSinceRotation >= key.rotationIntervalDays) {
+      needsRotation.push(key);
+      warnings.push(`🔑 ${key.name} needs rotation (last rotated ${Math.floor(daysSinceRotation)} days ago)`);
+    } else if (daysSinceRotation >= key.rotationIntervalDays * 0.8) {
+      warnings.push(`⚠️  ${key.name} will need rotation soon (${Math.floor(daysSinceRotation)} days old)`);
+    }
+  }
+  
+  return { needsRotation, warnings };
 }

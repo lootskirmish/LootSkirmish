@@ -23,6 +23,7 @@ import {
   sanitizeBio,
   sanitizeText,
   maskUserId,
+  sanitizeSqlInput,
   type RateLimitEntry
 } from './_utils.js';
 
@@ -351,11 +352,17 @@ async function handleCheckPublicProfile(req: ApiRequest, res: ApiResponse): Prom
 
     console.log(`[CHECK_PUBLIC_PROFILE] Checking profile request from ${identifier}`);
 
+    // Sanitizar para prevenir SQL injection
+    const safeSanitized = sanitizeSqlInput(sanitized, 256);
+    if (!safeSanitized) {
+      return res.status(400).json({ error: 'Invalid username format' });
+    }
+
     // Fetch profile without authentication - but only public field
     const { data: profile, error } = await supabase
       .from('player_stats')
       .select('user_id, username, public')
-      .ilike('username', sanitized)
+      .ilike('username', safeSanitized)
       .single();
 
     if (error) {

@@ -15,6 +15,8 @@ import {
   updatePlayerBalance,
   maybeCleanupRateLimits,
   buildLogAction,
+  getRequestIp,
+  createSecurityEvent,
   type RateLimitEntry,
 } from './_utils.js';
 import { applyReferralCommissionForSpend } from './_referrals.js';
@@ -91,6 +93,44 @@ export default async function handler(req: ApiRequest, res: ApiResponse): Promis
   if (req.method === 'OPTIONS') {
     res.status(200).end();
     return;
+  }
+
+  // CSP VIOLATION REPORTING ENDPOINT
+  if (req.method === 'POST' && (req.body?.['csp-report'] || req.body?.documentUri)) {
+    try {
+      const report = req.body;
+      const ip = getRequestIp(req);
+      const violation = report['csp-report'] || report;
+      
+      // Log estruturado
+      const securityEvent = createSecurityEvent({
+        type: 'CSP_VIOLATION',
+        severity: 'MEDIUM',
+        ip,
+        details: {
+          documentUri: violation['document-uri'],
+          violatedDirective: violation['violated-directive'],
+          blockedUri: violation['blocked-uri'],
+          effectiveDirective: violation['effective-directive']
+        }
+      });
+
+      // Salvar no banco
+      await supabase
+        .from('security_events')
+        .insert({
+          event_type: 'CSP_VIOLATION',
+          severity: 'MEDIUM',
+          ip_address: ip,
+          details: securityEvent.details,
+          created_at: new Date().toISOString()
+        })
+        .then(() => {}, () => {}); // Ignore errors silently
+
+      return res.status(204).end();
+    } catch {
+      return res.status(204).end();
+    }
   }
 
   if (req.method !== 'POST') {
