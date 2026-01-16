@@ -568,11 +568,11 @@ export async function handleOpenCases(req: ApiRequest, res: ApiResponse) {
     const stats = session.stats;
 
     // 🛡️ Validar CSRF token
-    const csrfValidation = validateCsrfMiddleware(req, userId);
+    const csrfValidation = await validateCsrfMiddleware(supabase, req, userId);
     if (!csrfValidation.valid) {
       console.warn('⚠️ CSRF validation failed:', { userId, error: csrfValidation.error });
       // Retornar novo token para o cliente usar
-      return res.status(403).json({ 
+      return res.status(403).json({
         error: 'Security validation failed',
         csrfToken: csrfValidation.newToken // Novo token para o cliente
       });
@@ -851,11 +851,11 @@ export async function handlePurchasePass(req: ApiRequest, res: ApiResponse) {
     }
 
     // 🛡️ Validar CSRF token
-    const csrfValidation = validateCsrfMiddleware(req, userId);
+    const csrfValidation = await validateCsrfMiddleware(supabase, req, userId);
     if (!csrfValidation.valid) {
       console.warn('⚠️ CSRF validation failed:', { userId, error: csrfValidation.error });
       // Retornar novo token para o cliente usar
-      return res.status(403).json({ 
+      return res.status(403).json({
         error: 'Security validation failed',
         csrfToken: csrfValidation.newToken // Novo token para o cliente
       });

@@ -872,8 +872,8 @@ async function handleGetCsrfToken(req: ApiRequest, res: ApiResponse, body: any) 
     return res.status(401).json({ error: session.error || 'Invalid session' });
   }
 
-  // Gera o token CSRF
-  const csrfToken = generateCsrfToken(userId);
+  // Gera o token CSRF e salva no banco
+  const csrfToken = await generateCsrfToken(supabase, userId);
   
   return res.status(200).json({ 
     success: true, 
@@ -903,8 +903,8 @@ async function handleClearCsrfToken(req: ApiRequest, res: ApiResponse, body: any
     return res.status(401).json({ error: session.error || 'Invalid session' });
   }
 
-  // Remove o token CSRF
-  clearCsrfToken(userId);
+  // Remove o token CSRF do banco
+  await clearCsrfToken(supabase, userId);
   
   return res.status(200).json({ 
     success: true 

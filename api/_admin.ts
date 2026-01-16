@@ -371,7 +371,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse): Promis
   }
   
   // 🛡️ Validar CSRF token (ações administrativas são críticas)
-  const csrfValidation = validateCsrfMiddleware(req, userId);
+  const csrfValidation = await validateCsrfMiddleware(supabase, req, userId);
   if (!csrfValidation.valid) {
     console.warn('⚠️ CSRF validation failed in admin:', { userId, action, error: csrfValidation.error });
     logAction(userId, 'ADMIN_CSRF_VALIDATION_FAILED', { action, ipAddress }, req).catch(() => {});

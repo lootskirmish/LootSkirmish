@@ -796,7 +796,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse): Promis
       }
 
       // 🛡️ Validar CSRF token (ações de suporte são críticas)
-      const csrfValidation = validateCsrfMiddleware(req, userId);
+      const csrfValidation = await validateCsrfMiddleware(supabase, req, userId);
       if (!csrfValidation.valid) {
         console.warn('⚠️ CSRF validation failed:', { userId, error: csrfValidation.error });
         return res.status(403).json({ error: 'Security validation failed' });
