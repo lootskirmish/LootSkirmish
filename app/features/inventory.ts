@@ -3,6 +3,7 @@
 // ============================================================
 
 import { supabase } from './auth';
+import { addCsrfHeader } from '../core/session';
 import { 
   createSellParticles, 
   showSellConfirmation,
@@ -602,7 +603,7 @@ export async function purchaseInventoryUpgrade(): Promise<void> {
 
     const response = await fetch('/api/_inventory', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: addCsrfHeader({ 'Content-Type': 'application/json' }),
       body: JSON.stringify({
         action: 'upgradeInventory',
         userId: currentUserId,
@@ -747,9 +748,9 @@ export async function sellItem(itemId: string, userId: string, renderCallback: (
     
     const response = await fetch('/api/_inventory', {
       method: 'POST',
-      headers: {
+      headers: addCsrfHeader({
         'Content-Type': 'application/json',
-      },
+      }),
       body: JSON.stringify({
         action: 'sellItem',
         userId: userId,
@@ -833,9 +834,9 @@ export async function sellSelected(): Promise<void> {
     
     const response = await fetch('/api/_inventory', {
       method: 'POST',
-      headers: {
+      headers: addCsrfHeader({
         'Content-Type': 'application/json',
-      },
+      }),
       body: JSON.stringify({
         action: 'sellSelected',
         userId: currentUserId,
@@ -917,9 +918,9 @@ export async function confirmSellAll(): Promise<void> {
     
     const response = await fetch('/api/_inventory', {
       method: 'POST',
-      headers: {
+      headers: addCsrfHeader({
         'Content-Type': 'application/json',
-      },
+      }),
       body: JSON.stringify({
         action: 'sellAll',
         userId: currentUserId,

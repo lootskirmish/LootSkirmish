@@ -3,6 +3,7 @@
 // ============================================================
 
 import { supabase } from './auth';
+import { addCsrfHeader, addIdempotencyHeader } from '../core/session';
 import { showAlert, showToast } from '../shared/effects';
 import { getActiveUser } from '../core/session';
 
@@ -726,19 +727,23 @@ window.proceedToCheckout = async function() {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session?.access_token) throw new Error('Not authenticated');
 
+    // 🔑 Gerar chave de idempotência para prevenir cliques duplos
+    const { headers, idempotencyKey } = addIdempotencyHeader(
+      addCsrfHeader({ 'Content-Type': 'application/json' })
+    );
+
     // Criar pedido
     const response = await fetch('/api/_shop', {
       method: 'POST',
-      headers: { 
-        'Content-Type': 'application/json'
-      },
+      headers,
       body: JSON.stringify({
         action: 'createOrder',
         userId: currentUser.id,
         authToken: session.access_token,
         productId: selectedProduct.id,
         productType: selectedProduct.type,
-        paymentMethod: selectedPaymentMethod
+        paymentMethod: selectedPaymentMethod,
+        idempotencyKey  // 🛡️ Enviar idempotency key
       })
     });
 

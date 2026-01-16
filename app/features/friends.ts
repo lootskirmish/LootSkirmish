@@ -3,6 +3,7 @@
 // ============================================================
 
 import { supabase } from './auth';
+import { addCsrfHeader } from '../core/session';
 import { showToast } from '../shared/effects';
 import { navigateTo } from '../core/router';
 
@@ -163,9 +164,9 @@ async function callFriendsApi(action: string, payload: Record<string, any> = {})
 
   const response = await fetch('/api/_profile', {
     method: 'POST',
-    headers: {
+    headers: addCsrfHeader({
       'Content-Type': 'application/json'
-    },
+    }),
     body: JSON.stringify({
       action,
       userId: currentUser.id,

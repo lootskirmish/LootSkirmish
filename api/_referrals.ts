@@ -12,6 +12,8 @@ import {
   logAudit,
   validateSessionAndFetchPlayerStats,
   logMoneyTransactionAsync,
+  validateCsrfMiddleware,
+  validateRequestSignature,
 } from './_utils.js';
 
 dotenv.config();
@@ -656,6 +658,35 @@ export default async function handler(req: ApiRequest, res: ApiResponse): Promis
   if (!valid) {
     logAudit(supabase, userId, 'REFERRAL_AUTH_FAILED', { action, error: sessionError }, req as any).catch(() => {});
     return res.status(401).json({ error: sessionError });
+  }
+
+  // 🛡️ Validar CSRF token (apenas para ações que fazem mutações)
+  const mutationActions = ['registerReferral', 'withdrawEarnings'];
+  if (mutationActions.includes(action)) {
+    const csrfValidation = validateCsrfMiddleware(req, userId);
+    if (!csrfValidation.valid) {
+      console.warn('⚠️ CSRF validation failed:', { userId, action, error: csrfValidation.error });
+      logAudit(supabase, userId, 'REFERRAL_CSRF_VALIDATION_FAILED', { action }, req as any).catch(() => {});
+      return res.status(403).json({ error: 'Security validation failed' });
+    }
+
+    // 🛡️ Validar Request Signature para ações críticas (anti-replay)
+    if (action === 'withdrawEarnings') {
+      const requestSignature = req.headers?.['x-request-signature'] as string;
+      const requestTimestamp = req.headers?.['x-request-timestamp'] as string;
+      if (requestSignature && requestTimestamp) {
+        const signatureValidation = validateRequestSignature(
+          { headers: { 'x-request-signature': requestSignature, 'x-request-timestamp': requestTimestamp } } as any,
+          process.env.REQUEST_SIGNING_SECRET || ''
+        );
+        
+        if (!signatureValidation.valid) {
+          console.warn('⚠️ Request signature validation failed in referral:', { userId, action, error: signatureValidation.error });
+          logAudit(supabase, userId, 'REFERRAL_REQUEST_SIGNATURE_FAILED', { action, error: signatureValidation.error }, req as any).catch(() => {});
+          return res.status(403).json({ error: 'Request signature validation failed' });
+        }
+      }
+    }
   }
 
   try {

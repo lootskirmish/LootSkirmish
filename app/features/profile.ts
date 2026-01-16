@@ -3,6 +3,7 @@
 // ============================================================
 
 import { supabase } from './auth';
+import { addCsrfHeader } from '../core/session';
 import { 
   showUploadNotification, 
   showDiamondPopup, 
@@ -242,7 +243,7 @@ export async function loadPublicProfile(username: string, calculateLevel?: (xp: 
     try {
       profileCheckResponse = await fetch('/api/_profile', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: addCsrfHeader({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({
           action: 'checkPublicProfile',
           username: username.trim()

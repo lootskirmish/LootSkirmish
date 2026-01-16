@@ -1,0 +1,58 @@
+# ============================================================
+# DEPENDABOT CONFIGURATION
+# ============================================================
+# Automatically creates PRs for dependency updates
+# Checks for security vulnerabilities and version updates
+# ============================================================
+
+version: 2
+updates:
+  # NPM dependencies (package.json)
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+    open-pull-requests-limit: 10
+    
+    # Grouping strategy
+    groups:
+      # Group all minor and patch updates together
+      development-dependencies:
+        dependency-type: "development"
+        update-types:
+          - "minor"
+          - "patch"
+      
+      production-dependencies:
+        dependency-type: "production"
+        update-types:
+          - "patch"
+    
+    # Auto-merge rules
+    commit-message:
+      prefix: "chore(deps)"
+      include: "scope"
+    
+    # Labels for PRs
+    labels:
+      - "dependencies"
+      - "automated"
+    
+    # Ignore specific dependencies (if needed)
+    # ignore:
+    #   - dependency-name: "package-name"
+    #     versions: ["1.x", "2.x"]
+    
+    # Security updates
+    versioning-strategy: increase
+    
+  # GitHub Actions dependencies
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "monthly"
+    labels:
+      - "github-actions"
+      - "dependencies"

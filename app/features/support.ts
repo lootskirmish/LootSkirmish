@@ -2,6 +2,8 @@
 // SUPPORT MODAL - CONTACT/SUPPORT SYSTEM
 // ============================================================
 
+import { addCsrfHeader } from '../core/session';
+
 // ============================================================
 // TIPOS E INTERFACES
 // ============================================================
@@ -144,9 +146,9 @@ async function submitTicket(formData: SupportFormData): Promise<TicketSubmitResp
   try {
     const response = await fetch('/api/_support', {
       method: 'POST',
-      headers: {
+      headers: addCsrfHeader({
         'Content-Type': 'application/json'
-      },
+      }),
       body: JSON.stringify({
         action: 'submitTicket',
         name: formData.nome,

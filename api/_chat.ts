@@ -3,7 +3,7 @@
 // ============================================================
 
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
-import { applyCors, validateSessionAndFetchPlayerStats, validateSupabaseSession, ValidationSchemas, createSecureLog } from './_utils.js';
+import { applyCors, validateSessionAndFetchPlayerStats, validateSupabaseSession, ValidationSchemas, createSecureLog, validateCsrfMiddleware, sanitizeHtml, containsDangerousContent } from './_utils.js';
 
 import dotenv from 'dotenv';
 dotenv.config();
@@ -140,6 +140,40 @@ async function handleSendMessage(req: ApiRequest, res: ApiResponse): Promise<voi
       return res.status(400).json({ error: 'Message too long (max 60 chars)' });
     }
     
+    // 🛡️ XSS PROTECTION - Verificar e sanitizar mensagem
+    if (containsDangerousContent(trimmedMessage)) {
+      // Registrar tentativa de XSS
+      const log = createSecureLog({
+        action: 'XSS_ATTEMPT_BLOCKED',
+        userId,
+        details: { messagePreview: trimmedMessage.substring(0, 50) },
+        statusCode: 400,
+        isSecurityEvent: true
+      });
+      console.warn('⚠️ XSS attempt in chat:', JSON.stringify(log));
+      
+      // Registrar no audit_log
+      await supabase.from('audit_log').insert({
+        user_id: userId,
+        action: 'XSS_ATTEMPT_BLOCKED',
+        details: { 
+          context: 'chat_message',
+          messageLength: trimmedMessage.length,
+          containedTags: true
+        },
+        ip_address: (req.connection?.remoteAddress || req.headers?.['x-forwarded-for'] || 'unknown') as string
+      });
+      
+      return res.status(400).json({ error: 'Message contains invalid content' });
+    }
+    
+    // Sanitizar mensagem (mesmo que não tenha detectado perigo, sempre sanitizar)
+    const sanitizedMessage = sanitizeHtml(trimmedMessage);
+    
+    if (sanitizedMessage.length === 0) {
+      return res.status(400).json({ error: 'Message cannot be empty after sanitization' });
+    }
+    
     // 3. Validar sessão
     const { valid, error: sessionError, stats } = await validateSessionAndFetchPlayerStats(
       supabase,
@@ -153,6 +187,13 @@ async function handleSendMessage(req: ApiRequest, res: ApiResponse): Promise<voi
     
     if (!stats) {
       return res.status(401).json({ error: 'Invalid session' });
+    }
+    
+    // 🛡️ Validar CSRF token
+    const csrfValidation = validateCsrfMiddleware(req, userId);
+    if (!csrfValidation.valid) {
+      console.warn('⚠️ CSRF validation failed:', { userId, error: csrfValidation.error });
+      return res.status(403).json({ error: 'Security validation failed' });
     }
     
     // 4. Rate limiting
@@ -174,12 +215,12 @@ async function handleSendMessage(req: ApiRequest, res: ApiResponse): Promise<voi
       console.warn('Rank fetch failed (non-critical):', rankError);
     }
     
-    // 6. ✅ USAR RPC FUNCTION para inserir mensagem
+    // 6. ✅ USAR RPC FUNCTION para inserir mensagem (com mensagem sanitizada)
     const { data: result, error: insertError } = await supabase
       .rpc('insert_chat_message', {
         p_user_id: userId,
         p_username: stats.username,
-        p_message: trimmedMessage,
+        p_message: sanitizedMessage,  // 🛡️ Usar mensagem sanitizada
         p_user_level: (stats as any).level,
         p_user_rank: userRank,
         p_avatar_url: (stats as any).avatar_url

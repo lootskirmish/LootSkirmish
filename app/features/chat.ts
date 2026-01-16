@@ -3,10 +3,37 @@
 // ============================================================
 
 import { supabase } from './auth';
+import { addCsrfHeader } from '../core/session';
 import type { RealtimeChannel } from '@supabase/supabase-js';
 import { navigateTo } from '../core/router';
 import { requestFriendFromContext } from './friends';
 import { showToast } from '../shared/effects';
+
+// ============================================================
+// 🛡️ XSS PROTECTION - FRONTEND ESCAPE
+// ============================================================
+
+/**
+ * Escapa caracteres HTML especiais para prevenir XSS no frontend
+ * @param text - Texto a ser escapado
+ * @returns Texto com caracteres HTML escapados de forma segura
+ */
+function escapeHtml(text: string): string {
+  if (typeof text !== 'string') return '';
+  
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
+}
+
+/**
+ * Cria elemento de texto seguro sem permitir HTML
+ * @param text - Texto a ser renderizado
+ * @returns String HTML segura para innerHTML
+ */
+function createSafeTextElement(text: string): string {
+  return escapeHtml(text);
+}
 
 // ============================================================
 // TYPE DEFINITIONS
@@ -524,7 +551,9 @@ async function renderMessage(msg: ChatMessage): Promise<void> {
           .eq('user_id', msg.user_id)
           .single();
         
-        avatarUrl = data?.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${msg.username}`;
+        // 🛡️ Sanitizar username antes de usar na URL
+        const safeUsername = encodeURIComponent(msg.username || 'Player');
+        avatarUrl = data?.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${safeUsername}`;
         avatarCache.set(msg.user_id, avatarUrl);
       } else {
         avatarUrl = avatarCache.get(msg.user_id);
@@ -619,9 +648,9 @@ export async function sendChatMessage(): Promise<void> {
     
     const response = await fetch('/api/_chat', {
       method: 'POST',
-      headers: {
+      headers: addCsrfHeader({
         'Content-Type': 'application/json',
-      },
+      }),
       body: JSON.stringify({
         action: 'sendMessage',
         userId: currentUserId,
@@ -748,12 +777,6 @@ function showChatError(message: string): void {
   setTimeout(() => {
     errorDiv.style.display = 'none';
   }, 3000);
-}
-
-function escapeHtml(text: string): string {
-  const div = document.createElement('div');
-  div.textContent = text;
-  return div.innerHTML;
 }
 
 function formatTime(timestamp: string): string {

@@ -3,6 +3,7 @@
 // ============================================================
 
 import { supabase } from './auth';
+import { addCsrfHeader } from '../core/session';
 import { RARITIES, OPENING_CASES, getCaseById, getRarityByIndex, PASSES_CONFIG, getPassConfig, canOpenQuantity, getRequiredPassForQuantity } from '../shared/constants';
 import type { Case, CaseItem, Rarity, PassConfig } from '../shared/constants';
 import { playSound, startLoop } from '../shared/sfx';
@@ -693,9 +694,9 @@ async function purchasePass(passId: string): Promise<void> {
     
     const response = await fetch('/api/_caseopening', {
       method: 'POST',
-      headers: {
+      headers: addCsrfHeader({
         'Content-Type': 'application/json',
-      },
+      }),
       body: JSON.stringify({
         action: 'purchasePass',
         userId: currentUser.id,
@@ -799,9 +800,9 @@ async function upgradeCaseDiscount(): Promise<void> {
 
     const response = await fetch('/api/_caseopening', {
       method: 'POST',
-      headers: {
+      headers: addCsrfHeader({
         'Content-Type': 'application/json'
-      },
+      }),
       body: JSON.stringify({
         action: 'upgradeCaseDiscount',
         userId: currentUser.id,
@@ -1063,9 +1064,9 @@ async function openCase(): Promise<void> {
     
         const response = await fetch('/api/_caseopening', {
       method: 'POST',
-      headers: {
+      headers: addCsrfHeader({
         'Content-Type': 'application/json',
-      },
+      }),
       body: JSON.stringify({
         action: 'openCases',
         userId: currentUser.id,

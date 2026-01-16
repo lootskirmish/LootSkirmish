@@ -3,6 +3,7 @@
 // ============================================================
 
 import type { SupabaseClient } from '@supabase/supabase-js';
+import crypto from 'crypto';
 
 // ============================================================
 // TYPES
@@ -48,7 +49,29 @@ interface SessionValidateOptions {
 export interface ApiRequest {
   headers?: Record<string, string | string[] | undefined>;
   connection?: { remoteAddress?: string };
+  method?: string;
 }
+
+export interface CsrfTokenEntry {
+  token: string;
+  createdAt: number;
+  expiresAt: number;
+}
+
+// ============================================================
+// RATE LIMITING CONFIGS (Per-Endpoint)
+// ============================================================
+
+export const RATE_LIMIT_CONFIGS = {
+  LOGIN: { maxRequests: 5, windowMs: 60_000 },        // 5 req/min
+  REGISTER: { maxRequests: 3, windowMs: 60_000 },     // 3 req/min
+  PAYMENT: { maxRequests: 3, windowMs: 60_000 },      // 3 req/min
+  ADMIN: { maxRequests: 10, windowMs: 60_000 },       // 10 req/min
+  WITHDRAWAL: { maxRequests: 2, windowMs: 60_000 },   // 2 req/min
+  CHAT: { maxRequests: 30, windowMs: 60_000 },        // 30 req/min
+  PROFILE: { maxRequests: 15, windowMs: 60_000 },     // 15 req/min
+  DEFAULT: { maxRequests: 20, windowMs: 60_000 }      // 20 req/min
+};
 
 // ============================================================
 // CORS HELPERS
@@ -89,7 +112,51 @@ export function applyCors(
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('X-Frame-Options', 'DENY');
     res.setHeader('X-XSS-Protection', '1; mode=block');
+    
+    // Content Security Policy
+    applyContentSecurityPolicy(res);
   }
+}
+
+/**
+ * Aplica Content Security Policy (CSP) headers
+ * 
+ * Protege contra:
+ * - XSS (Cross-Site Scripting)
+ * - Clickjacking
+ * - Data injection attacks
+ * - MIME type sniffing
+ * 
+ * @param {any} res - Response object
+ * 
+ * @example
+ * ```typescript
+ * export default async (req, res) => {
+ *   applyContentSecurityPolicy(res);
+ *   res.status(200).json({ success: true });
+ * }
+ * ```
+ */
+export function applyContentSecurityPolicy(res: any): void {
+  const cspDirectives = [
+    "default-src 'self'",
+    "script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://hcaptcha.com https://*.hcaptcha.com",
+    "style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com",
+    "img-src 'self' data: https: blob:",
+    "font-src 'self' https://cdnjs.cloudflare.com data:",
+    "connect-src 'self' https://xgcseugigsdgmyrfrofj.supabase.co https://hcaptcha.com https://*.hcaptcha.com",
+    "frame-src 'self' https://hcaptcha.com https://*.hcaptcha.com",
+    "media-src 'self' blob:",
+    "object-src 'none'",
+    "base-uri 'self'",
+    "form-action 'self'",
+    "frame-ancestors 'none'",
+    "upgrade-insecure-requests"
+  ];
+  
+  res.setHeader('Content-Security-Policy', cspDirectives.join('; '));
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  res.setHeader('Permissions-Policy', 'geolocation=(), microphone=(), camera=()');
 }
 
 export function getRequestIp(req: ApiRequest): string {
@@ -297,6 +364,134 @@ export async function validateSessionAndFetchPlayerStats(
 
 export function getIdentifier(req: ApiRequest, userId?: string): string {
   return userId || getRequestIp(req);
+}
+
+// ============================================================
+// 🛡️ CSRF PROTECTION
+// ============================================================
+
+// Armazena tokens CSRF por sessão (userId)
+const csrfTokens = new Map<string, CsrfTokenEntry>();
+
+/**
+ * Gera um token CSRF único e seguro
+ */
+export function generateCsrfToken(userId: string): string {
+  // Gera token aleatório de 32 bytes (256 bits)
+  const token = crypto.randomBytes(32).toString('base64url');
+  
+  const now = Date.now();
+  const expiresAt = now + (24 * 60 * 60 * 1000); // 24 horas
+  
+  csrfTokens.set(userId, {
+    token,
+    createdAt: now,
+    expiresAt
+  });
+  
+  return token;
+}
+
+/**
+ * Valida se o token CSRF enviado é válido para o usuário
+ */
+export function validateCsrfToken(userId: string, token: string | undefined): boolean {
+  if (!token || typeof token !== 'string') {
+    return false;
+  }
+  
+  const entry = csrfTokens.get(userId);
+  if (!entry) {
+    return false;
+  }
+  
+  // Verifica se o token expirou
+  if (Date.now() > entry.expiresAt) {
+    csrfTokens.delete(userId);
+    return false;
+  }
+  
+  // Compara tokens usando timing-safe comparison para evitar timing attacks
+  return crypto.timingSafeEqual(
+    Buffer.from(token),
+    Buffer.from(entry.token)
+  );
+}
+
+/**
+ * Remove o token CSRF de um usuário (útil no logout)
+ */
+export function clearCsrfToken(userId: string): void {
+  csrfTokens.delete(userId);
+}
+
+/**
+ * Limpa tokens CSRF expirados
+ */
+export function cleanupExpiredCsrfTokens(): void {
+  const now = Date.now();
+  let deleted = 0;
+  const maxDelete = 100;
+  
+  for (const [userId, entry] of csrfTokens.entries()) {
+    if (now > entry.expiresAt) {
+      csrfTokens.delete(userId);
+      deleted += 1;
+      if (deleted >= maxDelete) break;
+    }
+  }
+}
+
+/**
+ * Verifica se a requisição deve ter proteção CSRF
+ * Webhooks e requisições GET/OPTIONS não precisam
+ */
+export function requiresCsrfProtection(req: ApiRequest, path?: string): boolean {
+  // GET e OPTIONS não precisam de CSRF
+  const method = req.method?.toUpperCase();
+  if (method === 'GET' || method === 'OPTIONS') {
+    return false;
+  }
+  
+  // Webhooks não precisam de CSRF (Stripe, MercadoPago, etc)
+  const isWebhook = path?.includes('/webhook') || 
+                    path?.includes('stripe') || 
+                    path?.includes('mercadopago');
+  if (isWebhook) {
+    return false;
+  }
+  
+  // Todas as outras requisições POST/PUT/DELETE precisam
+  return true;
+}
+
+/**
+ * Middleware para validar CSRF em requisições
+ * Retorna true se válido, false se inválido
+ */
+export function validateCsrfMiddleware(
+  req: ApiRequest,
+  userId: string,
+  path?: string
+): { valid: boolean; error?: string } {
+  // Verifica se a requisição precisa de proteção CSRF
+  if (!requiresCsrfProtection(req, path)) {
+    return { valid: true };
+  }
+  
+  // Extrai o token do header
+  const csrfToken = req.headers?.['x-csrf-token'];
+  const tokenString = Array.isArray(csrfToken) ? csrfToken[0] : csrfToken;
+  
+  // Valida o token
+  if (!validateCsrfToken(userId, tokenString)) {
+    return { 
+      valid: false, 
+      error: 'Invalid or missing CSRF token' 
+    };
+  }
+  
+  return { valid: true };
 }
 
 // ============================================================
@@ -745,5 +940,1239 @@ export async function updatePlayerBalance(
     const message = error instanceof Error ? error.message : String(error);
     console.error('💥 updatePlayerBalance error:', message);
     throw error;
+  }
+}
+
+// ============================================================
+// 🛡️ XSS PROTECTION - SANITIZAÇÃO E VALIDAÇÃO
+// ============================================================
+
+/**
+ * Lista de tags HTML perigosas que devem ser bloqueadas
+ */
+const DANGEROUS_TAGS = [
+  'script', 'iframe', 'object', 'embed', 'applet',
+  'link', 'style', 'meta', 'base', 'form',
+  'input', 'button', 'select', 'textarea', 'img',
+  'audio', 'video', 'source', 'track'
+];
+
+/**
+ * Padrões perigosos que indicam tentativa de XSS
+ */
+const DANGEROUS_PATTERNS = [
+  /javascript:/gi,
+  /data:text\/html/gi,
+  /vbscript:/gi,
+  /on\w+\s*=/gi,  // event handlers (onclick, onerror, etc)
+  /<\s*script/gi,
+  /<\s*iframe/gi,
+  /eval\s*\(/gi,
+  /expression\s*\(/gi,
+  /import\s*\(/gi,
+  /document\./gi,
+  /window\./gi,
+  /alert\s*\(/gi,
+  /prompt\s*\(/gi,
+  /confirm\s*\(/gi
+];
+
+/**
+ * Escapa caracteres HTML especiais para prevenir XSS
+ * @param text - Texto a ser escapado
+ * @returns Texto com caracteres HTML escapados
+ */
+export function escapeHtmlEntities(text: string): string {
+  if (typeof text !== 'string') return '';
+  
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#x27;')
+    .replace(/\//g, '&#x2F;');
+}
+
+/**
+ * Verifica se o texto contém conteúdo perigoso (scripts, iframes, etc)
+ * @param text - Texto a ser verificado
+ * @returns true se contém conteúdo perigoso
+ */
+export function containsDangerousContent(text: string): boolean {
+  if (typeof text !== 'string') return false;
+  
+  const lowerText = text.toLowerCase();
+  
+  // Verifica tags perigosas
+  for (const tag of DANGEROUS_TAGS) {
+    if (lowerText.includes(`<${tag}`) || lowerText.includes(`</${tag}`)) {
+      return true;
+    }
+  }
+  
+  // Verifica padrões perigosos
+  for (const pattern of DANGEROUS_PATTERNS) {
+    if (pattern.test(text)) {
+      return true;
+    }
+  }
+  
+  return false;
+}
+
+/**
+ * Sanitiza texto para prevenir ataques XSS
+ * Remove/escapa tags HTML, scripts e conteúdo perigoso
+ * @param text - Texto a ser sanitizado
+ * @returns Texto sanitizado e seguro
+ */
+export function sanitizeHtml(text: string): string {
+  if (typeof text !== 'string') return '';
+  
+  // 1. Trim e validação básica
+  let sanitized = text.trim();
+  
+  if (sanitized.length === 0) return '';
+  
+  // 2. Remover null bytes
+  sanitized = sanitized.replace(/\0/g, '');
+  
+  // 3. Verificar conteúdo perigoso ANTES de escapar
+  // (para registrar tentativas de ataque)
+  if (containsDangerousContent(sanitized)) {
+    console.warn('⚠️ XSS attempt detected and blocked:', {
+      originalLength: text.length,
+      preview: text.substring(0, 50)
+    });
+  }
+  
+  // 4. Remover todas as tags HTML
+  sanitized = sanitized.replace(/<[^>]*>/g, '');
+  
+  // 5. Escapar caracteres especiais
+  sanitized = escapeHtmlEntities(sanitized);
+  
+  // 6. Remover sequências de controle perigosas
+  sanitized = sanitized.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '');
+  
+  // 7. Limitar caracteres Unicode perigosos (emoji bombs, etc)
+  // Permitir emojis comuns mas remover variações seletor
+  sanitized = sanitized.replace(/[\uFE00-\uFE0F\u200D]/g, '');
+  
+  return sanitized;
+}
+
+/**
+ * Sanitiza username (alfanumérico + alguns caracteres especiais)
+ * @param username - Username a sanitizar
+ * @returns Username sanitizado
+ */
+export function sanitizeUsername(username: string): string {
+  if (typeof username !== 'string') return '';
+  
+  // Remove espaços, permite apenas: a-z, A-Z, 0-9, _, -, .
+  let sanitized = username.trim().replace(/[^a-zA-Z0-9_\-\.]/g, '');
+  
+  // Limitar tamanho
+  if (sanitized.length > 16) sanitized = sanitized.substring(0, 16);
+  
+  return sanitized;
+}
+
+/**
+ * Sanitiza bio/descrição (remove HTML, limita tamanho)
+ * @param bio - Texto da bio
+ * @returns Bio sanitizada
+ */
+export function sanitizeBio(bio: string): string {
+  if (typeof bio !== 'string') return '';
+  
+  // Usar sanitizeHtml base
+  let sanitized = sanitizeHtml(bio);
+  
+  // Limitar tamanho (500 caracteres)
+  if (sanitized.length > 500) sanitized = sanitized.substring(0, 500);
+  
+  return sanitized;
+}
+
+/**
+ * Sanitiza texto genérico (product name, reason, etc.)
+ * @param text - Texto a sanitizar
+ * @param maxLength - Tamanho máximo (padrão: 200)
+ * @returns Texto sanitizado
+ */
+export function sanitizeText(text: string, maxLength: number = 200): string {
+  if (typeof text !== 'string') return '';
+  
+  // Usar sanitizeHtml base
+  let sanitized = sanitizeHtml(text);
+  
+  // Limitar tamanho
+  if (sanitized.length > maxLength) sanitized = sanitized.substring(0, maxLength);
+  
+  return sanitized;
+}
+
+// ============================================================
+// 🔑 IDEMPOTENCY KEYS - PROTEÇÃO CONTRA REQUISIÇÕES DUPLICADAS
+// ============================================================
+
+export interface IdempotencyKeyEntry {
+  idempotency_key: string;
+  user_id: string;
+  action: string;
+  status: 'processing' | 'completed' | 'failed';
+  result?: any;
+  request_data?: any;
+  response_code?: number;
+  created_at?: string;
+  completed_at?: string;
+  expires_at?: string;
+}
+
+export interface IdempotencyCheckResult {
+  exists: boolean;
+  status?: 'processing' | 'completed' | 'failed';
+  result?: any;
+  response_code?: number;
+  shouldWait?: boolean;
+}
+
+/**
+ * Verifica se uma chave de idempotência já foi processada
+ * @param supabase - Cliente Supabase
+ * @param idempotencyKey - Chave única gerada pelo frontend
+ * @param userId - ID do usuário (para validação)
+ * @returns Objeto com informações sobre a key
+ */
+export async function checkIdempotencyKey(
+  supabase: SupabaseClient,
+  idempotencyKey: string,
+  userId: string
+): Promise<IdempotencyCheckResult> {
+  try {
+    if (!idempotencyKey || !userId) {
+      return { exists: false };
+    }
+
+    const { data, error } = await supabase
+      .from('idempotency_keys')
+      .select('*')
+      .eq('idempotency_key', idempotencyKey)
+      .single();
+
+    if (error) {
+      if (error.code === 'PGRST116') {
+        // Não encontrado - key não existe
+        return { exists: false };
+      }
+      console.error('Error checking idempotency key:', error);
+      return { exists: false };
+    }
+
+    if (!data) {
+      return { exists: false };
+    }
+
+    // Verificar se o userId bate (segurança)
+    if (data.user_id !== userId) {
+      console.warn('⚠️ Idempotency key user mismatch:', {
+        key: idempotencyKey,
+        expectedUser: userId,
+        actualUser: data.user_id
+      });
+      return { exists: false };
+    }
+
+    // Key existe - retornar informações
+    return {
+      exists: true,
+      status: data.status,
+      result: data.result,
+      response_code: data.response_code,
+      shouldWait: data.status === 'processing'
+    };
+
+  } catch (err) {
+    console.error('checkIdempotencyKey error:', err);
+    return { exists: false };
+  }
+}
+
+/**
+ * Salva uma chave de idempotência com status inicial (processing)
+ * @param supabase - Cliente Supabase
+ * @param entry - Dados da chave de idempotência
+ * @returns true se salvou com sucesso
+ */
+export async function saveIdempotencyKey(
+  supabase: SupabaseClient,
+  entry: IdempotencyKeyEntry
+): Promise<boolean> {
+  try {
+    const { error } = await supabase
+      .from('idempotency_keys')
+      .insert({
+        idempotency_key: entry.idempotency_key,
+        user_id: entry.user_id,
+        action: entry.action,
+        status: entry.status || 'processing',
+        result: entry.result || null,
+        request_data: entry.request_data || null,
+        response_code: entry.response_code || null
+      });
+
+    if (error) {
+      // Erro de duplicata é esperado (race condition)
+      if (error.code === '23505') {
+        console.log('⚠️ Idempotency key already exists (race condition):', entry.idempotency_key);
+        return false;
+      }
+      console.error('Error saving idempotency key:', error);
+      return false;
+    }
+
+    return true;
+
+  } catch (err) {
+    console.error('saveIdempotencyKey error:', err);
+    return false;
+  }
+}
+
+/**
+ * Atualiza uma chave de idempotência com resultado final
+ * @param supabase - Cliente Supabase
+ * @param idempotencyKey - Chave única
+ * @param status - Status final (completed ou failed)
+ * @param result - Resultado da operação
+ * @param responseCode - Código HTTP da resposta
+ * @returns true se atualizou com sucesso
+ */
+export async function updateIdempotencyKey(
+  supabase: SupabaseClient,
+  idempotencyKey: string,
+  status: 'completed' | 'failed',
+  result: any,
+  responseCode: number
+): Promise<boolean> {
+  try {
+    const { error } = await supabase
+      .from('idempotency_keys')
+      .update({
+        status,
+        result,
+        response_code: responseCode,
+        completed_at: new Date().toISOString()
+      })
+      .eq('idempotency_key', idempotencyKey);
+
+    if (error) {
+      console.error('Error updating idempotency key:', error);
+      return false;
+    }
+
+    return true;
+
+  } catch (err) {
+    console.error('updateIdempotencyKey error:', err);
+    return false;
+  }
+}
+
+/**
+ * Remove chaves de idempotência expiradas (>24h)
+ * @param supabase - Cliente Supabase
+ * @returns Número de keys removidas
+ */
+export async function cleanupOldIdempotencyKeys(
+  supabase: SupabaseClient
+): Promise<number> {
+  try {
+    const { data, error } = await supabase
+      .rpc('cleanup_expired_idempotency_keys');
+
+    if (error) {
+      console.error('Error cleaning up idempotency keys:', error);
+      return 0;
+    }
+
+    return data || 0;
+
+  } catch (err) {
+    console.error('cleanupOldIdempotencyKeys error:', err);
+    return 0;
+  }
+}
+
+// ============================================================
+// 🚫 IP BLOCKING - BLOQUEIO AUTOMÁTICO DE IPs SUSPEITOS
+// ============================================================
+
+export interface BlockedIpEntry {
+  ip_address: string;
+  reason: string;
+  details?: any;
+  block_type: 'manual' | 'automatic' | 'temporary';
+  blocked_by?: string;
+  suspicious_attempts?: number;
+  expires_at?: string;
+}
+
+export interface IpBlockCheckResult {
+  blocked: boolean;
+  reason?: string;
+  expires_at?: string;
+  block_type?: string;
+}
+
+/**
+ * Verifica se um IP está bloqueado
+ * @param supabase - Cliente Supabase
+ * @param ipAddress - Endereço IP a verificar
+ * @returns Resultado com informações do bloqueio
+ */
+export async function checkIpBlocked(
+  supabase: SupabaseClient,
+  ipAddress: string
+): Promise<IpBlockCheckResult> {
+  try {
+    if (!ipAddress || ipAddress === 'unknown') {
+      return { blocked: false };
+    }
+
+    // Cleanup de bloqueios temporários expirados
+    await supabase.rpc('cleanup_expired_ip_blocks');
+
+    const { data, error } = await supabase
+      .from('blocked_ips')
+      .select('*')
+      .eq('ip_address', ipAddress)
+      .eq('is_active', true)
+      .single();
+
+    if (error) {
+      if (error.code === 'PGRST116') {
+        // Não encontrado - IP não está bloqueado
+        return { blocked: false };
+      }
+      console.error('Error checking IP block:', error);
+      return { blocked: false };
+    }
+
+    if (!data) {
+      return { blocked: false };
+    }
+
+    // Verificar se bloqueio temporário expirou
+    if (data.expires_at) {
+      const expiresAt = new Date(data.expires_at);
+      if (expiresAt < new Date()) {
+        return { blocked: false };
+      }
+    }
+
+    return {
+      blocked: true,
+      reason: data.reason,
+      expires_at: data.expires_at,
+      block_type: data.block_type
+    };
+
+  } catch (err) {
+    console.error('checkIpBlocked error:', err);
+    return { blocked: false };
+  }
+}
+
+// ============================================================
+// 🌍 IP GEOLOCATION CHECKING
+// ============================================================
+
+interface GeolocationResult {
+  country: string | null;
+  city: string | null;
+  region: string | null;
+  isBlocked: boolean;
+  reason?: string;
+}
+
+interface IpApiResponse {
+  country_code?: string;
+  country_name?: string;
+  city?: string;
+  region?: string;
+}
+
+// Lista de países bloqueados (exemplo: pode ser configurável)
+const BLOCKED_COUNTRIES = new Set<string>([
+  // Adicionar códigos ISO se necessário, ex: 'KP', 'IR', 'SY'
+]);
+
+/**
+ * Verifica geolocalização de um IP usando API gratuita
+ * @param ip - Endereço IP a verificar
+ * @returns Informações de geolocalização
+ */
+export async function checkIpGeolocation(ip: string): Promise<GeolocationResult> {
+  try {
+    // Usar API gratuita ipapi.co (1000 req/dia grátis)
+    const response = await fetch(`https://ipapi.co/${ip}/json/`, {
+      headers: {
+        'User-Agent': 'LootSkirmish/1.0'
+      }
+    });
+
+    if (!response.ok) {
+      console.warn('Geolocation API failed:', response.status);
+      return {
+        country: null,
+        city: null,
+        region: null,
+        isBlocked: false
+      };
+    }
+
+    const data = await response.json() as IpApiResponse;
+    
+    // Verificar se país está bloqueado
+    const isBlocked = BLOCKED_COUNTRIES.has(data.country_code || '');
+
+    return {
+      country: data.country_name || null,
+      city: data.city || null,
+      region: data.region || null,
+      isBlocked,
+      reason: isBlocked ? `Country ${data.country_name || 'Unknown'} is blocked` : undefined
+    };
+  } catch (error) {
+    console.error('Geolocation check failed:', error);
+    return {
+      country: null,
+      city: null,
+      region: null,
+      isBlocked: false
+    };
+  }
+}
+
+/**
+ * Bloqueia um IP
+ * @param supabase - Cliente Supabase
+ * @param entry - Dados do bloqueio
+ * @returns true se bloqueou com sucesso
+ */
+export async function blockIp(
+  supabase: SupabaseClient,
+  entry: BlockedIpEntry
+): Promise<boolean> {
+  try {
+    const { error } = await supabase
+      .from('blocked_ips')
+      .insert({
+        ip_address: entry.ip_address,
+        reason: entry.reason,
+        details: entry.details || null,
+        block_type: entry.block_type,
+        blocked_by: entry.blocked_by || null,
+        suspicious_attempts: entry.suspicious_attempts || 0,
+        expires_at: entry.expires_at || null
+      });
+
+    if (error) {
+      // Se já existe, atualizar
+      if (error.code === '23505') {
+        const { error: updateError } = await supabase
+          .from('blocked_ips')
+          .update({
+            is_active: true,
+            reason: entry.reason,
+            details: entry.details,
+            block_type: entry.block_type,
+            blocked_at: new Date().toISOString(),
+            expires_at: entry.expires_at || null
+          })
+          .eq('ip_address', entry.ip_address);
+
+        if (updateError) {
+          console.error('Error updating IP block:', updateError);
+          return false;
+        }
+
+        return true;
+      }
+
+      console.error('Error blocking IP:', error);
+      return false;
+    }
+
+    console.log('✅ IP blocked:', entry.ip_address, '-', entry.reason);
+    return true;
+
+  } catch (err) {
+    console.error('blockIp error:', err);
+    return false;
+  }
+}
+
+/**
+ * Desbloqueia um IP
+ * @param supabase - Cliente Supabase
+ * @param ipAddress - IP a desbloquear
+ * @param unblockedBy - Admin que desbloqueou
+ * @returns true se desbloqueou com sucesso
+ */
+export async function unblockIp(
+  supabase: SupabaseClient,
+  ipAddress: string,
+  unblockedBy?: string
+): Promise<boolean> {
+  try {
+    const { error } = await supabase
+      .from('blocked_ips')
+      .update({
+        is_active: false,
+        unblocked_at: new Date().toISOString()
+      })
+      .eq('ip_address', ipAddress);
+
+    if (error) {
+      console.error('Error unblocking IP:', error);
+      return false;
+    }
+
+    console.log('✅ IP unblocked:', ipAddress, unblockedBy ? `by ${unblockedBy}` : '');
+    return true;
+
+  } catch (err) {
+    console.error('unblockIp error:', err);
+    return false;
+  }
+}
+
+/**
+ * Middleware para checar se IP está bloqueado
+ * @param supabase - Cliente Supabase
+ * @param req - Request
+ * @returns Resultado da verificação
+ */
+export async function ipBlockMiddleware(
+  supabase: SupabaseClient,
+  req: ApiRequest
+): Promise<IpBlockCheckResult> {
+  const ipAddress = getIpAddress(req);
+  return await checkIpBlocked(supabase, ipAddress);
+}
+
+/**
+ * Extrai endereço IP da requisição
+ * @param req - Request
+ * @returns Endereço IP
+ */
+export function getIpAddress(req: ApiRequest): string {
+  // Tentar X-Forwarded-For primeiro (proxies, CDNs)
+  const forwarded = req.headers?.['x-forwarded-for'];
+  if (forwarded) {
+    const ip = Array.isArray(forwarded) ? forwarded[0] : forwarded.split(',')[0].trim();
+    return ip;
+  }
+
+  // Fallback para remoteAddress
+  return req.connection?.remoteAddress || 'unknown';
+}
+
+// ============================================================
+// 🛡️ MIDDLEWARE HELPER - SIMPLIFICA VALIDAÇÃO COMPLETA
+// ============================================================
+
+export interface SecurityMiddlewareOptions {
+  userId: string;
+  authToken: string;
+  idempotencyKey?: string;
+  action: string;
+  requestData?: any;
+}
+
+export interface SecurityMiddlewareResult {
+  allowed: boolean;
+  error?: string;
+  statusCode?: number;
+  cachedResult?: any;
+  isIdempotencyHit?: boolean;
+}
+
+/**
+ * Middleware completo que valida:
+ * 1. IP bloqueado
+ * 2. Idempotency key (se fornecida)
+ * Retorna resultado pronto para usar
+ */
+export async function securityMiddleware(
+  supabase: SupabaseClient,
+  req: ApiRequest,
+  options: SecurityMiddlewareOptions
+): Promise<SecurityMiddlewareResult> {
+  const { userId, idempotencyKey, action, requestData } = options;
+
+  // 1. Verificar IP bloqueado
+  const ipCheck = await ipBlockMiddleware(supabase, req);
+  if (ipCheck.blocked) {
+    console.warn('⚠️ Blocked IP attempted access:', getIpAddress(req), 'action:', action);
+    return {
+      allowed: false,
+      error: ipCheck.block_type === 'temporary' ? 'Temporarily blocked' : 'Access denied',
+      statusCode: 403
+    };
+  }
+
+  // 2. Verificar Idempotency Key
+  if (idempotencyKey) {
+    const idempotencyCheck = await checkIdempotencyKey(supabase, idempotencyKey, userId);
+
+    if (idempotencyCheck.exists) {
+      if (idempotencyCheck.status === 'processing') {
+        return {
+          allowed: false,
+          error: 'Request is being processed',
+          statusCode: 409,
+          cachedResult: { status: 'processing' }
+        };
+      }
+
+      if (idempotencyCheck.status === 'completed') {
+        return {
+          allowed: false,
+          statusCode: idempotencyCheck.response_code || 200,
+          cachedResult: idempotencyCheck.result,
+          isIdempotencyHit: true
+        };
+      }
+
+      if (idempotencyCheck.status === 'failed') {
+        return {
+          allowed: false,
+          statusCode: idempotencyCheck.response_code || 500,
+          cachedResult: idempotencyCheck.result,
+          isIdempotencyHit: true
+        };
+      }
+    }
+
+    // Salvar key com status "processing"
+    await saveIdempotencyKey(supabase, {
+      idempotency_key: idempotencyKey,
+      user_id: userId,
+      action,
+      status: 'processing',
+      request_data: requestData
+    });
+  }
+
+  return { allowed: true };
+}
+
+// ============================================================
+// 🔐 WEBHOOK SIGNATURE VERIFICATION
+// ============================================================
+
+/**
+ * Verifica assinatura HMAC-SHA256 de webhook MercadoPago
+ * @param payload - Corpo do webhook (JSON string)
+ * @param signature - Header x-signature do webhook
+ * @param secret - Secret key do MercadoPago (process.env.MERCADOPAGO_WEBHOOK_SECRET)
+ * @returns true se assinatura é válida
+ */
+export function verifyWebhookSignature(
+  payload: string,
+  signature: string | string[] | undefined,
+  secret: string
+): boolean {
+  if (!payload || !signature || !secret) {
+    console.warn('⚠️ Missing webhook signature components');
+    return false;
+  }
+
+  // Signature pode vir como string ou array
+  const sig = Array.isArray(signature) ? signature[0] : signature;
+
+  try {
+    // MercadoPago usa format: "ts=<timestamp>,v1=<hmac>"
+    // Extrair o HMAC v1
+    const parts = sig.split(',');
+    let hmacFromHeader = '';
+
+    for (const part of parts) {
+      if (part.startsWith('v1=')) {
+        hmacFromHeader = part.substring(3);
+        break;
+      }
+    }
+
+    if (!hmacFromHeader) {
+      console.warn('⚠️ No v1 signature found in header');
+      return false;
+    }
+
+    // Calcular HMAC-SHA256
+    const calculatedHmac = crypto
+      .createHmac('sha256', secret)
+      .update(payload)
+      .digest('hex');
+
+    // Usar timing-safe comparison
+    const bufferCalculated = Buffer.from(calculatedHmac);
+    const bufferFromHeader = Buffer.from(hmacFromHeader);
+
+    const isValid = crypto.timingSafeEqual(bufferCalculated, bufferFromHeader);
+
+    if (!isValid) {
+      console.warn('⚠️ Webhook signature verification failed');
+    }
+
+    return isValid;
+
+  } catch (err) {
+    console.error('Webhook signature verification error:', err);
+    return false;
+  }
+}
+
+// ============================================================
+// ⏱️ REQUEST SIGNING (ANTI-REPLAY)
+// ============================================================
+
+// Cache de nonces usados (cleanup automático após 5 minutos)
+const usedNonces = new Map<string, number>();
+const NONCE_EXPIRY_MS = 5 * 60 * 1000; // 5 minutos
+
+/**
+ * Limpa nonces expirados do cache
+ */
+function cleanupExpiredNonces(): void {
+  const now = Date.now();
+  for (const [nonce, timestamp] of usedNonces.entries()) {
+    if (now - timestamp > NONCE_EXPIRY_MS) {
+      usedNonces.delete(nonce);
+    }
+  }
+}
+
+/**
+ * Valida assinatura de requisição (anti-replay attack)
+ * Verifica:
+ * 1. Timestamp está dentro de 5 minutos
+ * 2. Nonce não foi usado antes
+ * 3. Assinatura está correta (HMAC-SHA256)
+ * @param req - Request
+ * @param secret - Secret para assinar (userId + auth token)
+ * @returns { valid, error? }
+ */
+export function validateRequestSignature(
+  req: any,
+  secret: string
+): { valid: boolean; error?: string } {
+  try {
+    const timestamp = req.headers?.['x-request-timestamp'];
+    const nonce = req.headers?.['x-request-nonce'];
+    const signature = req.headers?.['x-request-signature'];
+    const bodyHash = req.headers?.['x-request-body-hash'];
+
+    if (!timestamp || !nonce || !signature) {
+      return { valid: false, error: 'Missing signature headers' };
+    }
+
+    // 1. Validar timestamp (dentro de 5 minutos)
+    const requestTime = parseInt(timestamp as string);
+    const now = Date.now();
+    const timeDiff = Math.abs(now - requestTime);
+
+    if (timeDiff > NONCE_EXPIRY_MS) {
+      return { valid: false, error: 'Request timestamp expired' };
+    }
+
+    // 2. Validar nonce (não usado antes)
+    if (usedNonces.has(nonce as string)) {
+      console.warn('⚠️ Nonce replay detected:', nonce);
+      return { valid: false, error: 'Nonce already used (replay attack)' };
+    }
+
+    // 3. Validar assinatura (INCLUINDO BODY SE FORNECIDO)
+    // Formato: HMAC-SHA256(timestamp:nonce[:bodyHash])
+    let messageToSign = `${timestamp}:${nonce}`;
+    
+    // Se bodyHash foi fornecido, incluir na assinatura
+    if (bodyHash) {
+      messageToSign += `:${bodyHash}`;
+    }
+    
+    const calculatedSignature = crypto
+      .createHmac('sha256', secret)
+      .update(messageToSign)
+      .digest('hex');
+
+    const isValid = crypto.timingSafeEqual(
+      Buffer.from(calculatedSignature),
+      Buffer.from(signature as string)
+    );
+
+    if (!isValid) {
+      return { valid: false, error: 'Invalid request signature' };
+    }
+
+    // 4. Adicionar nonce ao cache
+    usedNonces.set(nonce as string, now);
+
+    // Cleanup periódico (a cada 100 validações)
+    if (usedNonces.size % 100 === 0) {
+      cleanupExpiredNonces();
+    }
+
+    return { valid: true };
+
+  } catch (err) {
+    console.error('Request signature validation error:', err);
+    return { valid: false, error: 'Signature validation failed' };
+  }
+}
+
+// ============================================================
+// 🔐 TWO-FACTOR AUTHENTICATION (2FA) - TOTP
+// ============================================================
+
+interface TwoFactorSecret {
+  secret: string;
+  qrCode: string;
+}
+
+/**
+ * Gera secret TOTP para 2FA
+ * Usa authenticator apps como Google Authenticator
+ * @param email - Email do usuário (para label no QR code)
+ * @returns { secret, qrCode }
+ */
+export function generateTwoFactorSecret(email: string): TwoFactorSecret {
+  try {
+    // Gerar secret aleatório (32 bytes = 256 bits)
+    const secret = crypto
+      .randomBytes(32)
+      .toString('base64')
+      .replace(/[^A-Z0-9]/g, '')
+      .substring(0, 32);
+
+    // Criar URL otpauth para QR code
+    // Formato: otpauth://totp/issuer:email?secret=...&issuer=issuer
+    const otpauthUrl = `otpauth://totp/LootSkirmish:${encodeURIComponent(
+      email
+    )}?secret=${secret}&issuer=LootSkirmish`;
+
+    // Para gerar QR code, retornar a URL
+    // Frontend vai usar biblioteca como qrcode.js
+    // Aqui retornamos apenas a URL
+    // Na prática, você usaria algo como: require('qrcode').toDataURL(otpauthUrl)
+    return {
+      secret,
+      qrCode: otpauthUrl // Frontend vai converter para QR
+    };
+
+  } catch (err) {
+    console.error('Error generating 2FA secret:', err);
+    throw err;
+  }
+}
+
+/**
+ * Verifica código TOTP (6 dígitos)
+ * @param secret - Secret TOTP armazenado
+ * @param code - Código de 6 dígitos do authenticator
+ * @param window - Janela de tolerância em passos de 30s (default 1)
+ * @returns true se código é válido
+ */
+export function verifyTwoFactorCode(
+  secret: string,
+  code: string,
+  window: number = 1
+): boolean {
+  try {
+    if (!secret || !code || code.length !== 6 || !/^\d+$/.test(code)) {
+      return false;
+    }
+
+    // Converter secret de base32 para buffer
+    // Usar algoritmo HMAC-SHA1 com período de 30 segundos
+    const PERIOD = 30;
+    const now = Math.floor(Date.now() / 1000);
+
+    // Testar código no time atual e janela de tolerância
+    for (let i = -window; i <= window; i++) {
+      const time = now + i * PERIOD;
+      const timeHex = Buffer.alloc(8);
+      let timeCounter = time;
+
+      // Converter timestamp para big-endian bytes
+      for (let j = 7; j >= 0; j--) {
+        timeHex[j] = timeCounter & 0xff;
+        timeCounter = timeCounter >> 8;
+      }
+
+      // Calcular HMAC-SHA1
+      // Base32 decode
+      const secretBuffer = Buffer.from(decodeBase32(secret));
+      const hmac = crypto.createHmac('sha1', secretBuffer).update(timeHex).digest();
+
+      // Extrair 4 bytes e converter para número
+      const offset = hmac[hmac.length - 1] & 0x0f;
+      const otp =
+        ((hmac[offset] & 0x7f) << 24) |
+        ((hmac[offset + 1] & 0xff) << 16) |
+        ((hmac[offset + 2] & 0xff) << 8) |
+        (hmac[offset + 3] & 0xff);
+
+      const totp = (otp % 1000000).toString().padStart(6, '0');
+
+      if (totp === code) {
+        return true;
+      }
+    }
+
+    return false;
+
+  } catch (err) {
+    console.error('Error verifying 2FA code:', err);
+    return false;
+  }
+}
+
+/**
+ * Decodifica base32 (usado por autenticadores TOTP)
+ */
+function decodeBase32(encoded: string): number[] {
+  const base32Chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+  let bits = 0;
+  let value = 0;
+  const result: number[] = [];
+
+  for (let i = 0; i < encoded.length; i++) {
+    const charIndex = base32Chars.indexOf(encoded[i].toUpperCase());
+    if (charIndex === -1) throw new Error('Invalid base32 character');
+
+    value = (value << 5) | charIndex;
+    bits += 5;
+
+    if (bits >= 8) {
+      bits -= 8;
+      result.push((value >> bits) & 0xff);
+    }
+  }
+
+  return result;
+}
+
+// ============================================================
+// ENVIRONMENT VARIABLES VALIDATION
+// ============================================================
+
+export interface EnvironmentValidationResult {
+  valid: boolean;
+  missingCritical: string[];
+  missingOptional: string[];
+  errors: string[];
+}
+
+/**
+ * Valida que todas as variáveis de ambiente críticas estão definidas
+ * 
+ * **Categorias:**
+ * - CRITICAL: Variáveis essenciais - servidor não deve iniciar sem elas
+ * - OPTIONAL: Variáveis opcionais - apenas warning no log
+ * 
+ * @returns {EnvironmentValidationResult} Resultado da validação
+ * 
+ * @example
+ * ```typescript
+ * const validation = validateEnvironmentVariables();
+ * if (!validation.valid) {
+ *   console.error('Missing critical env vars:', validation.missingCritical);
+ *   process.exit(1);
+ * }
+ * ```
+ */
+export function validateEnvironmentVariables(): EnvironmentValidationResult {
+  const result: EnvironmentValidationResult = {
+    valid: true,
+    missingCritical: [],
+    missingOptional: [],
+    errors: []
+  };
+
+  // ============================================================
+  // CRITICAL VARIABLES (servidor não deve iniciar sem elas)
+  // ============================================================
+  const CRITICAL_VARS = [
+    // Supabase (Database & Auth)
+    'SUPABASE_URL',
+    'SUPABASE_SERVICE_KEY',
+    'SUPABASE_ANON_KEY',
+    
+    // Security Keys
+    'REQUEST_SIGNING_SECRET',
+    'CSRF_TOKEN_SECRET',
+    'JWT_SECRET',
+    
+    // Payment Gateways (pelo menos um deve estar configurado)
+    // Nota: Validação especial abaixo
+  ];
+
+  // ============================================================
+  // OPTIONAL VARIABLES (apenas warnings)
+  // ============================================================
+  const OPTIONAL_VARS = [
+    // Email (se não configurado, emails não serão enviados)
+    'GMAIL_USER',
+    'GMAIL_APP_PASSWORD',
+    
+    // Discord (se não configurado, notificações desabilitadas)
+    'DISCORD_WEBHOOK_URL',
+    
+    // Feature Flags (defaults existem no código)
+    'ENABLE_SHOP',
+    'ENABLE_BATTLES',
+    'ENABLE_CASE_OPENING',
+    
+    // Monitoring (opcional)
+    'SENTRY_DSN',
+    'GA_TRACKING_ID',
+  ];
+
+  // ============================================================
+  // VALIDAR VARIÁVEIS CRÍTICAS
+  // ============================================================
+  for (const varName of CRITICAL_VARS) {
+    const value = process.env[varName];
+    if (!value || value.trim() === '') {
+      result.missingCritical.push(varName);
+      result.valid = false;
+      result.errors.push(`❌ CRITICAL: ${varName} is not set or empty`);
+    }
+  }
+
+  // ============================================================
+  // VALIDAR PAYMENT GATEWAYS (pelo menos um deve estar configurado)
+  // ============================================================
+  const paymentGateways = {
+    mercadopago: ['MERCADOPAGO_ACCESS_TOKEN', 'MERCADOPAGO_PUBLIC_KEY'],
+    stripe: ['STRIPE_SECRET_KEY', 'STRIPE_PUBLIC_KEY'],
+    nowpayments: ['NOWPAYMENTS_API_KEY']
+  };
+
+  let hasAtLeastOnePaymentGateway = false;
+  for (const [gateway, vars] of Object.entries(paymentGateways)) {
+    const allConfigured = vars.every(varName => {
+      const value = process.env[varName];
+      return value && value.trim() !== '';
+    });
+    
+    if (allConfigured) {
+      hasAtLeastOnePaymentGateway = true;
+      break;
+    }
+  }
+
+  if (!hasAtLeastOnePaymentGateway) {
+    result.missingCritical.push('PAYMENT_GATEWAY (MercadoPago, Stripe, or NOWPayments)');
+    result.valid = false;
+    result.errors.push(
+      '❌ CRITICAL: No payment gateway configured. Please set up at least one:\n' +
+      '  - MercadoPago: MERCADOPAGO_ACCESS_TOKEN, MERCADOPAGO_PUBLIC_KEY\n' +
+      '  - Stripe: STRIPE_SECRET_KEY, STRIPE_PUBLIC_KEY\n' +
+      '  - NOWPayments: NOWPAYMENTS_API_KEY'
+    );
+  }
+
+  // ============================================================
+  // VALIDAR VARIÁVEIS OPCIONAIS
+  // ============================================================
+  for (const varName of OPTIONAL_VARS) {
+    const value = process.env[varName];
+    if (!value || value.trim() === '') {
+      result.missingOptional.push(varName);
+    }
+  }
+
+  // ============================================================
+  // VALIDAR FORMATO DE URLs
+  // ============================================================
+  const urlVars = ['SUPABASE_URL', 'FRONTEND_URL', 'PUBLIC_SITE_URL'];
+  for (const varName of urlVars) {
+    const value = process.env[varName];
+    if (value) {
+      try {
+        new URL(value);
+      } catch (err) {
+        result.errors.push(`⚠️  ${varName} is not a valid URL: ${value}`);
+        if (CRITICAL_VARS.includes(varName)) {
+          result.valid = false;
+        }
+      }
+    }
+  }
+
+  // ============================================================
+  // VALIDAR FORMATO DE SECRETS (devem ter comprimento mínimo)
+  // ============================================================
+  const secretVars = ['REQUEST_SIGNING_SECRET', 'CSRF_TOKEN_SECRET', 'JWT_SECRET'];
+  for (const varName of secretVars) {
+    const value = process.env[varName];
+    if (value && value.length < 32) {
+      result.errors.push(
+        `⚠️  ${varName} is too short (${value.length} chars). Recommended: 64+ characters for security.`
+      );
+      // Não marca como inválido, mas avisa
+    }
+  }
+
+  return result;
+}
+
+/**
+ * Loga o resultado da validação de variáveis de ambiente
+ * 
+ * @param {EnvironmentValidationResult} result - Resultado da validação
+ * @param {boolean} throwOnError - Se true, lança erro em caso de validação falhar (default: true)
+ */
+export function logEnvironmentValidation(
+  result: EnvironmentValidationResult,
+  throwOnError: boolean = true
+): void {
+  console.log('\n' + '='.repeat(60));
+  console.log('🔍 ENVIRONMENT VARIABLES VALIDATION');
+  console.log('='.repeat(60) + '\n');
+
+  if (result.valid) {
+    console.log('✅ All critical environment variables are set!\n');
+  } else {
+    console.error('❌ VALIDATION FAILED - Missing critical environment variables:\n');
+    for (const error of result.errors) {
+      console.error(error);
+    }
+    console.error('\n' + '⚠️  Server cannot start without these variables!');
+    console.error('Please check your .env.local file and ensure all critical variables are set.\n');
+  }
+
+  // Warnings para variáveis opcionais
+  if (result.missingOptional.length > 0) {
+    console.warn('⚠️  Optional environment variables not set (features may be disabled):');
+    for (const varName of result.missingOptional) {
+      console.warn(`   - ${varName}`);
+    }
+    console.warn('');
+  }
+
+  console.log('='.repeat(60) + '\n');
+
+  // Se validação falhar e throwOnError = true, lançar erro
+  if (!result.valid && throwOnError) {
+    throw new Error('Environment validation failed. Please check the logs above.');
   }
 }

@@ -3,6 +3,7 @@
 // ============================================================
 
 import { supabase } from './auth';
+import { addCsrfHeader } from '../core/session';
 import type { RealtimeChannel } from '@supabase/supabase-js';
 
 // ============================================================
@@ -938,9 +939,9 @@ export async function handleApproveOrder(orderId: string): Promise<void> {
     // 6. CHAMAR BACKEND SEGURO
     const response = await fetch('/api/_admin', {
       method: 'POST',
-      headers: {
+      headers: addCsrfHeader({
         'Content-Type': 'application/json',
-      },
+      }),
       body: JSON.stringify({
         action: 'approveOrder',
         userId: window.currentUser.id,
@@ -1066,9 +1067,9 @@ export async function handleRejectOrder(orderId: string): Promise<void> {
     // 6. CHAMAR BACKEND SEGURO
     const response = await fetch('/api/_admin', {
       method: 'POST',
-      headers: {
+      headers: addCsrfHeader({
         'Content-Type': 'application/json',
-      },
+      }),
       body: JSON.stringify({
         action: 'rejectOrder',
         userId: window.currentUser.id,

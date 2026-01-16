@@ -14,6 +14,10 @@ import {
   logAudit,
   updatePlayerDiamonds,
   buildLogAction,
+  validateCsrfMiddleware,
+  blockIp,
+  unblockIp,
+  validateRequestSignature,
   type RateLimitEntry,
 } from './_utils.js';
 import { applyReferralDiamondBonus } from './_referrals.js';
@@ -153,6 +157,129 @@ async function validateAdminSession(authToken: string, expectedUserId: string, i
 // ============================================================
 // MAIN HANDLER
 // ============================================================
+// ============================================================
+// IP BLOCKING HANDLERS
+// ============================================================
+
+/**
+ * Lista IPs bloqueados
+ */
+async function handleListBlockedIps(req: ApiRequest, res: ApiResponse, validation: any): Promise<void> {
+  try {
+    const { isActive } = req.body || {};
+    
+    let query = supabase
+      .from('blocked_ips')
+      .select('*')
+      .order('blocked_at', { ascending: false });
+    
+    if (typeof isActive === 'boolean') {
+      query = query.eq('is_active', isActive);
+    }
+    
+    const { data, error } = await query.limit(100);
+    
+    if (error) {
+      console.error('Error fetching blocked IPs:', error);
+      return res.status(500).json({ error: 'Failed to fetch blocked IPs' });
+    }
+    
+    return res.status(200).json({
+      success: true,
+      blockedIps: data || []
+    });
+    
+  } catch (err) {
+    console.error('handleListBlockedIps error:', err);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+}
+
+/**
+ * Bloqueia um IP
+ */
+async function handleBlockIp(req: ApiRequest, res: ApiResponse, validation: any): Promise<void> {
+  try {
+    const { ipAddress, reason, expiresAt, details } = req.body || {};
+    const { userId } = validation;
+    
+    // Validações
+    if (!ipAddress || typeof ipAddress !== 'string') {
+      return res.status(400).json({ error: 'Invalid IP address' });
+    }
+    
+    if (!reason || typeof reason !== 'string') {
+      return res.status(400).json({ error: 'Reason required' });
+    }
+    
+    // Bloquear IP
+    const success = await blockIp(supabase, {
+      ip_address: ipAddress,
+      reason,
+      block_type: expiresAt ? 'temporary' : 'manual',
+      blocked_by: userId,
+      expires_at: expiresAt,
+      details
+    });
+    
+    if (!success) {
+      return res.status(500).json({ error: 'Failed to block IP' });
+    }
+    
+    // Log auditoria
+    await logAudit(supabase, userId, 'ADMIN_BLOCKED_IP', {
+      ip_address: ipAddress,
+      reason,
+      expires_at: expiresAt
+    }, req).catch(() => {});
+    
+    return res.status(200).json({
+      success: true,
+      message: `IP ${ipAddress} blocked successfully`
+    });
+    
+  } catch (err) {
+    console.error('handleBlockIp error:', err);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+}
+
+/**
+ * Desbloqueia um IP
+ */
+async function handleUnblockIp(req: ApiRequest, res: ApiResponse, validation: any): Promise<void> {
+  try {
+    const { ipAddress } = req.body || {};
+    const { userId } = validation;
+    
+    // Validações
+    if (!ipAddress || typeof ipAddress !== 'string') {
+      return res.status(400).json({ error: 'Invalid IP address' });
+    }
+    
+    // Desbloquear IP
+    const success = await unblockIp(supabase, ipAddress, userId);
+    
+    if (!success) {
+      return res.status(500).json({ error: 'Failed to unblock IP' });
+    }
+    
+    // Log auditoria
+    await logAudit(supabase, userId, 'ADMIN_UNBLOCKED_IP', {
+      ip_address: ipAddress
+    }, req).catch(() => {});
+    
+    return res.status(200).json({
+      success: true,
+      message: `IP ${ipAddress} unblocked successfully`
+    });
+    
+  } catch (err) {
+    console.error('handleUnblockIp error:', err);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+}
+
 export default async function handler(req: ApiRequest, res: ApiResponse): Promise<void> {
   const startTime = Date.now();
   
@@ -226,7 +353,47 @@ export default async function handler(req: ApiRequest, res: ApiResponse): Promis
     }, req).catch(() => {});
     return res.status(401).json({ error: validation.error });
   }
+
+  // 🛡️ ENFORCE 2FA FOR ADMIN USERS (Obrigatório)
+  const { data: profile, error: profileError } = await supabase
+    .from('player_profiles')
+    .select('two_factor_enabled')
+    .eq('user_id', userId)
+    .single();
+
+  if (!profileError && !profile?.two_factor_enabled) {
+    console.warn('⚠️ Admin user without 2FA:', { userId, action });
+    logAction(userId, 'ADMIN_2FA_REQUIRED', { action, ipAddress }, req).catch(() => {});
+    return res.status(403).json({ 
+      error: '2FA is required for admin users',
+      require2FA: true 
+    });
+  }
   
+  // 🛡️ Validar CSRF token (ações administrativas são críticas)
+  const csrfValidation = validateCsrfMiddleware(req, userId);
+  if (!csrfValidation.valid) {
+    console.warn('⚠️ CSRF validation failed in admin:', { userId, action, error: csrfValidation.error });
+    logAction(userId, 'ADMIN_CSRF_VALIDATION_FAILED', { action, ipAddress }, req).catch(() => {});
+    return res.status(403).json({ error: 'Security validation failed' });
+  }
+
+  // 🛡️ Validar Request Signature (proteção contra replay attacks em ações críticas)
+  const requestSignature = req.headers?.['x-request-signature'] as string;
+  const requestTimestamp = req.headers?.['x-request-timestamp'] as string;
+  if (requestSignature && requestTimestamp) {
+    const signatureValidation = validateRequestSignature(
+      { headers: { 'x-request-signature': requestSignature, 'x-request-timestamp': requestTimestamp } } as any,
+      process.env.REQUEST_SIGNING_SECRET || ''
+    );
+    
+    if (!signatureValidation.valid) {
+      console.warn('⚠️ Request signature validation failed in admin:', { userId, action, error: signatureValidation.error });
+      logAction(userId, 'ADMIN_REQUEST_SIGNATURE_FAILED', { action, error: signatureValidation.error, ipAddress }, req).catch(() => {});
+      return res.status(403).json({ error: 'Request signature validation failed' });
+    }
+  }
+
   // 7. ROTEAMENTO
   try {
     let result;
@@ -237,6 +404,15 @@ export default async function handler(req: ApiRequest, res: ApiResponse): Promis
         break;
       case 'rejectOrder':
         result = await handleRejectOrder(req, res, validation);
+        break;
+      case 'listBlockedIps':
+        result = await handleListBlockedIps(req, res, validation);
+        break;
+      case 'blockIp':
+        result = await handleBlockIp(req, res, validation);
+        break;
+      case 'unblockIp':
+        result = await handleUnblockIp(req, res, validation);
         break;
       default:
         return res.status(400).json({ error: 'Invalid action' });

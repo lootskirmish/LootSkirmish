@@ -9,7 +9,8 @@ import {
   applyCors,
   validateSessionAndFetchPlayerStats,
   getIdentifier,
-  checkRateLimit
+  checkRateLimit,
+  validateCsrfMiddleware
 } from './_utils.js';
 
 // ============================================================
@@ -792,6 +793,13 @@ export default async function handler(req: ApiRequest, res: ApiResponse): Promis
 
       if (!session.valid || !['admin', 'support'].includes(session.stats?.role)) {
         return res.status(401).json({ error: 'Unauthorized' });
+      }
+
+      // 🛡️ Validar CSRF token (ações de suporte são críticas)
+      const csrfValidation = validateCsrfMiddleware(req, userId);
+      if (!csrfValidation.valid) {
+        console.warn('⚠️ CSRF validation failed:', { userId, error: csrfValidation.error });
+        return res.status(403).json({ error: 'Security validation failed' });
       }
 
       const status = mapResolutionToStatus(resolutionCategory);

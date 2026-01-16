@@ -3,7 +3,7 @@
 
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import crypto from 'crypto';
-import { applyCors, createSecureLog, updatePlayerBalance, validateSessionAndFetchPlayerStats, ValidationSchemas } from './_utils.js';
+import { applyCors, createSecureLog, updatePlayerBalance, validateSessionAndFetchPlayerStats, ValidationSchemas, validateCsrfMiddleware } from './_utils.js';
 
 import dotenv from 'dotenv';
 dotenv.config();
@@ -567,6 +567,14 @@ export async function handleOpenCases(req: ApiRequest, res: ApiResponse) {
     }
     const stats = session.stats;
 
+    // 🛡️ Validar CSRF token
+    const csrfValidation = validateCsrfMiddleware(req, userId);
+    if (!csrfValidation.valid) {
+      console.warn('⚠️ CSRF validation failed:', { userId, error: csrfValidation.error });
+      // CSRF validation failed - logged elsewhere
+      return res.status(403).json({ error: 'Security validation failed' });
+    }
+
     // 🔥 Verificar capacidade do inventário
     const capacityCheck = await checkInventoryCapacity(userId, qty, stats.max_inventory);
     if (!capacityCheck.valid) {
@@ -837,6 +845,13 @@ export async function handlePurchasePass(req: ApiRequest, res: ApiResponse) {
     const { valid, error: sessionError } = session;
     if (!valid) {
       return res.status(401).json({ error: sessionError });
+    }
+
+    // 🛡️ Validar CSRF token
+    const csrfValidation = validateCsrfMiddleware(req, userId);
+    if (!csrfValidation.valid) {
+      console.warn('⚠️ CSRF validation failed:', { userId, error: csrfValidation.error });
+      return res.status(403).json({ error: 'Security validation failed' });
     }
 
     // Validar configuração do pass

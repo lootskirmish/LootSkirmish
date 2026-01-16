@@ -9,9 +9,21 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
+import { validateEnvironmentVariables, logEnvironmentValidation } from '../api/_utils.js';
 
 // Carregar variáveis de ambiente
 dotenv.config({ path: '.env.local' });
+
+// ============================================================
+// VALIDAR VARIÁVEIS DE AMBIENTE NO STARTUP
+// ============================================================
+try {
+  const validation = validateEnvironmentVariables();
+  logEnvironmentValidation(validation, true);
+} catch (error) {
+  console.error('\n🚨 Server startup aborted due to environment validation failure.\n');
+  process.exit(1);
+}
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -36,6 +48,40 @@ app.use(cors({
   origin: process.env.CORS_ORIGINS?.split(',') || ['http://localhost:5173', 'http://localhost:3000'],
   credentials: true
 }));
+
+// ============================================================
+// SECURITY HEADERS (including Content Security Policy)
+// ============================================================
+app.use((req: Request, res: Response, next) => {
+  // Content Security Policy
+  res.setHeader(
+    'Content-Security-Policy',
+    [
+      "default-src 'self'",
+      "script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://hcaptcha.com https://*.hcaptcha.com",
+      "style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com",
+      "img-src 'self' data: https: blob:",
+      "font-src 'self' https://cdnjs.cloudflare.com data:",
+      "connect-src 'self' https://xgcseugigsdgmyrfrofj.supabase.co https://hcaptcha.com https://*.hcaptcha.com",
+      "frame-src 'self' https://hcaptcha.com https://*.hcaptcha.com",
+      "media-src 'self' blob:",
+      "object-src 'none'",
+      "base-uri 'self'",
+      "form-action 'self'",
+      "frame-ancestors 'none'",
+      "upgrade-insecure-requests"
+    ].join('; ')
+  );
+  
+  // Additional security headers
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('X-XSS-Protection', '1; mode=block');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  res.setHeader('Permissions-Policy', 'geolocation=(), microphone=(), camera=()');
+  
+  next();
+});
 
 // Preserve raw body for webhooks (Stripe/MercadoPago) while still parsing JSON normally.
 app.use(express.json({

@@ -1,0 +1,115 @@
+# ============================================================
+# SECURITY WORKFLOW - AUTOMATED DEPENDENCY SCANNING
+# ============================================================
+# Runs npm audit on every push/PR and scheduled weekly
+# Fails the build if high/critical vulnerabilities are found
+# ============================================================
+
+name: Security Checks
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+  schedule:
+    # Run every Monday at 9am UTC
+    - cron: '0 9 * * 1'
+  workflow_dispatch: # Allow manual trigger
+
+jobs:
+  dependency-scan:
+    name: Dependency Security Scan
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      
+      - name: Install dependencies
+        run: npm ci
+      
+      - name: Run npm audit
+        run: |
+          echo "🔍 Running npm audit..."
+          npm audit --production --audit-level=high
+        continue-on-error: false
+      
+      - name: Run npm audit (detailed report)
+        if: failure()
+        run: |
+          echo "⚠️ Vulnerabilities found! Generating detailed report..."
+          npm audit --json > audit-report.json
+          npm audit
+      
+      - name: Upload audit report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: npm-audit-report
+          path: audit-report.json
+          retention-days: 30
+      
+      - name: Check for outdated packages
+        run: |
+          echo "📦 Checking for outdated packages..."
+          npm outdated || true
+      
+      - name: Notify on failure
+        if: failure()
+        run: |
+          echo "❌ Security vulnerabilities detected!"
+          echo "Please run 'npm audit fix' locally and review changes."
+          exit 1
+
+  typescript-check:
+    name: TypeScript Compilation Check
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      
+      - name: Install dependencies
+        run: npm ci
+      
+      - name: Run TypeScript compiler
+        run: |
+          echo "🔨 Compiling TypeScript..."
+          npx tsc --noEmit
+      
+      - name: Notify on success
+        if: success()
+        run: echo "✅ TypeScript compilation successful!"
+
+  security-summary:
+    name: Security Summary
+    runs-on: ubuntu-latest
+    needs: [dependency-scan, typescript-check]
+    if: always()
+    
+    steps:
+      - name: Check results
+        run: |
+          echo "📊 Security Checks Summary:"
+          echo "- Dependency Scan: ${{ needs.dependency-scan.result }}"
+          echo "- TypeScript Check: ${{ needs.typescript-check.result }}"
+          
+          if [ "${{ needs.dependency-scan.result }}" != "success" ] || [ "${{ needs.typescript-check.result }}" != "success" ]; then
+            echo "❌ Security checks failed!"
+            exit 1
+          else
+            echo "✅ All security checks passed!"
+          fi

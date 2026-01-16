@@ -12,6 +12,7 @@ import {
   validateSessionAndFetchPlayerStats,
   logMoneyTransactionAsync,
   updatePlayerBalance,
+  validateCsrfMiddleware,
 } from './_utils.js';
 import { applyReferralCommissionForSpend } from './_referrals.js';
 
@@ -166,6 +167,14 @@ export default async function handler(req: ApiRequest, res: ApiResponse): Promis
   if (!valid) {
     logAction(userId, 'AUTH_FAILED', { action, error: sessionError }, req).catch(() => {});
     return res.status(401).json({ error: sessionError });
+  }
+  
+  // 🛡️ Validar CSRF token (todas ações de inventory fazem mutações)
+  const csrfValidation = validateCsrfMiddleware(req, userId);
+  if (!csrfValidation.valid) {
+    console.warn('⚠️ CSRF validation failed:', { userId, action, error: csrfValidation.error });
+    logAction(userId, 'CSRF_VALIDATION_FAILED', { action }, req).catch(() => {});
+    return res.status(403).json({ error: 'Security validation failed' });
   }
   
   try {

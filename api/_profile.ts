@@ -14,6 +14,14 @@ import {
   isValidUsername,
   usernameExists,
   updatePlayerDiamonds,
+  generateCsrfToken,
+  validateCsrfMiddleware,
+  clearCsrfToken,
+  generateTwoFactorSecret,
+  verifyTwoFactorCode,
+  sanitizeUsername,
+  sanitizeBio,
+  sanitizeText,
   type RateLimitEntry
 } from './_utils.js';
 
@@ -110,6 +118,25 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
   const { action } = body;
 
   try {
+    // 🛡️ CSRF Token Management
+    if (action === 'getCsrfToken') {
+      return await handleGetCsrfToken(req, res, body);
+    }
+    if (action === 'clearCsrfToken') {
+      return await handleClearCsrfToken(req, res, body);
+    }
+    
+    // 🛡️ 2FA Management
+    if (action === 'setup2FA') {
+      return await handleSetup2FA(req, res, body);
+    }
+    if (action === 'verify2FA') {
+      return await handleVerify2FA(req, res, body);
+    }
+    if (action === 'disable2FA') {
+      return await handleDisable2FA(req, res, body);
+    }
+    
     // Profile actions
     if (action === 'changeUsername') {
       return await handleChangeUsername(req, res);
@@ -153,7 +180,10 @@ async function handleChangeUsername(req: ApiRequest, res: ApiResponse): Promise<
       return res.status(400).json({ error: 'Invalid authToken' });
     }
 
-    const normalized = normalizeUsername(newUsername);
+    // 🛡️ Sanitizar username (XSS protection)
+    const sanitized = sanitizeUsername(newUsername);
+    const normalized = normalizeUsername(sanitized);
+    
     if (!isValidUsername(normalized)) {
       return res.status(400).json({ error: 'INVALID_USERNAME' });
     }
@@ -310,18 +340,21 @@ async function handleCheckPublicProfile(req: ApiRequest, res: ApiResponse): Prom
       return res.status(400).json({ error: 'Missing or invalid username' });
     }
 
-    if (username.length > 256) {
-      console.warn(`[CHECK_PUBLIC_PROFILE] Username too long from ${identifier}:`, username.length);
+    // 🛡️ Sanitizar username antes de buscar
+    const sanitized = sanitizeUsername(username);
+
+    if (sanitized.length > 256) {
+      console.warn(`[CHECK_PUBLIC_PROFILE] Username too long from ${identifier}:`, sanitized.length);
       return res.status(400).json({ error: 'Invalid username' });
     }
 
-    console.log(`[CHECK_PUBLIC_PROFILE] Checking profile for: "${username}" from ${identifier}`);
+    console.log(`[CHECK_PUBLIC_PROFILE] Checking profile for: "${sanitized}" from ${identifier}`);
 
     // Fetch profile without authentication - but only public field
     const { data: profile, error } = await supabase
       .from('player_stats')
       .select('user_id, username, public')
-      .ilike('username', username)
+      .ilike('username', sanitized)
       .single();
 
     if (error) {
@@ -803,4 +836,239 @@ async function handleRemoveFriend(req: ApiRequest, res: ApiResponse, body: any) 
   ]);
 
   return res.status(200).json({ success: true, state: meState });
+}
+// ============================================================
+// 🛡️ CSRF TOKEN HANDLERS
+// ============================================================
+
+/**
+ * Gera e retorna um token CSRF para o usuário autenticado
+ * Este endpoint deve ser chamado após o login bem-sucedido
+ */
+async function handleGetCsrfToken(req: ApiRequest, res: ApiResponse, body: any) {
+  const { userId, authToken } = body;
+  
+  if (!userId || !authToken) {
+    return res.status(400).json({ error: 'Missing required fields' });
+  }
+
+  // Valida a sessão do usuário
+  const session = await validateSessionAndFetchPlayerStats(
+    supabase,
+    authToken,
+    userId,
+    { select: 'user_id' }
+  );
+  
+  if (!session.valid) {
+    return res.status(401).json({ error: session.error || 'Invalid session' });
+  }
+
+  // Gera o token CSRF
+  const csrfToken = generateCsrfToken(userId);
+  
+  return res.status(200).json({ 
+    success: true, 
+    csrfToken 
+  });
+}
+
+/**
+ * Remove o token CSRF do usuário (útil no logout)
+ */
+async function handleClearCsrfToken(req: ApiRequest, res: ApiResponse, body: any) {
+  const { userId, authToken } = body;
+  
+  if (!userId || !authToken) {
+    return res.status(400).json({ error: 'Missing required fields' });
+  }
+
+  // Valida a sessão do usuário
+  const session = await validateSessionAndFetchPlayerStats(
+    supabase,
+    authToken,
+    userId,
+    { select: 'user_id' }
+  );
+  
+  if (!session.valid) {
+    return res.status(401).json({ error: session.error || 'Invalid session' });
+  }
+
+  // Remove o token CSRF
+  clearCsrfToken(userId);
+  
+  return res.status(200).json({ 
+    success: true 
+  });
+}
+
+// ============================================================
+// 2FA HANDLERS
+// ============================================================
+
+/**
+ * Generate 2FA secret and QR code for setup
+ */
+async function handleSetup2FA(req: ApiRequest, res: ApiResponse, body: any) {
+  const { userId, authToken } = body;
+  
+  if (!userId || !authToken) {
+    return res.status(400).json({ error: 'Missing required fields' });
+  }
+
+  // Validate session
+  const session = await validateSessionAndFetchPlayerStats(
+    supabase,
+    authToken,
+    userId,
+    { select: 'user_id' }
+  );
+  
+  if (!session.valid) {
+    return res.status(401).json({ error: session.error || 'Invalid session' });
+  }
+
+  try {
+    // Generate 2FA secret with QR code
+    const { secret, qrCode } = generateTwoFactorSecret(userId);
+    
+    // Don't save to database yet - user must verify the code first
+    return res.status(200).json({
+      success: true,
+      secret,
+      qrCode,
+      message: 'Please scan the QR code with your authenticator app and verify the 6-digit code'
+    });
+  } catch (err) {
+    console.error('2FA setup error:', err);
+    return res.status(500).json({ error: 'Failed to generate 2FA secret' });
+  }
+}
+
+/**
+ * Verify 2FA code and enable 2FA for user
+ */
+async function handleVerify2FA(req: ApiRequest, res: ApiResponse, body: any) {
+  const { userId, authToken, secret, code } = body;
+  
+  if (!userId || !authToken || !secret || !code) {
+    return res.status(400).json({ error: 'Missing required fields' });
+  }
+
+  // Validate session
+  const session = await validateSessionAndFetchPlayerStats(
+    supabase,
+    authToken,
+    userId,
+    { select: 'user_id' }
+  );
+  
+  if (!session.valid) {
+    return res.status(401).json({ error: session.error || 'Invalid session' });
+  }
+
+  try {
+    // Verify the provided code
+    const isValid = verifyTwoFactorCode(secret, code, 1); // Allow 1 period window (±30s)
+    
+    if (!isValid) {
+      logAudit(supabase, userId, '2FA_VERIFY_FAILED', { attempt: 'invalid_code' }, req as any).catch(() => {});
+      return res.status(400).json({ error: 'Invalid authentication code' });
+    }
+
+    // Save 2FA secret to user profile (encrypted ideally)
+    const { error: updateError } = await supabase
+      .from('player_profiles')
+      .update({
+        two_factor_secret: secret,
+        two_factor_enabled: true,
+        updated_at: new Date().toISOString()
+      })
+      .eq('user_id', userId);
+
+    if (updateError) {
+      console.error('Failed to enable 2FA:', updateError);
+      return res.status(500).json({ error: 'Failed to enable 2FA' });
+    }
+
+    logAudit(supabase, userId, '2FA_ENABLED', {}, req as any).catch(() => {});
+
+    return res.status(200).json({
+      success: true,
+      message: '2FA has been successfully enabled'
+    });
+  } catch (err) {
+    console.error('2FA verification error:', err);
+    return res.status(500).json({ error: 'Failed to verify 2FA code' });
+  }
+}
+
+/**
+ * Disable 2FA for user
+ */
+async function handleDisable2FA(req: ApiRequest, res: ApiResponse, body: any) {
+  const { userId, authToken, code } = body;
+  
+  if (!userId || !authToken || !code) {
+    return res.status(400).json({ error: 'Missing required fields' });
+  }
+
+  // Validate session
+  const session = await validateSessionAndFetchPlayerStats(
+    supabase,
+    authToken,
+    userId,
+    { select: 'user_id' }
+  );
+  
+  if (!session.valid) {
+    return res.status(401).json({ error: session.error || 'Invalid session' });
+  }
+
+  try {
+    // Get user's 2FA secret
+    const { data: profile, error: fetchError } = await supabase
+      .from('player_profiles')
+      .select('two_factor_secret')
+      .eq('user_id', userId)
+      .single();
+
+    if (fetchError || !profile?.two_factor_secret) {
+      return res.status(400).json({ error: '2FA is not enabled for this account' });
+    }
+
+    // Verify the code before disabling
+    const isValid = verifyTwoFactorCode(profile.two_factor_secret, code, 1);
+    
+    if (!isValid) {
+      logAudit(supabase, userId, '2FA_DISABLE_FAILED', { attempt: 'invalid_code' }, req as any).catch(() => {});
+      return res.status(400).json({ error: 'Invalid authentication code' });
+    }
+
+    // Disable 2FA
+    const { error: updateError } = await supabase
+      .from('player_profiles')
+      .update({
+        two_factor_secret: null,
+        two_factor_enabled: false,
+        updated_at: new Date().toISOString()
+      })
+      .eq('user_id', userId);
+
+    if (updateError) {
+      console.error('Failed to disable 2FA:', updateError);
+      return res.status(500).json({ error: 'Failed to disable 2FA' });
+    }
+
+    logAudit(supabase, userId, '2FA_DISABLED', {}, req as any).catch(() => {});
+
+    return res.status(200).json({
+      success: true,
+      message: '2FA has been successfully disabled'
+    });
+  } catch (err) {
+    console.error('2FA disable error:', err);
+    return res.status(500).json({ error: 'Failed to disable 2FA' });
+  }
 }

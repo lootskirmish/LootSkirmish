@@ -3,6 +3,7 @@
 // ============================================================
 
 import { supabase } from './auth';
+import { addCsrfHeader } from '../core/session';
 import { getActiveUser } from '../core/session';
 import { playSound, setMasterVolume, setSoundEnabled, setSoundPreference, setAllSoundPreferences } from '../shared/sfx';
 import { showToast, showAlert } from '../shared/effects';
@@ -157,7 +158,7 @@ function bindSettingsUIOnce(): void {
 
           const response = await fetch('/api/_profile', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: addCsrfHeader({ 'Content-Type': 'application/json' }),
             body: JSON.stringify({
               action: 'updatePublicProfile',
               userId: user.id,
@@ -495,7 +496,7 @@ export async function enableUsernameEdit(): Promise<void> {
 
       const response = await fetch('/api/_profile', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: addCsrfHeader({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({
           action: 'changeUsername',
           userId: user.id,

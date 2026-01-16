@@ -18,7 +18,14 @@ import {
   verifyMercadoPagoSignature,
   createSecureLog,
   maskUserId,
-  maskEmail
+  maskEmail,
+  validateCsrfMiddleware,
+  checkIdempotencyKey,
+  saveIdempotencyKey,
+  updateIdempotencyKey,
+  ipBlockMiddleware,
+  getIpAddress,
+  validateRequestSignature
 } from './_utils.js';
 
 import { 
@@ -994,11 +1001,58 @@ async function processSuccessfulPayment(orderId: string, { gateway = 'unknown', 
 
 async function handleCreateOrder(req: ApiRequest, res: ApiResponse, body: any): Promise<void> {
   try {
-    const { userId, authToken, productId, productType, paymentMethod } = body || {};
+    const { userId, authToken, productId, productType, paymentMethod, idempotencyKey } = body || {};
 
-    // Validações
+    // Validações básicas
     if (!userId || !authToken || !productId || !productType || !paymentMethod) {
       return res.status(400).json({ error: 'Missing required fields' });
+    }
+
+    // 🛡️ Verificar IP bloqueado PRIMEIRO
+    const ipCheck = await ipBlockMiddleware(supabase, req);
+    if (ipCheck.blocked) {
+      console.warn('⚠️ Blocked IP attempted order:', getIpAddress(req));
+      return res.status(403).json({ 
+        error: 'Access denied',
+        reason: ipCheck.block_type === 'temporary' ? 'Temporarily blocked' : 'Blocked'
+      });
+    }
+
+    // 🔑 Verificar Idempotency Key (proteção contra cliques duplos)
+    if (idempotencyKey) {
+      const idempotencyCheck = await checkIdempotencyKey(supabase, idempotencyKey, userId);
+      
+      if (idempotencyCheck.exists) {
+        if (idempotencyCheck.status === 'processing') {
+          // Requisição ainda está sendo processada
+          console.log('⏳ Duplicate request while processing:', idempotencyKey);
+          return res.status(409).json({ 
+            error: 'Request is being processed',
+            status: 'processing'
+          });
+        }
+        
+        if (idempotencyCheck.status === 'completed') {
+          // Requisição já foi processada - retornar resultado anterior
+          console.log('✅ Returning cached result for:', idempotencyKey);
+          return res.status(idempotencyCheck.response_code || 200).json(idempotencyCheck.result);
+        }
+        
+        if (idempotencyCheck.status === 'failed') {
+          // Requisição anterior falhou - retornar erro anterior
+          console.log('❌ Returning cached error for:', idempotencyKey);
+          return res.status(idempotencyCheck.response_code || 500).json(idempotencyCheck.result);
+        }
+      }
+      
+      // Salvar key com status "processing"
+      await saveIdempotencyKey(supabase, {
+        idempotency_key: idempotencyKey,
+        user_id: userId,
+        action: 'create_order',
+        status: 'processing',
+        request_data: { productId, productType, paymentMethod }
+      });
     }
 
     // Validar sessão
@@ -1010,12 +1064,59 @@ async function handleCreateOrder(req: ApiRequest, res: ApiResponse, body: any): 
     );
 
     if (!session.valid) {
+      // Atualizar idempotency key como failed
+      if (idempotencyKey) {
+        await updateIdempotencyKey(supabase, idempotencyKey, 'failed', 
+          { error: session.error || 'Invalid session' }, 401);
+      }
       return res.status(401).json({ error: session.error || 'Invalid session' });
+    }
+
+    // 🛡️ Validar CSRF token (protege contra ataques CSRF)
+    const csrfValidation = validateCsrfMiddleware(req, userId);
+    if (!csrfValidation.valid) {
+      console.warn('⚠️ CSRF validation failed:', { userId, error: csrfValidation.error });
+      securityMonitor.recordFraudAttempt();
+      logAudit(supabase, userId, 'CSRF_VALIDATION_FAILED', { action: 'createOrder' }, req as any).catch(() => {});
+      
+      // Atualizar idempotency key como failed
+      if (idempotencyKey) {
+        await updateIdempotencyKey(supabase, idempotencyKey, 'failed',
+          { error: 'Security validation failed' }, 403);
+      }
+      return res.status(403).json({ error: 'Security validation failed' });
+    }
+
+    // 🛡️ Validar Request Signature (proteção contra replay attacks)
+    const requestSignature = req.headers?.['x-request-signature'] as string;
+    const requestTimestamp = req.headers?.['x-request-timestamp'] as string;
+    if (requestSignature && requestTimestamp) {
+      const signatureValidation = await validateRequestSignature(
+        { headers: { 'x-request-signature': requestSignature, 'x-request-timestamp': requestTimestamp } } as any,
+        process.env.REQUEST_SIGNING_SECRET || ''
+      );
+      
+      if (!signatureValidation.valid) {
+        console.warn('⚠️ Request signature validation failed:', { userId, error: signatureValidation.error });
+        securityMonitor.recordFraudAttempt();
+        logAudit(supabase, userId, 'REQUEST_SIGNATURE_FAILED', { action: 'createOrder', error: signatureValidation.error }, req as any).catch(() => {});
+        
+        if (idempotencyKey) {
+          await updateIdempotencyKey(supabase, idempotencyKey, 'failed',
+            { error: 'Request signature validation failed' }, 403);
+        }
+        return res.status(403).json({ error: 'Request signature validation failed' });
+      }
     }
 
     // Buscar produto
     const product = getProduct(productId, productType);
     if (!product) {
+      // Atualizar idempotency key como failed
+      if (idempotencyKey) {
+        await updateIdempotencyKey(supabase, idempotencyKey, 'failed',
+          { error: 'Product not found' }, 404);
+      }
       return res.status(404).json({ error: 'Product not found' });
     }
 
@@ -1078,6 +1179,13 @@ async function handleCreateOrder(req: ApiRequest, res: ApiResponse, body: any): 
 
     if (orderError) {
       console.error('❌ Failed to create order:', orderError);
+      
+      // Atualizar idempotency key como failed
+      if (idempotencyKey) {
+        await updateIdempotencyKey(supabase, idempotencyKey, 'failed',
+          { error: 'Failed to create order' }, 500);
+      }
+      
       return res.status(500).json({ error: 'Failed to create order' });
     }
 
@@ -1120,6 +1228,13 @@ async function handleCreateOrder(req: ApiRequest, res: ApiResponse, body: any): 
 
       const errorMessage = (checkoutError as any)?.message || (checkoutError as any)?.error || 'Unknown error';
       console.error('❌ Erro final de checkout:', errorMessage);
+      
+      // Atualizar idempotency key como failed
+      if (idempotencyKey) {
+        await updateIdempotencyKey(supabase, idempotencyKey, 'failed',
+          { error: `Checkout error: ${errorMessage}` }, 500);
+      }
+      
       return res.status(500).json({ error: `Checkout error: ${errorMessage}` });
     }
 
@@ -1131,15 +1246,30 @@ async function handleCreateOrder(req: ApiRequest, res: ApiResponse, body: any): 
       paymentMethod 
     }, req).catch(() => {});
 
-    return res.status(200).json({
+    const successResult = {
       success: true,
       orderId: order.id,
       checkoutUrl,
       expiresAt: expiresAt.toISOString()
-    });
+    };
+
+    // 🔑 Atualizar idempotency key como completed
+    if (idempotencyKey) {
+      await updateIdempotencyKey(supabase, idempotencyKey, 'completed', successResult, 200);
+    }
+
+    return res.status(200).json(successResult);
 
   } catch (error) {
     console.error('❌ Create order error:', error);
+    
+    // 🔑 Atualizar idempotency key como failed
+    const { idempotencyKey } = req.body || {};
+    if (idempotencyKey) {
+      await updateIdempotencyKey(supabase, idempotencyKey, 'failed',
+        { error: 'Internal server error' }, 500);
+    }
+    
     return res.status(500).json({ error: 'Internal server error' });
   }
 }

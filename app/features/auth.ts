@@ -5,7 +5,7 @@
 import { createClient, Session, User, AuthError } from '@supabase/supabase-js';
 import { showToast, showAlert } from '../shared/effects';
 import { store, authActions, dataActions } from '../core/store';
-import { clearActiveUser, setActiveUser } from '../core/session';
+import { clearActiveUser, setActiveUser, fetchCsrfToken, clearCsrfTokenOnServer, getActiveUser } from '../core/session';
 
 // ============ TYPE DEFINITIONS ============
 interface RememberedCredentials {
@@ -602,6 +602,17 @@ export async function handleLogin(): Promise<void> {
   setButtonLoading(loginBtn, false);
   resetCaptcha('login');
   
+  // 🛡️ Buscar token CSRF após login bem-sucedido
+  if (data?.user && data.session?.access_token) {
+    try {
+      await fetchCsrfToken(data.user.id, data.session.access_token);
+      console.log('✅ CSRF token obtained');
+    } catch (err) {
+      console.error('Failed to fetch CSRF token:', err);
+      // Não bloqueia o login se falhar, apenas registra o erro
+    }
+  }
+  
   // O onAuthStateChange irá carregar os dados do usuário
 }
 
@@ -779,6 +790,18 @@ export async function handleLogout(isInBattle: boolean = false): Promise<void> {
 
   if (window.cleanupFriends) {
     window.cleanupFriends();
+  }
+  
+  // 🛡️ Limpar token CSRF do servidor e localstorage
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session?.user) {
+      await clearCsrfTokenOnServer(session.user.id, session.access_token);
+      console.log('✅ CSRF token cleared');
+    }
+  } catch (err) {
+    console.error('Failed to clear CSRF token:', err);
+    // Não bloqueia o logout se falhar
   }
   
   // ✅ Limpar variáveis globais ANTES de fazer signOut
@@ -1057,6 +1080,213 @@ export function setupAuthStateListener(loadUserDataCallback: (user: User) => voi
   authStateSubscription = data?.subscription || null;
 }
 
+// ============================================================
+// 🛡️ TWO-FACTOR AUTHENTICATION (2FA)
+// ============================================================
+
+/**
+ * Solicita setup de 2FA e exibe o QR code para o usuário
+ * @param userId - ID do usuário
+ * @param authToken - Token de autenticação
+ */
+export async function requestSetup2FA(userId: string, authToken: string): Promise<{ secret: string; qrCode: string } | null> {
+  try {
+    const response = await fetch('/api/_profile', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRF-Token': (window as any).currentCsrfToken || ''
+      },
+      body: JSON.stringify({
+        action: 'setup2FA',
+        userId,
+        authToken
+      })
+    });
+
+    if (!response.ok) {
+      console.error('Failed to setup 2FA:', response.status);
+      showAlert('error', '❌ 2FA Setup Failed', 'Could not generate 2FA secret');
+      return null;
+    }
+
+    const data = await response.json();
+    if (data.success && data.secret && data.qrCode) {
+      return { secret: data.secret, qrCode: data.qrCode };
+    }
+
+    return null;
+  } catch (error) {
+    console.error('Error requesting 2FA setup:', error);
+    showAlert('error', '❌ Error', 'Failed to setup 2FA');
+    return null;
+  }
+}
+
+/**
+ * Verifica o código 2FA e ativa 2FA para o usuário
+ * @param userId - ID do usuário
+ * @param authToken - Token de autenticação
+ * @param secret - Secret 2FA compartilhado
+ * @param code - Código 6-dígito do autenticador
+ */
+export async function verifyAndEnable2FA(userId: string, authToken: string, secret: string, code: string): Promise<boolean> {
+  try {
+    // Validar formato do código
+    if (!/^\d{6}$/.test(code)) {
+      showAlert('warning', '⚠️ Invalid Code', 'Please enter a valid 6-digit code');
+      return false;
+    }
+
+    const response = await fetch('/api/_profile', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRF-Token': (window as any).currentCsrfToken || ''
+      },
+      body: JSON.stringify({
+        action: 'verify2FA',
+        userId,
+        authToken,
+        secret,
+        code
+      })
+    });
+
+    if (!response.ok) {
+      console.error('Failed to verify 2FA:', response.status);
+      const errorData = await response.json();
+      showAlert('error', '❌ Verification Failed', errorData.error || 'Invalid code');
+      return false;
+    }
+
+    const data = await response.json();
+    if (data.success) {
+      showToast('success', '✅ 2FA Enabled', '2FA has been enabled on your account');
+      return true;
+    }
+
+    return false;
+  } catch (error) {
+    console.error('Error verifying 2FA:', error);
+    showAlert('error', '❌ Error', 'Failed to verify 2FA code');
+    return false;
+  }
+}
+
+/**
+ * Desabilita 2FA usando um código de autenticação válido
+ * @param userId - ID do usuário
+ * @param authToken - Token de autenticação
+ * @param code - Código 6-dígito do autenticador
+ */
+export async function disable2FA(userId: string, authToken: string, code: string): Promise<boolean> {
+  try {
+    // Validar formato do código
+    if (!/^\d{6}$/.test(code)) {
+      showAlert('warning', '⚠️ Invalid Code', 'Please enter a valid 6-digit code');
+      return false;
+    }
+
+    const response = await fetch('/api/_profile', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRF-Token': (window as any).currentCsrfToken || ''
+      },
+      body: JSON.stringify({
+        action: 'disable2FA',
+        userId,
+        authToken,
+        code
+      })
+    });
+
+    if (!response.ok) {
+      console.error('Failed to disable 2FA:', response.status);
+      const errorData = await response.json();
+      showAlert('error', '❌ Failed', errorData.error || 'Invalid code');
+      return false;
+    }
+
+    const data = await response.json();
+    if (data.success) {
+      showToast('success', '✅ 2FA Disabled', '2FA has been removed from your account');
+      return true;
+    }
+
+    return false;
+  } catch (error) {
+    console.error('Error disabling 2FA:', error);
+    showAlert('error', '❌ Error', 'Failed to disable 2FA');
+    return false;
+  }
+}
+
+/**
+ * Prompts the user to enter a 2FA code during login
+ * @returns 6-digit 2FA code or null if cancelled
+ */
+export function prompt2FACode(): Promise<string | null> {
+  return new Promise((resolve) => {
+    // Criar modal para entrada de código 2FA
+    const modal = document.createElement('div');
+    modal.id = '2fa-modal';
+    modal.className = 'modal modal-2fa';
+    modal.innerHTML = `
+      <div class="modal-overlay"></div>
+      <div class="modal-content">
+        <h2>Two-Factor Authentication</h2>
+        <p>Enter the 6-digit code from your authenticator app:</p>
+        <input 
+          type="text" 
+          id="2fa-code-input" 
+          maxlength="6" 
+          placeholder="000000" 
+          inputmode="numeric"
+          autocomplete="off"
+        />
+        <div class="modal-actions">
+          <button id="2fa-verify-btn" class="btn btn-primary">Verify</button>
+          <button id="2fa-cancel-btn" class="btn btn-secondary">Cancel</button>
+        </div>
+      </div>
+    `;
+    
+    document.body.appendChild(modal);
+    const codeInput = document.getElementById('2fa-code-input') as HTMLInputElement;
+    const verifyBtn = document.getElementById('2fa-verify-btn');
+    const cancelBtn = document.getElementById('2fa-cancel-btn');
+    
+    codeInput?.focus();
+    
+    const cleanup = () => {
+      modal.remove();
+    };
+    
+    const handleVerify = () => {
+      const code = codeInput?.value.trim();
+      if (code && /^\d{6}$/.test(code)) {
+        cleanup();
+        resolve(code);
+      } else {
+        showAlert('warning', '⚠️ Invalid Code', 'Please enter a valid 6-digit code');
+      }
+    };
+    
+    const handleCancel = () => {
+      cleanup();
+      resolve(null);
+    };
+    
+    verifyBtn?.addEventListener('click', handleVerify);
+    cancelBtn?.addEventListener('click', handleCancel);
+    codeInput?.addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') handleVerify();
+    });
+  });
+}
+
 function initializeAuthUI(): void {
   hydrateAuthForm();
   prefillReferralFromUrl();
@@ -1076,3 +1306,7 @@ window.handleRegister = handleRegister;
 window.handlePasswordReset = handlePasswordReset;
 window.handleUpdatePassword = handleUpdatePassword;
 window.updatePasswordAfterReset = updatePasswordAfterReset;
+window.requestSetup2FA = requestSetup2FA;
+window.verifyAndEnable2FA = verifyAndEnable2FA;
+window.disable2FA = disable2FA;
+window.prompt2FACode = prompt2FACode;
