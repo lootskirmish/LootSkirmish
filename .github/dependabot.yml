@@ -1,8 +1,8 @@
 # ============================================================
-# DEPENDABOT CONFIGURATION
+# DEPENDABOT CONFIGURATION (OPTIMIZED)
 # ============================================================
 # Automatically creates PRs for dependency updates
-# Checks for security vulnerabilities and version updates
+# CONFIGURAÇÃO OTIMIZADA: Menos PRs, mais agrupamento
 # ============================================================
 
 version: 2
@@ -11,24 +11,27 @@ updates:
   - package-ecosystem: "npm"
     directory: "/"
     schedule:
-      interval: "weekly"
+      interval: "monthly"  # ← Mudado de weekly para monthly
       day: "monday"
-      time: "09:00"
-    open-pull-requests-limit: 10
+      time: "03:00"  # ← 3am (horário de baixo tráfego)
+    open-pull-requests-limit: 3  # ← REDUZIDO de 10 para 3
     
-    # Grouping strategy
+    # Grouping strategy (AGRUPAR TUDO)
     groups:
-      # Group all minor and patch updates together
-      development-dependencies:
+      # Agrupar TODAS as dev dependencies juntas
+      all-development-dependencies:
         dependency-type: "development"
         update-types:
           - "minor"
           - "patch"
+          - "major"  # ← Incluir major também
       
-      production-dependencies:
+      # Agrupar TODAS as production dependencies juntas
+      all-production-dependencies:
         dependency-type: "production"
         update-types:
           - "patch"
+          - "minor"
     
     # Auto-merge rules
     commit-message:
@@ -40,19 +43,23 @@ updates:
       - "dependencies"
       - "automated"
     
-    # Ignore specific dependencies (if needed)
-    # ignore:
-    #   - dependency-name: "package-name"
-    #     versions: ["1.x", "2.x"]
+    # Ignorar packages específicos que causam muitos updates
+    ignore:
+      - dependency-name: "vite"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@types/*"
+        update-types: ["version-update:semver-minor", "version-update:semver-patch"]
     
     # Security updates
     versioning-strategy: increase
     
-  # GitHub Actions dependencies
-  - package-ecosystem: "github-actions"
-    directory: "/"
-    schedule:
-      interval: "monthly"
-    labels:
-      - "github-actions"
-      - "dependencies"
+  # GitHub Actions dependencies (DESABILITADO - raramente precisa)
+  # - package-ecosystem: "github-actions"
+  #   directory: "/"
+  #   schedule:
+  #     interval: "monthly"
+  #   labels:
+  #     - "github-actions"
+  #     - "dependencies"
