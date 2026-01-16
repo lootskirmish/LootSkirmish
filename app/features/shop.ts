@@ -245,8 +245,6 @@ function checkPaymentReturn(): void {
 // ============================================================
 
 export async function initShop(): Promise<void> {
-  console.log('🔄 Iniciando shop...');
-  
   try {
     const user = getActiveUser({ sync: true, allowStored: true });
     if (!user || !user.id) {
@@ -254,27 +252,13 @@ export async function initShop(): Promise<void> {
       showToast('error', 'Authentication Required', 'Please login to access the shop');
       return;
     }
-
-    console.log('✅ Usuário autenticado:', user.id);
     currentUser = user;
-    
-    console.log('🔄 Carregando dados do usuário...');
     await loadUserData();
-    
-    console.log('🔄 Renderizando shop...');
     renderShop();
-    
-    console.log('🔄 Iniciando timers de bônus...');
     startBonusTimers();
-    
-    console.log('🔄 Vinculando eventos...');
     bindShopEvents();
-    
-    console.log('🔄 Verificando retorno de pagamento...');
     // Verificar se há retorno de pagamento na URL
     checkPaymentReturn();
-    
-    console.log('✅ Shop inicializada com sucesso!');
   } catch (error) {
     console.error('❌ Erro ao inicializar shop:', error);
     showAlert('error', 'Shop Error', 'Failed to load shop. Please refresh the page.');
@@ -327,13 +311,11 @@ async function loadUserData(): Promise<void> {
 // ============================================================
 
 function renderShop(): void {
-  console.log('🔄 Renderizando shop...');
   
   // Remover skeleton se existir
   const skeleton = document.getElementById('shop-skeleton');
   if (skeleton) {
     skeleton.remove();
-    console.log('✅ Skeleton removido');
   }
 
   // Renderizar apenas os cards nos grids existentes
@@ -350,20 +332,16 @@ function renderShop(): void {
   subsGrid.innerHTML = '';
 
   // Renderizar Pacotes
-  console.log(`📦 Renderizando ${PACKAGES.length} pacotes...`);
   PACKAGES.forEach(pkg => {
     const card = createPackageCard(pkg as any);
     packagesGrid.appendChild(card);
   });
 
   // Renderizar Assinaturas
-  console.log(`👑 Renderizando ${SUBSCRIPTIONS.length} assinaturas...`);
   SUBSCRIPTIONS.forEach(sub => {
     const card = createSubscriptionCard(sub);
     subsGrid.appendChild(card);
   });
-
-  console.log('✅ Shop renderizada com sucesso!');
 
   // Aplicar traduções se disponível
   if (window.applyTranslations) {

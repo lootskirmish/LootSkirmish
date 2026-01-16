@@ -348,8 +348,6 @@ class PersistenceManager {
     this.isSaving = false;
     this.lastSavedChecksum = null;
     this.retryCount = 0;
-
-    logger.info('PersistenceManager criado', { config: this.config });
   }
 
   // ============================================================
@@ -357,7 +355,6 @@ class PersistenceManager {
   // ============================================================
 
   async initialize(): Promise<boolean> {
-    logger.info('Inicializando sistema de persistência...');
     
     try {
       // Executar hooks
@@ -378,8 +375,6 @@ class PersistenceManager {
       if (this.config.autoSave) {
         this.startAutoSave();
       }
-      
-      logger.info('✅ Sistema de persistência inicializado');
       return true;
     } catch (error) {
       logger.error('Erro ao inicializar persistência', { error });
@@ -389,7 +384,6 @@ class PersistenceManager {
   }
 
   async shutdown(): Promise<void> {
-    logger.info('Encerrando sistema de persistência...');
     
     try {
       // Salvar estado final
@@ -410,7 +404,6 @@ class PersistenceManager {
         this.debounceTimer = null;
       }
       
-      logger.info('✅ Sistema de persistência encerrado');
     } catch (error) {
       logger.error('Erro ao encerrar persistência', { error });
     }
@@ -422,12 +415,10 @@ class PersistenceManager {
 
   async save(): Promise<boolean> {
     if (this.isRestoring || this.isSaving) {
-      logger.debug('Save blocked: operation in progress');
       return false;
     }
 
     this.isSaving = true;
-    logger.mark('save:start');
 
     try {
       // Executar hooks
@@ -436,7 +427,6 @@ class PersistenceManager {
       // Coletar estado
       const state = this.collectState();
       if (!state) {
-        logger.debug('No state to save (user not authenticated)');
         this.isSaving = false;
         return false;
       }
@@ -450,7 +440,6 @@ class PersistenceManager {
       // Verificar se mudou (reutilizando serialized)
       const checksum = this.calculateChecksumFromString(serialized);
       if (checksum === this.lastSavedChecksum) {
-        logger.debug('State unchanged, skipping save');
         this.isSaving = false;
         return false;
       }
@@ -496,8 +485,6 @@ class PersistenceManager {
       // Executar hooks
       await this.executeHooks('afterSave', data);
 
-      logger.measure('State Save', 'save:start');
-      logger.info('State saved successfully');
       this.retryCount = 0;
       return true;
     } catch (error) {
@@ -507,7 +494,6 @@ class PersistenceManager {
       // Retry logic
       if (this.retryCount < this.config.maxRetries) {
         this.retryCount++;
-        logger.info(`Retrying save... (${this.retryCount}/${this.config.maxRetries})`);
         await this.delay(1000 * this.retryCount);
         return this.save();
       }
@@ -520,7 +506,6 @@ class PersistenceManager {
 
   async restore(): Promise<boolean> {
     if (this.isRestoring) {
-      logger.info('Restore bloqueado: operação em andamento');
       return false;
     }
 
@@ -530,7 +515,6 @@ class PersistenceManager {
       // Buscar dados do storage
       const serialized = await this.storage.get(this.getStorageKey());
       if (!serialized) {
-        logger.info('Nenhum estado salvo encontrado');
         this.isRestoring = false;
         return false;
       }
@@ -554,7 +538,6 @@ class PersistenceManager {
 
       // Validar dados
       if (!this.validateData(data)) {
-        logger.info('Dados inválidos, limpando storage');
         await this.clear();
         this.isRestoring = false;
         return false;
@@ -562,7 +545,6 @@ class PersistenceManager {
 
       // Verificar expiração
       if (Date.now() > data.expiresAt) {
-        logger.info('Estado expirado');
         await this.clear();
         this.isRestoring = false;
         return false;
@@ -571,14 +553,12 @@ class PersistenceManager {
       // Verificar userId
       const currentUserId = this.getCurrentUserId();
       if (data.userId !== currentUserId) {
-        logger.info('UserId diferente, ignorando estado');
         this.isRestoring = false;
         return false;
       }
 
       // Aplicar migrações se necessário
       if (data.version < this.config.version) {
-        logger.info(`Migrando dados de v${data.version} para v${this.config.version}`);
         data = this.applyMigrations(data);
       }
 
@@ -588,7 +568,6 @@ class PersistenceManager {
       // Salvar checksum
       this.lastSavedChecksum = this.calculateChecksum(data);
 
-      logger.info('✅ Estado restaurado com sucesso');
       return true;
     } catch (error) {
       logger.error('Erro ao restaurar estado', { error });
@@ -699,10 +678,8 @@ class PersistenceManager {
     // Globals (verificar e logar apenas)
     if (state.globals && typeof state.globals === 'object' && !Array.isArray(state.globals)) {
       if (state.globals.playerMoney !== undefined && typeof state.globals.playerMoney === 'number' && state.globals.playerMoney >= 0) {
-        logger.debug('Player money restored from state', { money: state.globals.playerMoney });
       }
       if (state.globals.playerDiamonds !== undefined && typeof state.globals.playerDiamonds === 'number' && state.globals.playerDiamonds >= 0) {
-        logger.debug('Player diamonds restored from state', { diamonds: state.globals.playerDiamonds });
       }
     }
 
@@ -826,7 +803,6 @@ class PersistenceManager {
   }
 
   private async clearExpiredCache(): Promise<void> {
-    logger.info('Clearing expired cache entries...');
     const state = this.collectState();
     if (!state?.cache) return;
 
@@ -842,7 +818,6 @@ class PersistenceManager {
       }
     });
 
-    logger.info(`Cleared ${clearedCount} expired cache entries`);
   }
 
   // ============================================================
@@ -855,15 +830,12 @@ class PersistenceManager {
     this.autoSaveTimer = setInterval(() => {
       this.save();
     }, this.config.autoSaveInterval);
-
-    logger.info('Auto-save iniciado');
   }
 
   private stopAutoSave(): void {
     if (this.autoSaveTimer) {
       clearInterval(this.autoSaveTimer);
       this.autoSaveTimer = null;
-      logger.info('Auto-save parado');
     }
   }
 
@@ -876,7 +848,6 @@ class PersistenceManager {
 
     // Set new timer for this namespace
     const timer = setTimeout(() => {
-      logger.debug(`Saving state for namespace: ${namespace}`);
       this.save();
       this.debounceTimers.delete(namespace);
     }, this.config.debounceMs);
@@ -912,7 +883,6 @@ class PersistenceManager {
 
   private initializeSync(): void {
     if (!('BroadcastChannel' in window)) {
-      logger.info('BroadcastChannel não suportado, usando storage events');
       this.setupStorageEventListener();
       return;
     }
@@ -924,7 +894,6 @@ class PersistenceManager {
         this.handleSyncMessage(event.data);
       };
 
-      logger.info('BroadcastChannel inicializado');
     } catch (error) {
       logger.error('Erro ao inicializar BroadcastChannel', { error });
       this.setupStorageEventListener();
@@ -947,7 +916,6 @@ class PersistenceManager {
 
   private async handleSyncMessage(message: any): Promise<void> {
     if (message.type === 'STATE_UPDATED' && message.checksum !== this.lastSavedChecksum) {
-      logger.info('Recebendo atualização de outra aba');
       await this.restore();
     }
   }
@@ -958,7 +926,6 @@ class PersistenceManager {
       const checksum = this.calculateChecksum(data);
       
       if (checksum !== this.lastSavedChecksum) {
-        logger.info('Storage alterado em outra aba');
         await this.restore();
       }
     } catch (error) {
@@ -1036,7 +1003,6 @@ class PersistenceManager {
       this.hooks.set(hook, []);
     }
     this.hooks.get(hook)!.push(callback);
-    logger.info(`Hook adicionado: ${hook}`);
   }
 
   removeHook(hook: PersistenceHook, callback: HookCallback): void {
@@ -1045,7 +1011,6 @@ class PersistenceManager {
       const index = callbacks.indexOf(callback);
       if (index > -1) {
         callbacks.splice(index, 1);
-        logger.info(`Hook removido: ${hook}`);
       }
     }
   }
@@ -1070,7 +1035,6 @@ class PersistenceManager {
   addMigration(migration: Migration): void {
     this.migrations.push(migration);
     this.migrations.sort((a, b) => a.from - b.from);
-    logger.info(`Migração adicionada: v${migration.from} -> v${migration.to}`);
   }
 
   private applyMigrations(data: PersistedData): PersistedData {
@@ -1094,7 +1058,6 @@ class PersistenceManager {
         throw new Error(ERRORS.MIGRATION_FAILED + ': ' + errorMsg);
       }
       
-      logger.info(`Applying migration: v${migration.from} -> v${migration.to}`);
       currentData.state = migration.migrate(currentData.state);
       currentData.version = migration.to;
     }
@@ -1153,7 +1116,6 @@ class PersistenceManager {
       await this.storage.remove(this.getStorageKey());
       this.lastSavedChecksum = null;
       this.cacheStore.clear();
-      logger.info('Storage limpo');
     } catch (error) {
       logger.error('Erro ao limpar storage', { error });
     }
@@ -1582,7 +1544,6 @@ export function setupPersistenceMiddleware(reduxStore: typeof store): void {
         persistence.debounceSave();
       });
 
-      logger.info('[Persistence] ✅ Middleware conectado ao Redux');
     } catch (error) {
       logger.warn('[Persistence] Aguardando inicialização...');
       setTimeout(setupSubscribe, 100);

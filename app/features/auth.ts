@@ -183,14 +183,11 @@ export async function handlePasswordReset(): Promise<void> {
   }
 
   try {
-    console.log('🔑 Sending password reset email to:', email);
     const result = await supabase.auth.resetPasswordForEmail(email, {
       redirectTo: `${window.location.origin}/auth?reset=true`,
       captchaToken: captchaToken || undefined
     });
     const { error, data } = result;
-    
-    console.log('🔑 Reset response:', { error, data });
     
     if (error) {
       console.error('🔑 Reset error:', error);
@@ -198,8 +195,7 @@ export async function handlePasswordReset(): Promise<void> {
       resetCaptcha('login');
       return;
     }
-    
-    console.log('🔑 Reset email sent successfully');
+
     showAlert('success', 'Check Your Email! 📧', 'Password reset link sent. Check your email to continue.');
     if (errorEl) {
       errorEl.textContent = 'Password reset link sent to your email!';
@@ -295,8 +291,6 @@ function detectPasswordReset(): void {
       resetForm.style.display = 'block';
     }
     if (authTabs) authTabs.style.display = 'none';
-    
-    console.log('🔑 Password reset mode activated');
   }
 }
 
@@ -507,8 +501,6 @@ export async function handleLogin(): Promise<void> {
       captchaToken: captchaToken || undefined
     }
   });
-  
-  console.log('🔐 Login attempt:', { email, error: error?.message || 'success' });
 
   if (error) {
     // Se o erro for que email não foi verificado, mostrar mensagem específica
@@ -572,7 +564,6 @@ export async function handleLogin(): Promise<void> {
   if (data?.user && data.session?.access_token) {
     try {
       await fetchCsrfToken(data.user.id, data.session.access_token);
-      console.log('✅ CSRF token obtained');
     } catch (err) {
       console.error('Failed to fetch CSRF token:', err);
       // Não bloqueia o login se falhar, apenas registra o erro
@@ -763,7 +754,6 @@ export async function handleLogout(isInBattle: boolean = false): Promise<void> {
     const { data: { session } } = await supabase.auth.getSession();
     if (session?.user) {
       await clearCsrfTokenOnServer(session.user.id, session.access_token);
-      console.log('✅ CSRF token cleared');
     }
   } catch (err) {
     console.error('Failed to clear CSRF token:', err);

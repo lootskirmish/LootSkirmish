@@ -91,7 +91,6 @@ export function getActiveUser(options: GetActiveUserOptions = {}): User | null {
           return parsed;
         }
       } catch (error) {
-        logger.debug('Failed to parse stored user', { error });
       }
     }
   }
@@ -241,7 +240,6 @@ export async function setCsrfToken(token: string, userId?: string): Promise<void
   const success = safeSetItem(STORAGE.CSRF_KEY, JSON.stringify(tokenData));
   
   if (success) {
-    logger.info('CSRF token stored securely in private memory');
   } else {
     logger.warn('Failed to persist CSRF token to storage');
   }
@@ -286,7 +284,6 @@ export async function getCsrfToken(expectedUserId?: string): Promise<string | nu
       const stored: CsrfTokenData = JSON.parse(storedRaw);
       if (await isTokenValid(stored)) {
         csrfTokenCache = stored;
-        logger.debug('CSRF token restored from storage');
         return stored.token;
       }
     } catch (error) {
@@ -315,7 +312,6 @@ export function clearCsrfToken(): void {
   retryAttempts.clear();
   lastRetryTime.clear();
   safeRemoveItem(STORAGE.CSRF_KEY);
-  logger.debug('CSRF token cleared from private memory');
 }
 
 /**
@@ -369,12 +365,10 @@ export async function fetchCsrfToken(userId: string, authToken: string): Promise
   // Apply exponential backoff delay
   if (attempts > 0) {
     const delay = getRetryDelay(attempts - 1);
-    logger.debug(`Retrying CSRF fetch after ${delay}ms`, { attempt: attempts + 1 });
     await new Promise(resolve => setTimeout(resolve, delay));
   }
   
   try {
-    logger.info('Fetching new CSRF token from server', { userId: userId.slice(0, 8) + '...' });
     retryAttempts.set(retryKey, attempts + 1);
     lastRetryTime.set(retryKey, Date.now());
     
@@ -409,7 +403,6 @@ export async function fetchCsrfToken(userId: string, authToken: string): Promise
       retryAttempts.delete(retryKey);
       lastRetryTime.delete(retryKey);
       
-      logger.info('CSRF token fetched and stored successfully');
       return data.csrfToken;
     }
 
@@ -425,7 +418,6 @@ export async function fetchCsrfToken(userId: string, authToken: string): Promise
  * Forces CSRF token renewal
  */
 export async function renewCsrfToken(userId: string, authToken: string): Promise<string | null> {
-  logger.info('Forcing CSRF token renewal');
   clearCsrfToken();
   return await fetchCsrfToken(userId, authToken);
 }
@@ -437,7 +429,6 @@ export async function renewCsrfToken(userId: string, authToken: string): Promise
  */
 export async function clearCsrfTokenOnServer(userId: string, authToken: string): Promise<void> {
   try {
-    logger.info('Clearing CSRF token on server');
     await fetch('/api/_profile', {
       method: 'POST',
       headers: {

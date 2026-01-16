@@ -315,7 +315,6 @@ async function _loadProfileRoute(): Promise<void> {
         }
 
         const checkData = await checkResponse.json() as any;
-        logger.debug(`[PROFILE_LOAD] Check response for "${publicUsername}"`, checkData);
 
         if (!checkData.success || !checkData.isPublic) {
           logger.warn(`[PROFILE_LOAD] Profile "${publicUsername}" is PRIVATE`, { success: checkData.success, isPublic: checkData.isPublic });

@@ -421,8 +421,6 @@ export function initSupport(): void {
   // Expose functions globally for onclick
   window.openSupport = openSupportModal;
   window.closeSupport = closeModal;
-  
-  console.log('✅ Support modal initialized');
 }
 
 // ============================================================

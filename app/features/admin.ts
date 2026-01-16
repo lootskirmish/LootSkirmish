@@ -1236,8 +1236,6 @@ export function setResolution(value: string): void {
  * Seleciona email no inbox
  */
 export function selectInboxEmail(ticketId: string): void {
-  // TODO: Abrir preview do email
-  console.log('Selected ticket:', ticketId);
 }
 
 /**

@@ -267,7 +267,6 @@ export async function loadPublicProfile(username: string, calculateLevel?: (xp: 
       }
 
       const checkData = await profileCheckResponse.json();
-      console.log(`[LOAD_PUBLIC_PROFILE] Check passed for "${username}":`, checkData);
 
       if (!checkData.success || !checkData.isPublic) {
         console.warn(`[LOAD_PUBLIC_PROFILE] Profile is private (success=${checkData.success}, isPublic=${checkData.isPublic})`);

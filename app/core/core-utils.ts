@@ -418,7 +418,6 @@ export class WindowManager {
       window.__LOOTSKIRMISH__ = {
         ...initialData,
       };
-      logger.info('Initialized LootSkirmish window namespace');
     }
   }
 
@@ -441,7 +440,6 @@ export class WindowManager {
     const ns = this.getNamespace();
     ns.loadRouteData = functions.loadRouteData;
     ns.invalidateRouteData = functions.invalidateRouteData;
-    logger.debug('Route loaders registered in namespace');
   }
 
   static getRouteLoaders(): {
@@ -575,14 +573,12 @@ export class WindowManager {
     }
 
     (window as any).__featureState[key] = value;
-    logger.debug(`Feature state updated: ${key}`);
   }
 
   static clearFeatureState(): void {
     if (typeof window === 'undefined') return;
 
     (window as any).__featureState = {};
-    logger.debug('Feature state cleared');
   }
 
   private static listeners: Array<{
@@ -614,7 +610,6 @@ export class WindowManager {
       target.removeEventListener(event, handler);
     }
     this.listeners = [];
-    logger.info('All window listeners cleaned up');
   }
 
   static hasFunction(functionName: keyof LootSkirmishWindow): boolean {
@@ -631,6 +626,5 @@ export class WindowManager {
 export function initWindowManager(): void {
   if (typeof window !== 'undefined') {
     WindowManager.init();
-    logger.info('Window manager initialized');
   }
 }
