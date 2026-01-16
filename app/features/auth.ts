@@ -89,7 +89,7 @@ let hcaptchaScriptPromise: Promise<HCaptchaInstance> | null = null;
 async function ensureCsrfForSession(session: Session | null): Promise<void> {
   if (!session?.user || !session.access_token) return;
   // Mantém o token atual se ainda for válido (evita troca desnecessária)
-  if (isCsrfTokenValid()) return;
+  if (isCsrfTokenValid(session.user.id)) return;
   try {
     await fetchCsrfToken(session.user.id, session.access_token);
   } catch (err) {

@@ -494,6 +494,10 @@ export function closeSyncChannel(): void {
  */
 export async function initializePersistence(): Promise<void> {
   console.log('[PERSIST] Inicializando sistema de persistência...');
+  // Evita piscada de render durante restauração
+  const root = document.documentElement;
+  const previousVisibility = root.style.visibility;
+  root.style.visibility = 'hidden';
   
   try {
     // Restaurar estado
@@ -519,6 +523,9 @@ export async function initializePersistence(): Promise<void> {
     console.log('[PERSIST] ✅ Sistema de persistência iniciado');
   } catch (err) {
     console.error('[PERSIST] Erro ao inicializar persistência:', err);
+  } finally {
+    // Restaurar visibilidade
+    root.style.visibility = previousVisibility;
   }
 }
 
