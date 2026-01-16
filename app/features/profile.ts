@@ -248,7 +248,7 @@ export async function loadPublicProfile(username: string, calculateLevel?: (xp: 
     try {
       profileCheckResponse = await fetch('/api/_profile', {
         method: 'POST',
-        headers: addCsrfHeader({ 'Content-Type': 'application/json' }),
+        headers: await addCsrfHeader({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({
           action: 'checkPublicProfile',
           username: username.trim()

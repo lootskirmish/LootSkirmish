@@ -657,7 +657,7 @@ export async function sendChatMessage(): Promise<void> {
     
     const response = await fetch('/api/_chat', {
       method: 'POST',
-      headers: addCsrfHeader({
+      headers: await addCsrfHeader({
         'Content-Type': 'application/json',
       }),
       body: JSON.stringify({

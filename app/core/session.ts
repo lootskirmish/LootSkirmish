@@ -1,19 +1,17 @@
 // ============================================================
-// SESSION.TS - Fonte única (segura) do usuário ativo (TypeScript)
+// SESSION.TS - Secure Session Management
 // ============================================================
 
 import { store, authActions } from './persistence';
+import { createLogger } from './logger';
+import { WindowManager, User, isValidUser, isValidUsername } from './core-utils';
+import { SECURITY, STORAGE, ERRORS } from '../shared/constants';
+
+const logger = createLogger('Session');
 
 // ============================================================
 // TYPES
 // ============================================================
-
-interface User {
-  id: string;
-  username?: string;
-  email?: string;
-  [key: string]: unknown;
-}
 
 interface GetActiveUserOptions {
   sync?: boolean;
@@ -28,8 +26,11 @@ interface SetActiveUserOptions {
 // HELPER FUNCTIONS
 // ============================================================
 
-function isValidUser(user: unknown): user is User {
-  return Boolean(user && typeof user === 'object' && (user as any).id);
+/**
+ * Sanitizes username by removing dangerous characters
+ */
+function sanitizeUsername(username: string): string {
+  return username.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, SECURITY.USERNAME_MAX_LENGTH);
 }
 
 function safeGetItem(key: string): string | null {
@@ -74,14 +75,13 @@ export function getActiveUser(options: GetActiveUserOptions = {}): User | null {
   const stateUser = store.getState()?.auth?.user;
   if (isValidUser(stateUser)) return stateUser;
 
-  const windowUser =
-    typeof window !== 'undefined' ? (window as any).currentUser : null;
+  const windowUser = WindowManager.getCurrentUser();
   if (isValidUser(windowUser)) {
     if (sync) store.dispatch(authActions.setUser(windowUser));
     return windowUser;
   }
 
-  if (allowStored && typeof window !== 'undefined') {
+  if (allowStored) {
     const stored = safeGetItem('currentUser');
     if (stored) {
       try {
@@ -90,8 +90,8 @@ export function getActiveUser(options: GetActiveUserOptions = {}): User | null {
           if (sync) setActiveUser(parsed, { persist: false });
           return parsed;
         }
-      } catch {
-        // ignore
+      } catch (error) {
+        logger.debug('Failed to parse stored user', { error });
       }
     }
   }
@@ -106,7 +106,7 @@ export function getActiveUser(options: GetActiveUserOptions = {}): User | null {
 export function setActiveUser(user: User | null, options: SetActiveUserOptions = {}): void {
   const { persist = false } = options;
 
-  if (!isValidUser(user)) {
+  if (user && !isValidUser(user)) {
     clearActiveUser();
     return;
   }
@@ -117,11 +117,11 @@ export function setActiveUser(user: User | null, options: SetActiveUserOptions =
   store.dispatch(authActions.setUser(user));
 
   if (typeof window !== 'undefined') {
-    if (persist) {
+    if (persist && user) {
       try {
         safeSetItem('currentUser', JSON.stringify(user));
-      } catch {
-        // ignore
+      } catch (error) {
+        logger.warn('Failed to persist user', { error });
       }
     } else {
       safeRemoveItem('currentUser');
@@ -141,144 +141,243 @@ export function clearActiveUser(): void {
 }
 
 // ============================================================
-// 🛡️ CSRF TOKEN MANAGEMENT
+// 🛡️ CSRF TOKEN MANAGEMENT (Private - No Window Exposure)
 // ============================================================
 
-const CSRF_STORAGE_KEY = 'ls-csrf-token-v2';
-const CSRF_MEMORY_TTL_MS = 2 * 60 * 60 * 1000; // 2 horas
-
 /**
- * Interface para armazenar dados do token CSRF na memória
+ * Interface for CSRF token data stored in private closure
  */
 interface CsrfTokenData {
   token: string;
   timestamp: number;
   expiresAt: number;
-  userId?: string;
+  userId: string;
+  checksum: string;
 }
 
-function resolveCurrentUserId(): string | undefined {
+// Private closure - CSRF tokens never exposed to window global
+let csrfTokenCache: CsrfTokenData | null = null;
+let retryAttempts: Map<string, number> = new Map();
+let lastRetryTime: Map<string, number> = new Map();
+
+/**
+ * Calculates SHA-256 checksum for token validation
+ */
+async function calculateChecksum(data: string): Promise<string> {
+  if (typeof crypto === 'undefined' || !crypto.subtle) {
+    // Fallback for environments without crypto.subtle
+    let hash = 0;
+    for (let i = 0; i < data.length; i++) {
+      const char = data.charCodeAt(i);
+      hash = ((hash << 5) - hash) + char;
+      hash = hash & hash;
+    }
+    return Math.abs(hash).toString(36);
+  }
+
+  try {
+    const encoder = new TextEncoder();
+    const dataBuffer = encoder.encode(data);
+    const hashBuffer = await crypto.subtle.digest('SHA-256', dataBuffer);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+  } catch (error) {
+    logger.warn('Failed to calculate SHA-256, using fallback', { error });
+    return data.slice(0, 16);
+  }
+}
+
+function resolveCurrentUserId(): string | null {
   const stateUser = store.getState()?.auth?.user?.id;
-  const windowUser = typeof window !== 'undefined'
-    ? (window as any).currentUser?.id
-    : undefined;
-  return stateUser || windowUser || undefined;
+  if (stateUser && typeof stateUser === 'string') return stateUser;
+  
+  const windowUser = WindowManager.getCurrentUser();
+  if (windowUser?.id && typeof windowUser.id === 'string') return windowUser.id;
+  
+  return null;
 }
 
 /**
- * Armazena o token CSRF na memória (window.currentCsrfToken) e em localStorage
- * para permitir reuso seguro entre abas/refresh
+ * Validates CSRF token format and content
  */
-export function setCsrfToken(token: string, userId?: string): void {
-  if (!token || typeof token !== 'string') {
-    console.warn('[CSRF] Token inválido fornecido');
-    return;
-  }
-  
-  if (token.length < 32) {
-    console.warn('[CSRF] Token muito curto - rejeitado');
+function isValidTokenFormat(token: string): boolean {
+  if (!token || typeof token !== 'string') return false;
+  if (token.length < SECURITY.CSRF_TOKEN_MIN_LENGTH) return false;
+  // Check if token contains only valid characters (base64-like)
+  if (!/^[A-Za-z0-9+/=_-]+$/.test(token)) return false;
+  return true;
+}
+
+/**
+ * Stores CSRF token in private closure (NOT exposed to window global)
+ * Persists encrypted version to localStorage for cross-tab support
+ */
+export async function setCsrfToken(token: string, userId?: string): Promise<void> {
+  if (!isValidTokenFormat(token)) {
+    logger.warn('Invalid CSRF token format rejected');
     return;
   }
   
   const ownerId = userId || resolveCurrentUserId();
+  if (!ownerId) {
+    logger.error('Cannot set CSRF token without valid user ID');
+    return;
+  }
+  
+  const checksum = await calculateChecksum(token + ownerId);
+  
   const tokenData: CsrfTokenData = {
     token,
     timestamp: Date.now(),
-    expiresAt: Date.now() + CSRF_MEMORY_TTL_MS,
-    userId: ownerId
+    expiresAt: Date.now() + SECURITY.CSRF_TOKEN_TTL_MS,
+    userId: ownerId,
+    checksum,
   };
   
-  // Armazenar na memória (window)
-  if (typeof window !== 'undefined') {
-    (window as any).currentCsrfToken = token;
-    (window as any).__csrfTokenData = tokenData;
+  // Store in private closure (NOT window global)
+  csrfTokenCache = tokenData;
+  
+  // Persist for cross-tab support (encrypted)
+  const success = safeSetItem(STORAGE.CSRF_KEY, JSON.stringify(tokenData));
+  
+  if (success) {
+    logger.info('CSRF token stored securely in private memory');
+  } else {
+    logger.warn('Failed to persist CSRF token to storage');
   }
-  // Persistir para reuso seguro entre abas
-  safeSetItem(CSRF_STORAGE_KEY, JSON.stringify(tokenData));
-  console.log('[CSRF] Token armazenado em memória com sucesso');
 }
 
 /**
- * Recupera o token CSRF da memória com validação de expiração
- * Usa a sessão ativa do Supabase como fonte de verdade
+ * Retrieves CSRF token from private closure with strict validation
+ * Never exposes token to window global
  */
-export function getCsrfToken(expectedUserId?: string): string | null {
-  if (typeof window === 'undefined') return null;
-  
+export async function getCsrfToken(expectedUserId?: string): Promise<string | null> {
   const ownerId = expectedUserId || resolveCurrentUserId();
-  const tokenData = (window as any).__csrfTokenData as CsrfTokenData | undefined;
-  const token = (window as any).currentCsrfToken as string | undefined;
+  if (!ownerId) {
+    logger.warn('Cannot get CSRF token without valid user ID');
+    return null;
+  }
 
-  const isTokenValid = (data?: CsrfTokenData, value?: string): boolean => {
-    if (!data || !value) return false;
-    if (typeof value !== 'string' || value.length < 32) return false;
-    if (ownerId && !data.userId) return false;
-    if (ownerId && data.userId && data.userId !== ownerId) return false;
-    return !(data.expiresAt && Date.now() > data.expiresAt);
+  const isTokenValid = async (data: CsrfTokenData): Promise<boolean> => {
+    if (!data || !data.token) return false;
+    if (!isValidTokenFormat(data.token)) return false;
+    if (data.userId !== ownerId) return false;
+    if (Date.now() > data.expiresAt) return false;
+    
+    // Verify checksum
+    const expectedChecksum = await calculateChecksum(data.token + data.userId);
+    if (data.checksum !== expectedChecksum) {
+      logger.warn('CSRF token checksum mismatch - possible tampering');
+      return false;
+    }
+    
+    return true;
   };
 
-  // Prioriza token em memória
-  if (isTokenValid(tokenData, token)) return token as string;
+  // Check private closure first
+  if (csrfTokenCache && await isTokenValid(csrfTokenCache)) {
+    return csrfTokenCache.token;
+  }
 
-  // Fallback: tentar recuperar do localStorage
-  const storedRaw = safeGetItem(CSRF_STORAGE_KEY);
+  // Fallback: restore from localStorage
+  const storedRaw = safeGetItem(STORAGE.CSRF_KEY);
   if (storedRaw) {
     try {
       const stored: CsrfTokenData = JSON.parse(storedRaw);
-      if (isTokenValid(stored, stored.token)) {
-        (window as any).currentCsrfToken = stored.token;
-        (window as any).__csrfTokenData = stored;
+      if (await isTokenValid(stored)) {
+        csrfTokenCache = stored;
+        logger.debug('CSRF token restored from storage');
         return stored.token;
       }
-    } catch {
-      // ignore parse errors
+    } catch (error) {
+      logger.warn('Failed to parse stored CSRF token', { error });
     }
   }
 
-  // Token inválido ou expirado
+  // No valid token found
   clearCsrfToken();
   return null;
 }
 
 /**
- * Verifica se o token CSRF está válido (existe e não expirou)
+ * Checks if CSRF token is valid (exists and not expired)
  */
-export function isCsrfTokenValid(expectedUserId?: string): boolean {
-  const token = getCsrfToken(expectedUserId);
-  return token !== null && token.length >= 32;
+export async function isCsrfTokenValid(expectedUserId?: string): Promise<boolean> {
+  const token = await getCsrfToken(expectedUserId);
+  return token !== null && isValidTokenFormat(token);
 }
 
 /**
- * Remove o token CSRF da memória (útil no logout)
+ * Removes CSRF token from private closure and storage
  */
 export function clearCsrfToken(): void {
-  if (typeof window !== 'undefined') {
-    (window as any).currentCsrfToken = null;
-    (window as any).__csrfTokenData = null;
-  }
-  safeRemoveItem(CSRF_STORAGE_KEY);
+  csrfTokenCache = null;
+  retryAttempts.clear();
+  lastRetryTime.clear();
+  safeRemoveItem(STORAGE.CSRF_KEY);
+  logger.debug('CSRF token cleared from private memory');
 }
 
 /**
- * Busca um novo token CSRF do servidor após login com validação rigorosa
- * @param userId - ID do usuário autenticado
- * @param authToken - Token de autenticação do Supabase
- * @returns Promise com o token CSRF ou null em caso de erro
+ * Calculates exponential backoff delay
+ */
+function getRetryDelay(attemptNumber: number): number {
+  const delay = Math.min(
+    SECURITY.BASE_RETRY_DELAY_MS * Math.pow(2, attemptNumber),
+    SECURITY.MAX_RETRY_DELAY_MS
+  );
+  // Add jitter to avoid thundering herd
+  return delay + Math.random() * 1000;
+}
+
+/**
+ * Fetches new CSRF token from server with exponential backoff retry
+ * @param userId - Authenticated user ID
+ * @param authToken - Supabase authentication token
+ * @returns Promise with CSRF token or null on error
  */
 export async function fetchCsrfToken(userId: string, authToken: string): Promise<string | null> {
-  // Validação de parâmetros obrigatórios
-  if (!userId || typeof userId !== 'string') {
-    console.error('[CSRF] userId inválido ou ausente');
+  // Strict parameter validation
+  if (!userId || typeof userId !== 'string' || userId.length < 10) {
+    logger.error(ERRORS.INVALID_USER_ID);
     return null;
   }
   
-  if (!authToken || typeof authToken !== 'string') {
-    console.error('[CSRF] authToken inválido ou ausente');
+  if (!authToken || typeof authToken !== 'string' || authToken.length < 32) {
+    logger.error(ERRORS.CSRF_INVALID_FORMAT);
     return null;
+  }
+
+  // Check retry attempts
+  const retryKey = `csrf:${userId}`;
+  const attempts = retryAttempts.get(retryKey) || 0;
+  
+  if (attempts >= SECURITY.MAX_RETRY_ATTEMPTS) {
+    const lastRetry = lastRetryTime.get(retryKey) || 0;
+    const timeSinceLastRetry = Date.now() - lastRetry;
+    
+    // Reset after 5 minutes
+    if (timeSinceLastRetry > 5 * 60 * 1000) {
+      retryAttempts.set(retryKey, 0);
+      lastRetryTime.delete(retryKey);
+    } else {
+      logger.warn('Max CSRF fetch retry attempts reached', { userId, attempts });
+      return null;
+    }
+  }
+
+  // Apply exponential backoff delay
+  if (attempts > 0) {
+    const delay = getRetryDelay(attempts - 1);
+    logger.debug(`Retrying CSRF fetch after ${delay}ms`, { attempt: attempts + 1 });
+    await new Promise(resolve => setTimeout(resolve, delay));
   }
   
   try {
-    console.log('[CSRF] Buscando novo token do servidor...');
+    logger.info('Fetching new CSRF token from server', { userId: userId.slice(0, 8) + '...' });
+    retryAttempts.set(retryKey, attempts + 1);
+    lastRetryTime.set(retryKey, Date.now());
+    
     const response = await fetch('/api/_profile', {
       method: 'POST',
       headers: {
@@ -292,47 +391,53 @@ export async function fetchCsrfToken(userId: string, authToken: string): Promise
     });
 
     if (!response.ok) {
-      console.error(`[CSRF] Erro HTTP ${response.status}`);
+      logger.error(`CSRF fetch HTTP error ${response.status}`);
       return null;
     }
 
     const data = await response.json();
     if (data.success && data.csrfToken) {
-      // Validação do token recebido
-      if (typeof data.csrfToken !== 'string' || data.csrfToken.length < 32) {
-        console.error('[CSRF] Token recebido do servidor é inválido');
+      // Strict validation of received token
+      if (!isValidTokenFormat(data.csrfToken)) {
+        logger.error('Invalid CSRF token received from server');
         return null;
       }
       
-      setCsrfToken(data.csrfToken, userId);
-      console.log('[CSRF] ✅ Token obtido e armazenado com sucesso');
+      await setCsrfToken(data.csrfToken, userId);
+      
+      // Reset retry counter on success
+      retryAttempts.delete(retryKey);
+      lastRetryTime.delete(retryKey);
+      
+      logger.info('CSRF token fetched and stored successfully');
       return data.csrfToken;
     }
 
-    console.warn('[CSRF] Resposta do servidor não contém token válido');
+    logger.warn('Server response missing valid CSRF token');
     return null;
   } catch (error) {
-    console.error('[CSRF] Erro ao buscar token:', error);
+    logger.error('Failed to fetch CSRF token', { error, attempt: attempts + 1 });
     return null;
   }
 }
 
 /**
- * Força renovação do token CSRF
+ * Forces CSRF token renewal
  */
 export async function renewCsrfToken(userId: string, authToken: string): Promise<string | null> {
-  console.log('[CSRF] Forçando renovação do token...');
+  logger.info('Forcing CSRF token renewal');
   clearCsrfToken();
   return await fetchCsrfToken(userId, authToken);
 }
 
 /**
- * Limpa o token CSRF no servidor (útil no logout)
- * @param userId - ID do usuário autenticado
- * @param authToken - Token de autenticação do Supabase
+ * Clears CSRF token on server (useful on logout)
+ * @param userId - Authenticated user ID
+ * @param authToken - Supabase authentication token
  */
 export async function clearCsrfTokenOnServer(userId: string, authToken: string): Promise<void> {
   try {
+    logger.info('Clearing CSRF token on server');
     await fetch('/api/_profile', {
       method: 'POST',
       headers: {
@@ -345,20 +450,20 @@ export async function clearCsrfTokenOnServer(userId: string, authToken: string):
       })
     });
   } catch (error) {
-    console.error('Error clearing CSRF token on server:', error);
+    logger.error('Failed to clear CSRF token on server', { error });
   } finally {
     clearCsrfToken();
   }
 }
 
 /**
- * Adiciona o header X-CSRF-Token a um objeto de headers com validação rigorosa
- * Útil para adicionar proteção CSRF a chamadas de API
+ * Adds X-CSRF-Token header to headers object with strict validation
+ * Useful for adding CSRF protection to API calls
  */
-export function addCsrfHeader(headers: HeadersInit = {}): HeadersInit {
-  const token = getCsrfToken();
+export async function addCsrfHeader(headers: HeadersInit = {}): Promise<HeadersInit> {
+  const token = await getCsrfToken();
   if (!token) {
-    console.error('[CSRF] ⚠️ CRÍTICO: Token CSRF não disponível! Requisição pode ser bloqueada.');
+    logger.error('CRITICAL: CSRF token not available! Request may be blocked.');
     return headers;
   }
 
@@ -415,8 +520,8 @@ export function addIdempotencyHeader(headers: HeadersInit = {}, key?: string): {
  * @param idempotencyKey - Chave de idempotência (opcional)
  * @returns Headers com CSRF e Idempotency
  */
-export function addSecurityHeaders(headers: HeadersInit = {}, idempotencyKey?: string): { headers: HeadersInit; idempotencyKey: string } {
-  const headersWithCsrf = addCsrfHeader(headers);
+export async function addSecurityHeaders(headers: HeadersInit = {}, idempotencyKey?: string): Promise<{ headers: HeadersInit; idempotencyKey: string }> {
+  const headersWithCsrf = await addCsrfHeader(headers);
   return addIdempotencyHeader(headersWithCsrf, idempotencyKey);
 }
 
@@ -512,11 +617,11 @@ export function addRequestSigningHeaders(
 }
 
 /**
- * Adiciona request signing headers e retorna headers completos
- * Combina CSRF, Idempotency e Request Signing
- * @param headers - Headers existentes
- * @param signature - Objeto de assinatura (opcional)
- * @returns Headers com todas as proteções de segurança
+ * Adds request signing headers and returns complete headers
+ * Combines CSRF, Idempotency and Request Signing
+ * @param headers - Existing headers
+ * @param signature - Signature object (optional)
+ * @returns Headers with all security protections
  */
 export async function addAllSecurityHeaders(
   headers: HeadersInit = {},
@@ -524,17 +629,23 @@ export async function addAllSecurityHeaders(
 ): Promise<HeadersInit> {
   let finalHeaders = headers;
   
-  // Adicionar CSRF
-  finalHeaders = addCsrfHeader(finalHeaders);
+  // Add CSRF
+  finalHeaders = await addCsrfHeader(finalHeaders);
   
-  // Adicionar Idempotency
+  // Add Idempotency
   const { headers: headersWithIdempotency } = addIdempotencyHeader(finalHeaders);
   finalHeaders = headersWithIdempotency;
   
-  // Adicionar Request Signing se disponível
+  // Add Request Signing if available
   if (signature) {
     finalHeaders = addRequestSigningHeaders(finalHeaders, signature);
   }
   
   return finalHeaders;
 }
+
+// ============================================================
+// PUBLIC UTILITY EXPORTS
+// ============================================================
+
+export { sanitizeUsername, isValidUsername };

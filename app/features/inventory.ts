@@ -614,7 +614,7 @@ export async function purchaseInventoryUpgrade(): Promise<void> {
 
     const response = await fetch('/api/_inventory', {
       method: 'POST',
-      headers: addCsrfHeader({ 'Content-Type': 'application/json' }),
+      headers: await addCsrfHeader({ 'Content-Type': 'application/json' }),
       body: JSON.stringify({
         action: 'upgradeInventory',
         userId: currentUserId,
@@ -760,7 +760,7 @@ export async function sellItem(itemId: string, userId: string, renderCallback: (
     
     const response = await fetch('/api/_inventory', {
       method: 'POST',
-      headers: addCsrfHeader({
+      headers: await addCsrfHeader({
         'Content-Type': 'application/json',
       }),
       body: JSON.stringify({
@@ -846,7 +846,7 @@ export async function sellSelected(): Promise<void> {
     
     const response = await fetch('/api/_inventory', {
       method: 'POST',
-      headers: addCsrfHeader({
+      headers: await addCsrfHeader({
         'Content-Type': 'application/json',
       }),
       body: JSON.stringify({
@@ -930,7 +930,7 @@ export async function confirmSellAll(): Promise<void> {
     
     const response = await fetch('/api/_inventory', {
       method: 'POST',
-      headers: addCsrfHeader({
+      headers: await addCsrfHeader({
         'Content-Type': 'application/json',
       }),
       body: JSON.stringify({

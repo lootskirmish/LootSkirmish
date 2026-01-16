@@ -741,7 +741,7 @@ window.proceedToCheckout = async function() {
 
     // 🔑 Gerar chave de idempotência para prevenir cliques duplos
     const { headers, idempotencyKey } = addIdempotencyHeader(
-      addCsrfHeader({ 'Content-Type': 'application/json' })
+      await addCsrfHeader({ 'Content-Type': 'application/json' })
     );
 
     // Criar pedido

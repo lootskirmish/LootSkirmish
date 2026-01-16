@@ -12,6 +12,11 @@
 // ============================================================
 
 import { configureStore, createSlice, PayloadAction } from '@reduxjs/toolkit';
+import { createLogger } from './logger';
+import { WindowManager, ErrorHandler } from './core-utils';
+import { PERSISTENCE, STORAGE, ERRORS } from '../shared/constants';
+
+const logger = createLogger('Persistence');
 
 // ============================================================
 // REDUX STORE - TYPES
@@ -324,6 +329,7 @@ class PersistenceManager {
   private broadcastChannel: BroadcastChannel | null;
   private autoSaveTimer: ReturnType<typeof setInterval> | null;
   private debounceTimer: ReturnType<typeof setTimeout> | null;
+  private debounceTimers: Map<string, ReturnType<typeof setTimeout>>;
   private isRestoring: boolean;
   private isSaving: boolean;
   private lastSavedChecksum: string | null;
@@ -337,12 +343,13 @@ class PersistenceManager {
     this.broadcastChannel = null;
     this.autoSaveTimer = null;
     this.debounceTimer = null;
+    this.debounceTimers = new Map();
     this.isRestoring = false;
     this.isSaving = false;
     this.lastSavedChecksum = null;
     this.retryCount = 0;
 
-    this.log('PersistenceManager criado', this.config);
+    logger.info('PersistenceManager criado', { config: this.config });
   }
 
   // ============================================================
@@ -350,7 +357,7 @@ class PersistenceManager {
   // ============================================================
 
   async initialize(): Promise<boolean> {
-    this.log('Inicializando sistema de persistência...');
+    logger.info('Inicializando sistema de persistência...');
     
     try {
       // Executar hooks
@@ -372,17 +379,17 @@ class PersistenceManager {
         this.startAutoSave();
       }
       
-      this.log('✅ Sistema de persistência inicializado');
+      logger.info('✅ Sistema de persistência inicializado');
       return true;
     } catch (error) {
-      this.logError('Erro ao inicializar persistência', error);
+      logger.error('Erro ao inicializar persistência', { error });
       await this.executeHooks('onError', error);
       return false;
     }
   }
 
   async shutdown(): Promise<void> {
-    this.log('Encerrando sistema de persistência...');
+    logger.info('Encerrando sistema de persistência...');
     
     try {
       // Salvar estado final
@@ -403,9 +410,9 @@ class PersistenceManager {
         this.debounceTimer = null;
       }
       
-      this.log('✅ Sistema de persistência encerrado');
+      logger.info('✅ Sistema de persistência encerrado');
     } catch (error) {
-      this.logError('Erro ao encerrar persistência', error);
+      logger.error('Erro ao encerrar persistência', { error });
     }
   }
 
@@ -415,11 +422,12 @@ class PersistenceManager {
 
   async save(): Promise<boolean> {
     if (this.isRestoring || this.isSaving) {
-      this.log('Save bloqueado: operação em andamento');
+      logger.debug('Save blocked: operation in progress');
       return false;
     }
 
     this.isSaving = true;
+    logger.mark('save:start');
 
     try {
       // Executar hooks
@@ -428,7 +436,7 @@ class PersistenceManager {
       // Coletar estado
       const state = this.collectState();
       if (!state) {
-        this.log('Nenhum estado para salvar (usuário não autenticado)');
+        logger.debug('No state to save (user not authenticated)');
         this.isSaving = false;
         return false;
       }
@@ -436,29 +444,44 @@ class PersistenceManager {
       // Criar objeto de dados persistidos
       const data = this.createPersistedData(state);
 
-      // Verificar se mudou
-      const checksum = this.calculateChecksum(data);
+      // PERFORMANCE: Cache JSON.stringify result for reuse
+      const serialized = JSON.stringify(data);
+      
+      // Verificar se mudou (reutilizando serialized)
+      const checksum = this.calculateChecksumFromString(serialized);
       if (checksum === this.lastSavedChecksum) {
-        this.log('Estado não mudou, skip save');
+        logger.debug('State unchanged, skipping save');
         this.isSaving = false;
         return false;
       }
 
-      // Comprimir se necessário
-      let serialized = JSON.stringify(data);
+      // Comprimir se necessário (usando serialized)
+      let finalData = serialized;
       if (this.config.compressionEnabled && serialized.length > 10000) {
-        serialized = this.compress(serialized);
+        finalData = this.compress(serialized);
         data.compressed = true;
       }
 
       // Verificar tamanho
-      if (serialized.length > STORAGE_SIZE_LIMIT) {
-        this.log('Estado muito grande, aplicando estratégias de redução...');
-        serialized = this.reduceStateSize(data);
+      if (finalData.length > STORAGE_SIZE_LIMIT) {
+        logger.warn('State too large, applying reduction strategies...');
+        finalData = this.reduceStateSize(data);
       }
 
-      // Salvar no storage
-      await this.storage.set(this.getStorageKey(), serialized);
+      // FUNCTIONALITY: Storage quota handling
+      try {
+        await this.storage.set(this.getStorageKey(), finalData);
+      } catch (error: any) {
+        if (error.name === 'QuotaExceededError' || error.code === 22) {
+          logger.warn('Storage quota exceeded, clearing expired cache...');
+          await this.clearExpiredCache();
+          // Retry after cleanup
+          await this.storage.set(this.getStorageKey(), finalData);
+        } else {
+          throw error;
+        }
+      }
+      
       this.lastSavedChecksum = checksum;
 
       // Broadcast para outras abas
@@ -473,17 +496,18 @@ class PersistenceManager {
       // Executar hooks
       await this.executeHooks('afterSave', data);
 
-      this.log('✅ Estado salvo com sucesso');
+      logger.measure('State Save', 'save:start');
+      logger.info('State saved successfully');
       this.retryCount = 0;
       return true;
     } catch (error) {
-      this.logError('Erro ao salvar estado', error);
+      logger.error('Failed to save state', { error });
       await this.executeHooks('onError', error);
       
       // Retry logic
       if (this.retryCount < this.config.maxRetries) {
         this.retryCount++;
-        this.log(`Tentando novamente... (${this.retryCount}/${this.config.maxRetries})`);
+        logger.info(`Retrying save... (${this.retryCount}/${this.config.maxRetries})`);
         await this.delay(1000 * this.retryCount);
         return this.save();
       }
@@ -496,7 +520,7 @@ class PersistenceManager {
 
   async restore(): Promise<boolean> {
     if (this.isRestoring) {
-      this.log('Restore bloqueado: operação em andamento');
+      logger.info('Restore bloqueado: operação em andamento');
       return false;
     }
 
@@ -506,7 +530,7 @@ class PersistenceManager {
       // Buscar dados do storage
       const serialized = await this.storage.get(this.getStorageKey());
       if (!serialized) {
-        this.log('Nenhum estado salvo encontrado');
+        logger.info('Nenhum estado salvo encontrado');
         this.isRestoring = false;
         return false;
       }
@@ -522,7 +546,7 @@ class PersistenceManager {
           data = parsed;
         }
       } catch (parseError) {
-        this.logError('Erro ao parsear dados', parseError);
+        logger.error('Erro ao parsear dados', { error: parseError });
         await this.clear();
         this.isRestoring = false;
         return false;
@@ -530,7 +554,7 @@ class PersistenceManager {
 
       // Validar dados
       if (!this.validateData(data)) {
-        this.log('Dados inválidos, limpando storage');
+        logger.info('Dados inválidos, limpando storage');
         await this.clear();
         this.isRestoring = false;
         return false;
@@ -538,7 +562,7 @@ class PersistenceManager {
 
       // Verificar expiração
       if (Date.now() > data.expiresAt) {
-        this.log('Estado expirado');
+        logger.info('Estado expirado');
         await this.clear();
         this.isRestoring = false;
         return false;
@@ -547,14 +571,14 @@ class PersistenceManager {
       // Verificar userId
       const currentUserId = this.getCurrentUserId();
       if (data.userId !== currentUserId) {
-        this.log('UserId diferente, ignorando estado');
+        logger.info('UserId diferente, ignorando estado');
         this.isRestoring = false;
         return false;
       }
 
       // Aplicar migrações se necessário
       if (data.version < this.config.version) {
-        this.log(`Migrando dados de v${data.version} para v${this.config.version}`);
+        logger.info(`Migrando dados de v${data.version} para v${this.config.version}`);
         data = this.applyMigrations(data);
       }
 
@@ -564,10 +588,10 @@ class PersistenceManager {
       // Salvar checksum
       this.lastSavedChecksum = this.calculateChecksum(data);
 
-      this.log('✅ Estado restaurado com sucesso');
+      logger.info('✅ Estado restaurado com sucesso');
       return true;
     } catch (error) {
-      this.logError('Erro ao restaurar estado', error);
+      logger.error('Erro ao restaurar estado', { error });
       await this.executeHooks('onError', error);
       return false;
     } finally {
@@ -618,11 +642,11 @@ class PersistenceManager {
       },
       
       globals: {
-        playerMoney: (window as any).playerMoney?.value,
-        playerDiamonds: (window as any).playerDiamonds?.value,
+        playerMoney: WindowManager.getPlayerMoney(),
+        playerDiamonds: WindowManager.getPlayerDiamonds(),
       },
       
-      features: (window as any).__featureState || {},
+      features: WindowManager.getFeatureState(),
       
       cache: this.getCache(),
     };
@@ -667,25 +691,29 @@ class PersistenceManager {
         }));
       }
 
-      if (state.data.cases?.data?.length) {
-        store.dispatch(dataActions.setCases(state.data.cases.data as any[]));
+      if (state.data.cases?.data?.length && Array.isArray(state.data.cases.data)) {
+        store.dispatch(dataActions.setCases(state.data.cases.data));
       }
     }
 
-    // Globals
-    if (state.globals) {
-      if (state.globals.playerMoney !== undefined && (window as any).playerMoney) {
-        (window as any).playerMoney.value = state.globals.playerMoney;
+    // Globals (verificar e logar apenas)
+    if (state.globals && typeof state.globals === 'object' && !Array.isArray(state.globals)) {
+      if (state.globals.playerMoney !== undefined && typeof state.globals.playerMoney === 'number' && state.globals.playerMoney >= 0) {
+        logger.debug('Player money restored from state', { money: state.globals.playerMoney });
       }
-
-      if (state.globals.playerDiamonds !== undefined && (window as any).playerDiamonds) {
-        (window as any).playerDiamonds.value = state.globals.playerDiamonds;
+      if (state.globals.playerDiamonds !== undefined && typeof state.globals.playerDiamonds === 'number' && state.globals.playerDiamonds >= 0) {
+        logger.debug('Player diamonds restored from state', { diamonds: state.globals.playerDiamonds });
       }
     }
 
-    // Features
-    if (state.features) {
-      (window as any).__featureState = state.features;
+    // Features (usando WindowManager)
+    if (state.features && typeof state.features === 'object' && !Array.isArray(state.features)) {
+      WindowManager.clearFeatureState();
+      Object.entries(state.features).forEach(([key, value]) => {
+        if (typeof key === 'string' && key.length > 0 && key.length < 200) {
+          WindowManager.setFeatureState(key, value);
+        }
+      });
     }
 
     // Cache
@@ -716,11 +744,19 @@ class PersistenceManager {
   }
 
   private validateData(data: any): boolean {
-    if (!data || typeof data !== 'object') return false;
-    if (!data.userId || typeof data.userId !== 'string') return false;
-    if (!data.timestamp || typeof data.timestamp !== 'number') return false;
-    if (!data.expiresAt || typeof data.expiresAt !== 'number') return false;
-    if (!data.state || typeof data.state !== 'object') return false;
+    if (!data || typeof data !== 'object' || Array.isArray(data)) return false;
+    if (!data.userId || typeof data.userId !== 'string' || data.userId.length < 10 || data.userId.length > 100) return false;
+    if (!data.timestamp || typeof data.timestamp !== 'number' || data.timestamp < 0 || !Number.isFinite(data.timestamp)) return false;
+    if (!data.expiresAt || typeof data.expiresAt !== 'number' || data.expiresAt < 0 || !Number.isFinite(data.expiresAt)) return false;
+    if (!data.state || typeof data.state !== 'object' || Array.isArray(data.state)) return false;
+    
+    // Validar globals se presente
+    if (data.state.globals) {
+      if (typeof data.state.globals !== 'object' || Array.isArray(data.state.globals)) return false;
+      if (data.state.globals.playerMoney !== undefined && (typeof data.state.globals.playerMoney !== 'number' || data.state.globals.playerMoney < 0)) return false;
+      if (data.state.globals.playerDiamonds !== undefined && (typeof data.state.globals.playerDiamonds !== 'number' || data.state.globals.playerDiamonds < 0)) return false;
+    }
+    
     return true;
   }
 
@@ -737,6 +773,11 @@ class PersistenceManager {
   private calculateChecksum(data: PersistedData): string {
     // Simples hash para verificar mudanças
     const str = JSON.stringify(data.state);
+    return this.calculateChecksumFromString(str);
+  }
+
+  private calculateChecksumFromString(str: string): string {
+    // Reusable checksum calculation from string
     let hash = 0;
     for (let i = 0; i < str.length; i++) {
       const char = str.charCodeAt(i);
@@ -784,6 +825,26 @@ class PersistenceManager {
     return JSON.stringify(reduced);
   }
 
+  private async clearExpiredCache(): Promise<void> {
+    logger.info('Clearing expired cache entries...');
+    const state = this.collectState();
+    if (!state?.cache) return;
+
+    const now = Date.now();
+    let clearedCount = 0;
+
+    // Remove expired cache entries
+    Object.keys(state.cache).forEach(key => {
+      const entry = state.cache![key];
+      if (entry && entry.timestamp + entry.ttl < now) {
+        delete state.cache![key];
+        clearedCount++;
+      }
+    });
+
+    logger.info(`Cleared ${clearedCount} expired cache entries`);
+  }
+
   // ============================================================
   // AUTO-SAVE
   // ============================================================
@@ -795,32 +856,52 @@ class PersistenceManager {
       this.save();
     }, this.config.autoSaveInterval);
 
-    this.log('Auto-save iniciado');
+    logger.info('Auto-save iniciado');
   }
 
   private stopAutoSave(): void {
     if (this.autoSaveTimer) {
       clearInterval(this.autoSaveTimer);
       this.autoSaveTimer = null;
-      this.log('Auto-save parado');
+      logger.info('Auto-save parado');
     }
   }
 
-  debounceSave(): void {
-    if (this.debounceTimer) {
-      clearTimeout(this.debounceTimer);
+  debounceSave(namespace: string = 'default'): void {
+    // Clear existing timer for this namespace
+    const existingTimer = this.debounceTimers.get(namespace);
+    if (existingTimer) {
+      clearTimeout(existingTimer);
     }
 
-    this.debounceTimer = setTimeout(() => {
+    // Set new timer for this namespace
+    const timer = setTimeout(() => {
+      logger.debug(`Saving state for namespace: ${namespace}`);
       this.save();
-      this.debounceTimer = null;
+      this.debounceTimers.delete(namespace);
     }, this.config.debounceMs);
+
+    this.debounceTimers.set(namespace, timer);
   }
 
-  forceSave(): void {
-    if (this.debounceTimer) {
-      clearTimeout(this.debounceTimer);
-      this.debounceTimer = null;
+  forceSave(namespace?: string): void {
+    // If namespace provided, clear only that timer
+    if (namespace) {
+      const timer = this.debounceTimers.get(namespace);
+      if (timer) {
+        clearTimeout(timer);
+        this.debounceTimers.delete(namespace);
+      }
+    } else {
+      // Clear all debounce timers
+      this.debounceTimers.forEach(timer => clearTimeout(timer));
+      this.debounceTimers.clear();
+      
+      // Also clear legacy single timer
+      if (this.debounceTimer) {
+        clearTimeout(this.debounceTimer);
+        this.debounceTimer = null;
+      }
     }
     this.save();
   }
@@ -831,7 +912,7 @@ class PersistenceManager {
 
   private initializeSync(): void {
     if (!('BroadcastChannel' in window)) {
-      this.log('BroadcastChannel não suportado, usando storage events');
+      logger.info('BroadcastChannel não suportado, usando storage events');
       this.setupStorageEventListener();
       return;
     }
@@ -843,24 +924,30 @@ class PersistenceManager {
         this.handleSyncMessage(event.data);
       };
 
-      this.log('BroadcastChannel inicializado');
+      logger.info('BroadcastChannel inicializado');
     } catch (error) {
-      this.logError('Erro ao inicializar BroadcastChannel', error);
+      logger.error('Erro ao inicializar BroadcastChannel', { error });
       this.setupStorageEventListener();
     }
   }
 
   private setupStorageEventListener(): void {
-    window.addEventListener('storage', (event) => {
+    const storageHandler = (evt: Event) => {
+      const event = evt as StorageEvent;
       if (event.key === this.getStorageKey() && event.newValue) {
         this.handleStorageChange(event.newValue);
       }
-    });
+    };
+    
+    // Registrar listener com WindowManager para cleanup adequado
+    if (typeof window !== 'undefined') {
+      WindowManager.addListener(window, 'storage', storageHandler);
+    }
   }
 
   private async handleSyncMessage(message: any): Promise<void> {
     if (message.type === 'STATE_UPDATED' && message.checksum !== this.lastSavedChecksum) {
-      this.log('Recebendo atualização de outra aba');
+      logger.info('Recebendo atualização de outra aba');
       await this.restore();
     }
   }
@@ -871,11 +958,11 @@ class PersistenceManager {
       const checksum = this.calculateChecksum(data);
       
       if (checksum !== this.lastSavedChecksum) {
-        this.log('Storage alterado em outra aba');
+        logger.info('Storage alterado em outra aba');
         await this.restore();
       }
     } catch (error) {
-      this.logError('Erro ao processar storage change', error);
+      logger.error('Erro ao processar storage change', { error });
     }
   }
 
@@ -949,7 +1036,7 @@ class PersistenceManager {
       this.hooks.set(hook, []);
     }
     this.hooks.get(hook)!.push(callback);
-    this.log(`Hook adicionado: ${hook}`);
+    logger.info(`Hook adicionado: ${hook}`);
   }
 
   removeHook(hook: PersistenceHook, callback: HookCallback): void {
@@ -958,7 +1045,7 @@ class PersistenceManager {
       const index = callbacks.indexOf(callback);
       if (index > -1) {
         callbacks.splice(index, 1);
-        this.log(`Hook removido: ${hook}`);
+        logger.info(`Hook removido: ${hook}`);
       }
     }
   }
@@ -971,7 +1058,7 @@ class PersistenceManager {
       try {
         await callback(data);
       } catch (error) {
-        this.logError(`Erro ao executar hook ${hook}`, error);
+        logger.error(`Erro ao executar hook ${hook}`, { error });
       }
     }
   }
@@ -983,21 +1070,61 @@ class PersistenceManager {
   addMigration(migration: Migration): void {
     this.migrations.push(migration);
     this.migrations.sort((a, b) => a.from - b.from);
-    this.log(`Migração adicionada: v${migration.from} -> v${migration.to}`);
+    logger.info(`Migração adicionada: v${migration.from} -> v${migration.to}`);
   }
 
   private applyMigrations(data: PersistedData): PersistedData {
     let currentData = data;
+    const targetVersion = this.config.version;
     
-    for (const migration of this.migrations) {
-      if (currentData.version === migration.from) {
-        this.log(`Aplicando migração: v${migration.from} -> v${migration.to}`);
-        currentData.state = migration.migrate(currentData.state);
-        currentData.version = migration.to;
+    // FUNCTIONALITY: Validate migration path exists
+    if (!this.hasMigrationPath(currentData.version, targetVersion)) {
+      const errorMsg = `No migration path from v${currentData.version} to v${targetVersion}`;
+      logger.error(errorMsg);
+      throw new Error(ERRORS.MIGRATION_FAILED + ': ' + errorMsg);
+    }
+    
+    // Apply migrations sequentially
+    while (currentData.version < targetVersion) {
+      const migration = this.migrations.find(m => m.from === currentData.version);
+      
+      if (!migration) {
+        const errorMsg = `Missing migration for v${currentData.version}`;
+        logger.error(errorMsg);
+        throw new Error(ERRORS.MIGRATION_FAILED + ': ' + errorMsg);
       }
+      
+      logger.info(`Applying migration: v${migration.from} -> v${migration.to}`);
+      currentData.state = migration.migrate(currentData.state);
+      currentData.version = migration.to;
     }
 
     return currentData;
+  }
+
+  private hasMigrationPath(fromVersion: number, toVersion: number): boolean {
+    if (fromVersion === toVersion) return true;
+    if (fromVersion > toVersion) return false; // Can't migrate backwards
+    
+    let currentVersion = fromVersion;
+    const visited = new Set<number>();
+    
+    // Try to find path from fromVersion to toVersion
+    while (currentVersion < toVersion) {
+      if (visited.has(currentVersion)) {
+        return false; // Circular migration detected
+      }
+      visited.add(currentVersion);
+      
+      const migration = this.migrations.find(m => m.from === currentVersion);
+      if (!migration) {
+        return false; // No migration available
+      }
+      
+      currentVersion = migration.to;
+    }
+    
+    return currentVersion === toVersion;
   }
 
   // ============================================================
@@ -1026,9 +1153,9 @@ class PersistenceManager {
       await this.storage.remove(this.getStorageKey());
       this.lastSavedChecksum = null;
       this.cacheStore.clear();
-      this.log('Storage limpo');
+      logger.info('Storage limpo');
     } catch (error) {
-      this.logError('Erro ao limpar storage', error);
+      logger.error('Erro ao limpar storage', { error });
     }
   }
 
@@ -1041,20 +1168,6 @@ class PersistenceManager {
       cacheSize: this.cacheStore.size,
       retryCount: this.retryCount,
     };
-  }
-
-  // ============================================================
-  // LOGGING
-  // ============================================================
-
-  private log(...args: any[]): void {
-    if (this.config.debug) {
-      console.log('[Persistence]', ...args);
-    }
-  }
-
-  private logError(...args: any[]): void {
-    console.error('[Persistence]', ...args);
   }
 
   private delay(ms: number): Promise<void> {
@@ -1207,7 +1320,7 @@ let persistenceInstance: PersistenceManager | null = null;
 
 export function createPersistence(config?: Partial<PersistenceConfig>): PersistenceManager {
   if (persistenceInstance) {
-    console.warn('[Persistence] Instância já existe, retornando existente');
+    logger.warn('[Persistence] Instância já existe, retornando existente');
     return persistenceInstance;
   }
 
@@ -1297,22 +1410,32 @@ export function clearCache(key?: string): void {
 // ============================================================
 
 export function setFeatureState(key: string, value: any): void {
-  (window as any).__featureState = (window as any).__featureState || {};
-  (window as any).__featureState[key] = value;
+  if (typeof key !== 'string' || key.length === 0 || key.length > 200) {
+    logger.warn('Invalid feature state key', { key });
+    return;
+  }
+  
+  WindowManager.setFeatureState(key, value);
   debounceSave();
 }
 
 export function getFeatureState<T = any>(key: string): T | undefined {
-  const featureState = (window as any).__featureState || {};
+  const featureState = WindowManager.getFeatureState();
   return featureState[key] as T | undefined;
 }
 
 export function clearFeatureState(key?: string): void {
   if (key) {
-    const featureState = (window as any).__featureState || {};
-    delete featureState[key];
+    if (typeof key === 'string' && key.length > 0 && key.length < 200) {
+      const state = WindowManager.getFeatureState();
+      delete state[key];
+      WindowManager.clearFeatureState();
+      Object.entries(state).forEach(([k, v]) => {
+        WindowManager.setFeatureState(k, v);
+      });
+    }
   } else {
-    (window as any).__featureState = {};
+    WindowManager.clearFeatureState();
   }
   debounceSave();
 }
@@ -1408,27 +1531,29 @@ function setupStateOverrides(): void {
   if (stateOverridesBound) return;
   stateOverridesBound = true;
 
-  const win = window as WindowWithState;
+  const win = window as any;
 
   // Override handleLogout para limpar estado
-  if (win.handleLogout && !(win.handleLogout as any)._stateWrapped) {
+  const hasHandleLogout = typeof win.handleLogout === 'function';
+  if (hasHandleLogout && !win.handleLogout._stateWrapped) {
     const original = win.handleLogout;
-    win.handleLogout = async function (this: WindowWithState) {
+    win.handleLogout = async function () {
       await clearStoredState();
       await original.call(this);
-    } as any;
-    (win.handleLogout as any)._stateWrapped = true;
+    };
+    win.handleLogout._stateWrapped = true;
   }
 
   // Override goTo para salvar estado após navegação
-  if (win.goTo && !(win.goTo as any)._stateWrapped) {
+  const hasGoTo = typeof win.goTo === 'function';
+  if (hasGoTo && !win.goTo._stateWrapped) {
     const originalGoTo = win.goTo;
-    const wrapped = function (this: WindowWithState, screen: string) {
+    const wrapped = function (this: any, screen: string) {
       originalGoTo.call(this, screen);
       setTimeout(() => debounceSave(), 300);
-    } as any;
+    };
     wrapped._stateWrapped = true;
-    wrapped._routerIntercepted = Boolean((originalGoTo as any)._routerIntercepted);
+    wrapped._routerIntercepted = Boolean(originalGoTo._routerIntercepted);
     win.goTo = wrapped;
   }
 }
@@ -1457,9 +1582,9 @@ export function setupPersistenceMiddleware(reduxStore: typeof store): void {
         persistence.debounceSave();
       });
 
-      console.log('[Persistence] ✅ Middleware conectado ao Redux');
+      logger.info('[Persistence] ✅ Middleware conectado ao Redux');
     } catch (error) {
-      console.warn('[Persistence] Aguardando inicialização...');
+      logger.warn('[Persistence] Aguardando inicialização...');
       setTimeout(setupSubscribe, 100);
     }
   };
@@ -1471,13 +1596,28 @@ export function setupPersistenceMiddleware(reduxStore: typeof store): void {
 // GLOBAL EXPORTS
 // ============================================================
 
+// ============================================================
+// GLOBAL EXPORTS
+// ============================================================
+
 if (typeof window !== 'undefined') {
-  (window as any).store = store;
-  (window as any).authActions = authActions;
-  (window as any).routerActions = routerActions;
-  (window as any).dataActions = dataActions;
-  (window as any).playerMoney = (window as any).playerMoney || { value: 0 };
-  (window as any).playerDiamonds = (window as any).playerDiamonds || { value: 0 };
+  // Initialize WindowManager with store and actions
+  WindowManager.init({
+    store,
+    actions: {
+      auth: authActions,
+      router: routerActions,
+      data: dataActions,
+    },
+  });
+  
+  // Ensure reactive properties exist on window (for external components)
+  if (!window.playerMoney) {
+    window.playerMoney = { value: 0 };
+  }
+  if (!window.playerDiamonds) {
+    window.playerDiamonds = { value: 0 };
+  }
 }
 
 // ============================================================

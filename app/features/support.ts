@@ -147,7 +147,7 @@ async function submitTicket(formData: SupportFormData): Promise<TicketSubmitResp
   try {
     const response = await fetch('/api/_support', {
       method: 'POST',
-      headers: addCsrfHeader({
+      headers: await addCsrfHeader({
         'Content-Type': 'application/json'
       }),
       body: JSON.stringify({

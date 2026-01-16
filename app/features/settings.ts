@@ -158,7 +158,7 @@ function bindSettingsUIOnce(): void {
 
           const response = await fetch('/api/_profile', {
             method: 'POST',
-            headers: addCsrfHeader({ 'Content-Type': 'application/json' }),
+            headers: await addCsrfHeader({ 'Content-Type': 'application/json' }),
             body: JSON.stringify({
               action: 'updatePublicProfile',
               userId: user.id,
@@ -497,7 +497,7 @@ export async function enableUsernameEdit(): Promise<void> {
 
       const response = await fetch('/api/_profile', {
         method: 'POST',
-        headers: addCsrfHeader({ 'Content-Type': 'application/json' }),
+        headers: await addCsrfHeader({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({
           action: 'changeUsername',
           userId: user.id,

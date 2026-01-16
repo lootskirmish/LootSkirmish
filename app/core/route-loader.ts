@@ -1,40 +1,14 @@
-// @ts-nocheck
 // ============================================================
 // ROUTE-LOADER.TS - Carregador de Dados por Rota
 // ============================================================
 
 import { store, dataActions } from './persistence';
 import { getActiveUser } from './session';
+import { WindowManager, ErrorHandler } from './core-utils';
+import { createLogger } from './logger';
 
-/**
- * Tipos para window extensions
- */
-interface WindowWithRouteLoaders extends Window {
-  renderInventory?: (userId: string) => Promise<void>;
-  initLeaderboard?: (user: any) => Promise<void>;
-  renderLeaderboard?: () => Promise<void>;
-  initCaseOpening?: (user: any, money: number, diamonds: number, passes: string[], discountLevel: number) => Promise<void>;
-  loadPublicProfile?: (username: string, calculateLevel: any, applyTranslations: any) => Promise<void>;
-  loadProfileData?: (user: any, calculateLevel: any, applyTranslations: any) => Promise<void>;
-  loadUserThemes?: () => Promise<void>;
-  initShop?: () => Promise<void>;
-  loadSettingsData?: () => Promise<void>;
-  applyTranslations?: () => Promise<void>;
-  initSkillTree?: () => void;
-  loadReferralsPanel?: () => Promise<void>;
-  startAdminPolling?: () => void;
-  showToast?: (type: string, message: string) => void;
-  calculateLevel?: (points: any) => any;
-  playerMoney?: { value: number };
-  cachedDiamonds?: number;
-  playerDiamonds?: { value: number };
-  cachedUnlockedPasses?: string[];
-  cachedCaseDiscountLevel?: number;
-  publicProfileUsername?: string | null;
-  checkRouteAuth?: () => void;
-  loadRouteData?: (screenName: string) => Promise<void>;
-  invalidateRouteData?: (dataType: string) => void;
-}
+const logger = createLogger('RouteLoader');
+
 
 interface RouteLoader {
   [key: string]: () => Promise<void>;
@@ -85,19 +59,26 @@ export async function loadRouteData(screenName: string): Promise<void> {
 
   const key = String(screenName);
   const existing = inFlightByScreen.get(key);
-  const isPublicProfileRequest = key === 'profile' && typeof window !== 'undefined' && !!(window as any).publicProfileUsername;
+  const publicProfileUsername = WindowManager.getPublicProfileUsername();
+  const isPublicProfileRequest = key === 'profile' && publicProfileUsername !== null;
   
   // Para perfil público, sempre iniciar um novo carregamento
   if (existing && !isPublicProfileRequest) return existing;
 
   const loader = routeLoaders[key];
-  if (!loader) return;
+  if (!loader) {
+    logger.warn(`No route loader found for: ${key}`);
+    return;
+  }
 
   const promise = (async () => {
     try {
       await loader();
     } catch (error) {
-      console.error(`❌ Erro ao carregar dados de ${key}:`, error);
+      ErrorHandler.handle(error, {
+        operation: `loadRoute:${key}`,
+        config: { shouldThrow: false },
+      });
     }
   })().finally(() => {
     if (inFlightByScreen.get(key) === promise) inFlightByScreen.delete(key);
@@ -122,26 +103,30 @@ async function _loadInventoryRoute(): Promise<void> {
   try {
     const user = getActiveUser({ sync: true, allowStored: true });
     
-    if (!user || !user.id) {
-      console.warn('⚠️ Nenhum usuário encontrado para carregar inventário');
+    if (!user?.id) {
+      logger.warn('No user found for inventory load');
       if (skeleton) skeleton.style.display = 'none';
       return;
     }
     
-    const windowExt = window as any as WindowWithRouteLoaders;
-    if (windowExt.renderInventory) {
-      await windowExt.renderInventory(user.id);
-      store.dispatch(dataActions.setInventory([]));
-      
-      // Esconder skeleton e mostrar conteúdo
+    const renderInventory = WindowManager.getWindowFunction<(userId: string) => Promise<void>>('renderInventory');
+    if (!renderInventory) {
+      logger.error('window.renderInventory not found');
       if (skeleton) skeleton.style.display = 'none';
-      if (content) content.style.display = 'grid';
-    } else {
-      console.error('❌ window.renderInventory não encontrada');
-      if (skeleton) skeleton.style.display = 'none';
+      return;
     }
+
+    await renderInventory(user.id);
+    store.dispatch(dataActions.setInventory([]));
+    
+    // Esconder skeleton e mostrar conteúdo
+    if (skeleton) skeleton.style.display = 'none';
+    if (content) content.style.display = 'grid';
   } catch (error) {
-    console.error('❌ Erro ao carregar inventário:', error);
+    ErrorHandler.handle(error, {
+      operation: 'loadInventoryRoute',
+      config: { shouldThrow: false },
+    });
     if (skeleton) skeleton.style.display = 'none';
   } finally {
     store.dispatch(dataActions.setInventoryLoading(false));
@@ -160,30 +145,36 @@ async function _loadLeaderboardRoute(): Promise<void> {
   try {
     const user = getActiveUser({ sync: true, allowStored: true });
     
-    const windowExt = window as any as WindowWithRouteLoaders;
-    if (!windowExt.initLeaderboard) {
-      console.error('❌ window.initLeaderboard não encontrada');
+    const initLeaderboard = WindowManager.getWindowFunction<(user: any) => Promise<void>>('initLeaderboard');
+    const renderLeaderboard = WindowManager.getWindowFunction<() => Promise<void>>('renderLeaderboard');
+    
+    if (!initLeaderboard) {
+      logger.error('window.initLeaderboard not found');
       store.dispatch(dataActions.setLeaderboardLoading(false));
       toggleSkeleton('leaderboard-skeleton', 'leader-list', false);
       return;
     }
     
-    if (!windowExt.renderLeaderboard) {
-      console.error('❌ window.renderLeaderboard não encontrada');
+    if (!renderLeaderboard) {
+      logger.error('window.renderLeaderboard not found');
       store.dispatch(dataActions.setLeaderboardLoading(false));
       toggleSkeleton('leaderboard-skeleton', 'leader-list', false);
       return;
     }
     
-    // Inicializar e renderizar leaderboard
-    await windowExt.initLeaderboard(user);
-    await windowExt.renderLeaderboard();
+    // Paralelizar operações independentes seria ideal, mas estas são dependentes
+    // initLeaderboard deve terminar antes de renderLeaderboard
+    await initLeaderboard(user);
+    await renderLeaderboard();
     store.dispatch(dataActions.setLeaderboard([]));
     
     // Esconder skeleton
     toggleSkeleton('leaderboard-skeleton', 'leader-list', false);
   } catch (error) {
-    console.error('❌ Erro ao carregar leaderboard:', error);
+    ErrorHandler.handle(error, {
+      operation: 'loadLeaderboardRoute',
+      config: { shouldThrow: false },
+    });
     toggleSkeleton('leaderboard-skeleton', 'leader-list', false);
   } finally {
     store.dispatch(dataActions.setLeaderboardLoading(false));
@@ -203,24 +194,29 @@ async function _loadCasesRoute(): Promise<void> {
   store.dispatch(dataActions.setCasesLoading(true));
   
   try {
-    // O case opening é inicializado via window.initCaseOpening (exportado em app/caseopening.js)
     const user = getActiveUser({ sync: true, allowStored: true });
     
-    const windowExt = window as any as WindowWithRouteLoaders;
-    const money = windowExt.playerMoney?.value ?? 0;
-    const diamonds = windowExt.cachedDiamonds ?? windowExt.playerDiamonds?.value ?? 0;
-    const passes = Array.isArray(windowExt.cachedUnlockedPasses)
-      ? windowExt.cachedUnlockedPasses
-      : [];
-    const discountLevel = windowExt.cachedCaseDiscountLevel ?? 0;
+    const money = WindowManager.getPlayerMoney();
+    const diamonds = WindowManager.getPlayerDiamonds();
+    const passes = WindowManager.getUnlockedPasses();
+    const discountLevel = WindowManager.getCaseDiscountLevel();
     
-    if (windowExt.initCaseOpening) {
-      await windowExt.initCaseOpening(user, money, diamonds, passes, discountLevel);
-      // Marca como carregado (evita recarregar desnecessariamente)
-      store.dispatch(dataActions.setCases([]));
-    } else {
-      console.error('❌ window.initCaseOpening não encontrada');
+    const initCaseOpening = WindowManager.getWindowFunction<
+      (user: any, money: number, diamonds: number, passes: string[], discountLevel: number) => Promise<void>
+    >('initCaseOpening');
+
+    if (!initCaseOpening) {
+      logger.error('window.initCaseOpening not found');
+      return;
     }
+
+    await initCaseOpening(user, money, diamonds, passes, discountLevel);
+    store.dispatch(dataActions.setCases([]));
+  } catch (error) {
+    ErrorHandler.handle(error, {
+      operation: 'loadCasesRoute',
+      config: { shouldThrow: false },
+    });
   } finally {
     store.dispatch(dataActions.setCasesLoading(false));
   }
@@ -231,43 +227,55 @@ let currentLoadingPublicProfile: string | null = null;
 let publicProfileLoadStartTime: number = 0;
 
 /**
+ * Helper para resetar estado de profile
+ */
+function resetProfileLoadState(): void {
+  currentLoadingPublicProfile = null;
+  publicProfileLoadStartTime = 0;
+}
+
+/**
+ * Helper para esconder/mostrar UI de profile
+ */
+function setProfileUIState(show: boolean): void {
+  const skeleton = document.getElementById('profile-skeleton');
+  const content = document.getElementById('profile-content');
+  
+  if (skeleton) skeleton.style.display = show ? 'none' : 'flex';
+  if (content) content.style.display = show ? 'block' : 'none';
+}
+
+/**
  * Carrega dados do perfil
  */
 async function _loadProfileRoute(): Promise<void> {
   // Mostrar skeleton e esconder conteúdo
-  const skeleton = document.getElementById('profile-skeleton');
-  const content = document.getElementById('profile-content');
-  if (skeleton) skeleton.style.display = 'flex';
-  if (content) content.style.display = 'none';
+  setProfileUIState(false);
   
   store.dispatch(dataActions.setProfileLoading(true));
   
   try {
-    const windowExt = window as any as WindowWithRouteLoaders;
-    const publicUsername = windowExt.publicProfileUsername;
+    const publicUsername = WindowManager.getPublicProfileUsername();
     const user = getActiveUser({ sync: true, allowStored: true });
 
     // GUARD: Se não tem publicUsername, limpar qualquer valor residual
-    if (!publicUsername && windowExt.publicProfileUsername !== null) {
-      windowExt.publicProfileUsername = null;
-      currentLoadingPublicProfile = null;
+    if (!publicUsername && WindowManager.hasValue('publicProfileUsername')) {
+      resetProfileLoadState();
     }
 
     if (publicUsername) {
       // GUARD: Prevent concurrent loads of the same profile
       if (currentLoadingPublicProfile === publicUsername) {
-        console.warn('Profile load already in progress for:', publicUsername);
-        if (skeleton) skeleton.style.display = 'none';
-        if (content) content.style.display = 'block';
-        return; // Don't load again
+        logger.warn(`Profile load already in progress for: ${publicUsername}`);
+        setProfileUIState(true);
+        return;
       }
 
       const currentTime = Date.now();
       // Debounce rapid successive requests (less than 500ms apart)
       if (publicProfileLoadStartTime && currentTime - publicProfileLoadStartTime < 500) {
-        console.warn('Profile load debounced - too soon');
-        if (skeleton) skeleton.style.display = 'none';
-        if (content) content.style.display = 'block';
+        logger.warn('Profile load debounced - too soon');
+        setProfileUIState(true);
         return;
       }
 
@@ -286,105 +294,127 @@ async function _loadProfileRoute(): Promise<void> {
         });
 
         if (!checkResponse.ok) {
-          const statusText = checkResponse.statusText || 'Unknown error';
-          console.warn(`[PROFILE_LOAD] Check failed - Status: ${checkResponse.status} (${statusText}), Username: "${publicUsername}"`);
           const errorData = await checkResponse.json().catch(() => ({}));
-          console.warn(`[PROFILE_LOAD] Error response:`, errorData);
-          // Return to safe state (menu)
-          if (windowExt.showToast) {
-            windowExt.showToast('error', 'Profile could not be accessed.');
+          logger.warn(`[PROFILE_LOAD] Check failed - Status: ${checkResponse.status}`, { username: publicUsername, errorData });
+          
+          const showToast = WindowManager.getWindowFunction<(type: string, message: string) => void>('showToast');
+          if (showToast) {
+            showToast('error', 'Profile could not be accessed.');
           }
+          
           window.history.replaceState({}, '', '/');
-          // Force re-route to menu
           await new Promise(resolve => setTimeout(resolve, 100));
-          if (windowExt.checkRouteAuth) windowExt.checkRouteAuth();
-          if (skeleton) skeleton.style.display = 'none';
-          if (content) content.style.display = 'block';
+          
+          const checkRouteAuth = WindowManager.getWindowFunction<() => void>('checkRouteAuth');
+          if (checkRouteAuth) checkRouteAuth();
+          
+          setProfileUIState(true);
           store.dispatch(dataActions.setProfileLoading(false));
-          windowExt.publicProfileUsername = null;
-          currentLoadingPublicProfile = null;
+          resetProfileLoadState();
           return;
         }
 
-        const checkData = await checkResponse.json();
-        console.log(`[PROFILE_LOAD] Check response for "${publicUsername}":`, checkData);
+        const checkData = await checkResponse.json() as any;
+        logger.debug(`[PROFILE_LOAD] Check response for "${publicUsername}"`, checkData);
 
         if (!checkData.success || !checkData.isPublic) {
-          console.warn(`[PROFILE_LOAD] Profile "${publicUsername}" is PRIVATE (success=${checkData.success}, isPublic=${checkData.isPublic})`);
-          // Return to safe state (menu)
-          if (windowExt.showToast) {
-            windowExt.showToast('info', 'This profile is private.');
+          logger.warn(`[PROFILE_LOAD] Profile "${publicUsername}" is PRIVATE`, { success: checkData.success, isPublic: checkData.isPublic });
+          
+          const showToast = WindowManager.getWindowFunction<(type: string, message: string) => void>('showToast');
+          if (showToast) {
+            showToast('info', 'This profile is private.');
           }
+          
           window.history.replaceState({}, '', '/');
-          // Force re-route to menu
           await new Promise(resolve => setTimeout(resolve, 100));
-          if (windowExt.checkRouteAuth) windowExt.checkRouteAuth();
-          if (skeleton) skeleton.style.display = 'none';
-          if (content) content.style.display = 'block';
+          
+          const checkRouteAuth = WindowManager.getWindowFunction<() => void>('checkRouteAuth');
+          if (checkRouteAuth) checkRouteAuth();
+          
+          setProfileUIState(true);
           store.dispatch(dataActions.setProfileLoading(false));
-          windowExt.publicProfileUsername = null;
-          currentLoadingPublicProfile = null;
+          resetProfileLoadState();
           return;
         }
-      } catch (err: any) {
-        console.error(`[PROFILE_LOAD] Fetch error for "${publicUsername}":`, err.message || err);
-        // Return to safe state (menu) on error
-        if (windowExt.showToast) {
-          windowExt.showToast('error', 'Could not access profile. Please try again.');
+      } catch (err) {
+        logger.error(`[PROFILE_LOAD] Fetch error for "${publicUsername}"`, { error: err });
+        
+        const showToast = WindowManager.getWindowFunction<(type: string, message: string) => void>('showToast');
+        if (showToast) {
+          showToast('error', 'Could not access profile. Please try again.');
         }
+        
         window.history.replaceState({}, '', '/');
-        // Force re-route to menu
         await new Promise(resolve => setTimeout(resolve, 100));
-        if (windowExt.checkRouteAuth) windowExt.checkRouteAuth();
-        if (skeleton) skeleton.style.display = 'none';
-        if (content) content.style.display = 'block';
+        
+        const checkRouteAuth = WindowManager.getWindowFunction<() => void>('checkRouteAuth');
+        if (checkRouteAuth) checkRouteAuth();
+        
+        setProfileUIState(true);
         store.dispatch(dataActions.setProfileLoading(false));
-        windowExt.publicProfileUsername = null;
-        currentLoadingPublicProfile = null;
+        resetProfileLoadState();
         return;
       }
 
       // Only proceed to load profile if check passed
-      if (windowExt.loadPublicProfile) {
-        await windowExt.loadPublicProfile(publicUsername, windowExt.calculateLevel, windowExt.applyTranslations);
-      } else {
-        console.error('❌ window.loadPublicProfile não encontrada');
-      }
-      
-      currentLoadingPublicProfile = null;
-    } else {
-      if (!user) {
-        console.warn('⚠️ Nenhum usuário encontrado para carregar perfil');
-        if (skeleton) skeleton.style.display = 'none';
-        if (content) content.style.display = 'block';
+      const loadPublicProfile = WindowManager.getWindowFunction<
+        (username: string, calculateLevel?: (points: number) => number, applyTranslations?: () => Promise<void>) => Promise<void>
+      >('loadPublicProfile');
+
+      if (!loadPublicProfile) {
+        logger.error('window.loadPublicProfile not found');
+        setProfileUIState(true);
+        resetProfileLoadState();
         return;
       }
-      if (windowExt.loadProfileData) {
-        await windowExt.loadProfileData(user, windowExt.calculateLevel, windowExt.applyTranslations);
-      } else {
-        console.error('❌ window.loadProfileData não encontrada');
+
+      const calculateLevel = WindowManager.getWindowFunction<(points: number) => number>('calculateLevel');
+      const applyTranslations = WindowManager.getWindowFunction<() => Promise<void>>('applyTranslations');
+
+      await loadPublicProfile(publicUsername, calculateLevel, applyTranslations);
+      resetProfileLoadState();
+    } else {
+      if (!user) {
+        logger.warn('No user found for profile load');
+        setProfileUIState(true);
+        return;
       }
+
+      const loadProfileData = WindowManager.getWindowFunction<
+        (user: any, calculateLevel?: (points: number) => number, applyTranslations?: () => Promise<void>) => Promise<void>
+      >('loadProfileData');
+
+      if (!loadProfileData) {
+        logger.error('window.loadProfileData not found');
+        setProfileUIState(true);
+        return;
+      }
+
+      const calculateLevel = WindowManager.getWindowFunction<(points: number) => number>('calculateLevel');
+      const applyTranslations = WindowManager.getWindowFunction<() => Promise<void>>('applyTranslations');
+
+      await loadProfileData(user, calculateLevel, applyTranslations);
     }
     
     // SEMPRE esconder skeleton e mostrar conteúdo
-    if (skeleton) skeleton.style.display = 'none';
-    if (content) content.style.display = 'block';
+    setProfileUIState(true);
     
-    if (!publicUsername && windowExt.loadUserThemes) {
-      await windowExt.loadUserThemes();
+    if (!publicUsername) {
+      const loadUserThemes = WindowManager.getWindowFunction<() => Promise<void>>('loadUserThemes');
+      if (loadUserThemes) {
+        await loadUserThemes();
+      }
     }
     
     store.dispatch(dataActions.setProfile(user));
   } catch (error) {
-    console.error('❌ Erro ao carregar perfil:', error);
-    const skeleton = document.getElementById('profile-skeleton');
-    const content = document.getElementById('profile-content');
-    if (skeleton) skeleton.style.display = 'none';
-    if (content) content.style.display = 'block';
-    currentLoadingPublicProfile = null;
+    ErrorHandler.handle(error, {
+      operation: 'loadProfileRoute',
+      config: { shouldThrow: false },
+    });
+    setProfileUIState(true);
+    resetProfileLoadState();
   } finally {
-    const windowExt = window as any as WindowWithRouteLoaders;
-    windowExt.publicProfileUsername = null;
     store.dispatch(dataActions.setProfileLoading(false));
   }
 }
@@ -420,19 +450,24 @@ async function _loadShopRoute(): Promise<void> {
   store.dispatch(dataActions.setShopLoading(true));
   
   try {
-    const windowExt = window as any as WindowWithRouteLoaders;
-    if (windowExt.initShop) {
-      await windowExt.initShop();
-      // Marca como carregado (evita recarregar desnecessariamente)
-      store.dispatch(dataActions.setShop([]));
+    const initShop = WindowManager.getWindowFunction<() => Promise<void>>('initShop');
+    if (!initShop) {
+      logger.error('window.initShop not found');
+      return;
     }
+
+    await initShop();
+    store.dispatch(dataActions.setShop([]));
     
     // Aguardar um pouco para o conteúdo carregar
     await new Promise(resolve => setTimeout(resolve, 500));
     
     toggleSkeleton('shop-skeleton', 'shop-packages', false);
   } catch (error) {
-    console.error('❌ Erro ao carregar shop:', error);
+    ErrorHandler.handle(error, {
+      operation: 'loadShopRoute',
+      config: { shouldThrow: false },
+    });
     toggleSkeleton('shop-skeleton', 'shop-packages', false);
   } finally {
     store.dispatch(dataActions.setShopLoading(false));
@@ -464,20 +499,26 @@ async function _loadSettingsRoute(): Promise<void> {
   if (skeleton) skeleton.style.display = 'block';
   
   try {
-    const windowExt = window as any as WindowWithRouteLoaders;
-    if (windowExt.loadSettingsData) {
-      await windowExt.loadSettingsData();
-    } else {
-      console.error('❌ window.loadSettingsData não encontrada');
+    const loadSettingsData = WindowManager.getWindowFunction<() => Promise<void>>('loadSettingsData');
+    if (!loadSettingsData) {
+      logger.error('window.loadSettingsData not found');
+      if (skeleton) skeleton.style.display = 'none';
+      return;
     }
-    
-    if (windowExt.applyTranslations) {
-      await windowExt.applyTranslations();
+
+    await loadSettingsData();
+
+    const applyTranslations = WindowManager.getWindowFunction<() => Promise<void>>('applyTranslations');
+    if (applyTranslations) {
+      await applyTranslations();
     }
     
     if (skeleton) skeleton.style.display = 'none';
   } catch (error) {
-    console.error('❌ Erro ao carregar settings:', error);
+    ErrorHandler.handle(error, {
+      operation: 'loadSettingsRoute',
+      config: { shouldThrow: false },
+    });
     if (skeleton) skeleton.style.display = 'none';
   }
 }
@@ -488,15 +529,19 @@ async function _loadSettingsRoute(): Promise<void> {
 async function _loadSkillTreeRoute(): Promise<void> {
   try {
     setTimeout(() => {
-      const windowExt = window as any as WindowWithRouteLoaders;
-      if (windowExt.initSkillTree) {
-        windowExt.initSkillTree();
-      } else {
-        console.error('❌ window.initSkillTree não encontrada');
+      const initSkillTree = WindowManager.getWindowFunction<() => void>('initSkillTree');
+      if (!initSkillTree) {
+        logger.error('window.initSkillTree not found');
+        return;
       }
+
+      initSkillTree();
     }, 100);
   } catch (error) {
-    console.error('❌ Erro ao carregar skill tree:', error);
+    ErrorHandler.handle(error, {
+      operation: 'loadSkillTreeRoute',
+      config: { shouldThrow: false },
+    });
   }
 }
 
@@ -510,14 +555,18 @@ async function _loadReferralsRoute(): Promise<void> {
   if (content) content.style.display = 'none';
 
   try {
-    const windowExt = window as any as WindowWithRouteLoaders;
-    if (windowExt.loadReferralsPanel) {
-      await windowExt.loadReferralsPanel();
-    } else {
-      console.error('❌ window.loadReferralsPanel não encontrada');
+    const loadReferralsPanel = WindowManager.getWindowFunction<() => Promise<void>>('loadReferralsPanel');
+    if (!loadReferralsPanel) {
+      logger.error('window.loadReferralsPanel not found');
+      return;
     }
+
+    await loadReferralsPanel();
   } catch (error) {
-    console.error('❌ Erro ao carregar referrals:', error);
+    ErrorHandler.handle(error, {
+      operation: 'loadReferralsRoute',
+      config: { shouldThrow: false },
+    });
   } finally {
     if (skeleton) skeleton.style.display = 'none';
     if (content) content.style.display = 'block';
@@ -553,19 +602,24 @@ async function _loadAdminRoute(): Promise<void> {
   if (skeleton) skeleton.style.display = 'block';
   
   try {
-    const windowExt = window as any as WindowWithRouteLoaders;
-    if (windowExt.startAdminPolling) {
-      windowExt.startAdminPolling();
-      
-      // Aguardar um pouco para o conteúdo carregar
-      await new Promise(resolve => setTimeout(resolve, 500));
-    } else {
-      console.error('❌ window.startAdminPolling não encontrada');
+    const startAdminPolling = WindowManager.getWindowFunction<() => void>('startAdminPolling');
+    if (!startAdminPolling) {
+      logger.error('window.startAdminPolling not found');
+      if (skeleton) skeleton.style.display = 'none';
+      return;
     }
+
+    startAdminPolling();
+    
+    // Aguardar um pouco para o conteúdo carregar
+    await new Promise(resolve => setTimeout(resolve, 500));
     
     if (skeleton) skeleton.style.display = 'none';
   } catch (error) {
-    console.error('❌ Erro ao carregar admin:', error);
+    ErrorHandler.handle(error, {
+      operation: 'loadAdminRoute',
+      config: { shouldThrow: false },
+    });
     if (skeleton) skeleton.style.display = 'none';
   }
 }
@@ -605,7 +659,8 @@ export function invalidateRouteData(dataType: string): void {
 
 // Expor funções globalmente
 if (typeof window !== 'undefined') {
-  const windowExt = window as any as WindowWithRouteLoaders;
-  windowExt.loadRouteData = loadRouteData;
-  windowExt.invalidateRouteData = invalidateRouteData;
+  WindowManager.registerRouteLoaders({
+    loadRouteData,
+    invalidateRouteData,
+  });
 }

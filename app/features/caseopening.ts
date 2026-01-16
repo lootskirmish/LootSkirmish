@@ -713,7 +713,7 @@ async function purchasePass(passId: string): Promise<void> {
     
     const response = await fetch('/api/_caseopening', {
       method: 'POST',
-      headers: addCsrfHeader({
+      headers: await addCsrfHeader({
         'Content-Type': 'application/json',
       }),
       body: JSON.stringify({
@@ -821,7 +821,7 @@ async function upgradeCaseDiscount(): Promise<void> {
 
     const response = await fetch('/api/_caseopening', {
       method: 'POST',
-      headers: addCsrfHeader({
+      headers: await addCsrfHeader({
         'Content-Type': 'application/json'
       }),
       body: JSON.stringify({
@@ -1093,7 +1093,7 @@ async function openCase(): Promise<void> {
     
     const response = await fetch('/api/_caseopening', {
       method: 'POST',
-      headers: addCsrfHeader({
+      headers: await addCsrfHeader({
         'Content-Type': 'application/json',
       }),
       body: JSON.stringify({

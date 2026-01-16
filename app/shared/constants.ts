@@ -3,6 +3,72 @@
 // ============================================================
 
 // ============================================================
+// SECURITY & CONFIGURATION CONSTANTS
+// ============================================================
+
+export const SECURITY = {
+  CSRF_TOKEN_MIN_LENGTH: 32,
+  CSRF_TOKEN_TTL_MS: 2 * 60 * 60 * 1000, // 2 hours
+  MAX_RETRY_ATTEMPTS: 3,
+  BASE_RETRY_DELAY_MS: 1000,
+  MAX_RETRY_DELAY_MS: 10000,
+  USERNAME_MIN_LENGTH: 3,
+  USERNAME_MAX_LENGTH: 20,
+  USERNAME_PATTERN: /^[a-zA-Z0-9_-]+$/,
+  AUTH_TOKEN_MIN_LENGTH: 32,
+} as const;
+
+export const STORAGE = {
+  CSRF_KEY: 'lootskirmish_csrf',
+  STATE_KEY: 'lootskirmish_state',
+  SESSION_KEY: 'lootskirmish_session',
+  MAX_SIZE_MB: 5,
+  COMPRESSION_THRESHOLD_KB: 10,
+} as const;
+
+export const PERSISTENCE = {
+  VERSION: 3,
+  TTL_MS: 30 * 60 * 1000, // 30 minutes
+  AUTO_SAVE_INTERVAL_MS: 3000,
+  DEBOUNCE_MS: 300,
+} as const;
+
+export const ROUTES = {
+  THROTTLE_MS: 300,
+  MAX_CONCURRENT_LOADS: 3,
+  TIMEOUT_MS: 10000,
+  PRELOAD_DELAY_MS: 100,
+} as const;
+
+export const CACHE = {
+  DEFAULT_TTL_MS: 5 * 60 * 1000, // 5 minutes
+  MAX_ENTRIES: 50,
+  CLEANUP_INTERVAL_MS: 60000,
+} as const;
+
+export const PERFORMANCE = {
+  SLOW_OPERATION_THRESHOLD_MS: 100,
+  DEBOUNCE_DEFAULT_MS: 300,
+  THROTTLE_DEFAULT_MS: 300,
+} as const;
+
+export const ERRORS = {
+  CSRF_FETCH_FAILED: 'Failed to fetch CSRF token',
+  CSRF_INVALID_FORMAT: 'Invalid CSRF token format',
+  CSRF_CHECKSUM_MISMATCH: 'CSRF token checksum verification failed',
+  STORAGE_QUOTA_EXCEEDED: 'Storage quota exceeded',
+  INVALID_USER_ID: 'Invalid user ID format',
+  MIGRATION_FAILED: 'State migration failed',
+} as const;
+
+export const FEATURES = {
+  ENABLE_COMPRESSION: false,
+  ENABLE_ENCRYPTION: false,
+  ENABLE_DEBUG_LOGGING: true,
+  ENABLE_PERFORMANCE_TRACKING: true,
+} as const;
+
+// ============================================================
 // TYPE DEFINITIONS
 // ============================================================
 

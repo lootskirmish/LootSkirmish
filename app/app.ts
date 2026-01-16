@@ -2,6 +2,7 @@
 // APP.TS - IMPORTS
 // ============================================================
 
+import { createLogger } from './core/logger';
 import './core/persistence'; // Sistema unificado: Store + State + Persistence
 import './core/route-loader'; // Route loader
 
@@ -58,6 +59,9 @@ import './features/caseopening.js';
 import { bindGlobalClickSfx, bindGlobalHoverSfx } from './shared/sfx';
 
 import { initializeChat } from './features/chat.js';
+
+const logger = createLogger('App');
+
 import { initializeFriends } from './features/friends.js';
 import { 
   initializePersistence, 
@@ -326,7 +330,7 @@ async function translateText(text: string, targetLang: string): Promise<string> 
     rememberTranslation(cacheKey, translated);
     return translated;
   } catch (err) {
-    console.error('Erro na tradução:', err);
+    logger.error('Erro na tradução:', { error: err });
     delete translationCache[cacheKey];
     return text;
   }
@@ -567,7 +571,7 @@ function startRouterOnce(): void {
     bindGlobalClickSfx();
     bindGlobalHoverSfx();
   } catch (err) {
-    console.error('Falha ao iniciar router (vai tentar no DOMContentLoaded):', err);
+    logger.error('Falha ao iniciar router (vai tentar no DOMContentLoaded):', { error: err });
     // fallback: tentar novamente quando DOM estiver pronto
     window.addEventListener(
       'DOMContentLoaded',
@@ -575,7 +579,7 @@ function startRouterOnce(): void {
         try {
           initRouter();
         } catch (err2) {
-          console.error('Falha ao iniciar router no DOMContentLoaded:', err2);
+          logger.error('Falha ao iniciar router no DOMContentLoaded:', { error: err2 });
         }
       },
       { once: true }

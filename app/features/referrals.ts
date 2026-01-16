@@ -121,7 +121,7 @@ async function fetchReferralStats(): Promise<{ data: any; session: any }> {
 
   const response = await fetch('/api/_referrals', {
     method: 'POST',
-    headers: addCsrfHeader({ 'Content-Type': 'application/json' }),
+    headers: await addCsrfHeader({ 'Content-Type': 'application/json' }),
     body: JSON.stringify({
       action: 'getReferralStats',
       userId: session.user.id,
@@ -278,7 +278,7 @@ async function withdrawEarnings(): Promise<void> {
 
     const response = await fetch('/api/_referrals', {
       method: 'POST',
-      headers: addCsrfHeader({ 'Content-Type': 'application/json' }),
+      headers: await addCsrfHeader({ 'Content-Type': 'application/json' }),
       body: JSON.stringify({
         action: 'withdrawEarnings',
         userId: session.user.id,
@@ -316,7 +316,7 @@ async function loadMoreHistory(): Promise<void> {
   const nextPage = historyPage + 1;
   const response = await fetch('/api/_referrals', {
     method: 'POST',
-    headers: addCsrfHeader({ 'Content-Type': 'application/json' }),
+    headers: await addCsrfHeader({ 'Content-Type': 'application/json' }),
     body: JSON.stringify({
       action: 'getTransactionHistory',
       userId: session.user.id,

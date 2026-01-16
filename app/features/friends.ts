@@ -163,7 +163,7 @@ async function callFriendsApi(action: string, payload: Record<string, any> = {})
 
   const response = await fetch('/api/_profile', {
     method: 'POST',
-    headers: addCsrfHeader({
+    headers: await addCsrfHeader({
       'Content-Type': 'application/json'
     }),
     body: JSON.stringify({

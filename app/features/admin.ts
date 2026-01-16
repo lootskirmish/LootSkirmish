@@ -947,7 +947,7 @@ export async function handleApproveOrder(orderId: string): Promise<void> {
     // 6. CHAMAR BACKEND SEGURO
     const response = await fetch('/api/_admin', {
       method: 'POST',
-      headers: addCsrfHeader({
+      headers: await addCsrfHeader({
         'Content-Type': 'application/json',
       }),
       body: JSON.stringify({
@@ -1075,7 +1075,7 @@ export async function handleRejectOrder(orderId: string): Promise<void> {
     // 6. CHAMAR BACKEND SEGURO
     const response = await fetch('/api/_admin', {
       method: 'POST',
-      headers: addCsrfHeader({
+      headers: await addCsrfHeader({
         'Content-Type': 'application/json',
       }),
       body: JSON.stringify({
