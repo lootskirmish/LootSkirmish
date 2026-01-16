@@ -1048,6 +1048,12 @@ export async function loadUserData(
  * @param {Function} loadUserDataCallback - Callback para carregar dados do usuário
  */
 export function setupAuthStateListener(loadUserDataCallback: (user: User) => void): void {
+  // 🔐 Garantir que Supabase foi inicializado
+  if (!supabase) {
+    console.error('[AUTH] setupAuthStateListener chamado antes de supabase estar pronto!');
+    return;
+  }
+  
   // Evitar múltiplos listeners (hot reload / chamadas repetidas)
   if (authStateSubscription) {
     try {
@@ -1369,7 +1375,6 @@ export function prompt2FACode(): Promise<string | null> {
 }
 
 function initializeAuthUI(): void {
-  hydrateAuthForm();
   prefillReferralFromUrl();
   detectPasswordReset();
   renderHCaptcha();
@@ -1382,12 +1387,48 @@ if (document.readyState === 'loading') {
 }
 
 // 🌍 Expor funções para o escopo global (HTML onclick)
-window.handleLogin = handleLogin;
-window.handleRegister = handleRegister;
-window.handlePasswordReset = handlePasswordReset;
-window.handleUpdatePassword = handleUpdatePassword;
-window.updatePasswordAfterReset = updatePasswordAfterReset;
-window.requestSetup2FA = requestSetup2FA;
-window.verifyAndEnable2FA = verifyAndEnable2FA;
-window.disable2FA = disable2FA;
-window.prompt2FACode = prompt2FACode;
+// Wraps com verificação de inicialização
+window.handleLogin = async function() {
+  ensureSupabaseInitialized();
+  return handleLogin();
+};
+
+window.handleRegister = async function() {
+  ensureSupabaseInitialized();
+  return handleRegister();
+};
+
+window.handlePasswordReset = async function() {
+  ensureSupabaseInitialized();
+  return handlePasswordReset();
+};
+
+window.handleUpdatePassword = function() {
+  ensureSupabaseInitialized();
+  return handleUpdatePassword();
+};
+
+window.updatePasswordAfterReset = async function(password: string) {
+  ensureSupabaseInitialized();
+  return updatePasswordAfterReset(password);
+};
+
+window.requestSetup2FA = async function() {
+  ensureSupabaseInitialized();
+  return requestSetup2FA();
+};
+
+window.verifyAndEnable2FA = async function() {
+  ensureSupabaseInitialized();
+  return verifyAndEnable2FA();
+};
+
+window.disable2FA = async function() {
+  ensureSupabaseInitialized();
+  return disable2FA();
+};
+
+window.prompt2FACode = async function() {
+  ensureSupabaseInitialized();
+  return prompt2FACode();
+};
