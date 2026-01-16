@@ -97,40 +97,44 @@ export default async function handler(req: ApiRequest, res: ApiResponse): Promis
   }
 
   // CSP VIOLATION REPORTING ENDPOINT
-  if (req.method === 'POST' && (req.body?.['csp-report'] || req.body?.documentUri)) {
-    try {
-      const report = req.body;
-      const ip = getRequestIp(req);
-      const violation = report['csp-report'] || report;
-      
-      // Log estruturado
-      const securityEvent = createSecurityEvent({
-        type: 'CSP_VIOLATION',
-        severity: 'MEDIUM',
-        ip,
-        details: {
-          documentUri: violation['document-uri'],
-          violatedDirective: violation['violated-directive'],
-          blockedUri: violation['blocked-uri'],
-          effectiveDirective: violation['effective-directive']
-        }
-      });
-
-      // Salvar no banco
-      await supabase
-        .from('security_events')
-        .insert({
-          event_type: 'CSP_VIOLATION',
+  if (req.method === 'POST' && req.body && typeof req.body === 'object') {
+    const body = req.body as any;
+    
+    // Detectar se é um CSP report
+    if (body['csp-report'] || body.documentUri || body['violated-directive']) {
+      try {
+        const violation = body['csp-report'] || body;
+        const ip = getRequestIp(req);
+        
+        // Log estruturado
+        const securityEvent = createSecurityEvent({
+          type: 'CSP_VIOLATION',
           severity: 'MEDIUM',
-          ip_address: ip,
-          details: securityEvent.details,
-          created_at: new Date().toISOString()
-        })
-        .then(() => {}, () => {}); // Ignore errors silently
+          ip,
+          details: {
+            documentUri: violation['document-uri'] || violation.documentUri,
+            violatedDirective: violation['violated-directive'] || violation.violatedDirective,
+            blockedUri: violation['blocked-uri'] || violation.blockedUri,
+            effectiveDirective: violation['effective-directive'] || violation.effectiveDirective
+          }
+        });
 
-      return res.status(204).end();
-    } catch {
-      return res.status(204).end();
+        // Salvar no banco (ignorar erros silenciosamente)
+        supabase
+          .from('security_events')
+          .insert({
+            event_type: 'CSP_VIOLATION',
+            severity: 'MEDIUM',
+            ip_address: ip,
+            details: securityEvent.details,
+            created_at: new Date().toISOString()
+          })
+          .then(() => {}, () => {});
+
+        return res.status(204).end();
+      } catch {
+        return res.status(204).end();
+      }
     }
   }
 
