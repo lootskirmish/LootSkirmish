@@ -172,7 +172,7 @@ async function handleChangeUsername(req: ApiRequest, res: ApiResponse): Promise<
     }
 
     // Uniqueness check (case-insensitive)
-    const taken = await usernameExists(normalized, userId);
+    const taken = await usernameExists(supabase, normalized, userId);
     if (taken) {
       return res.status(400).json({ error: 'USERNAME_TAKEN' });
     }
@@ -186,7 +186,7 @@ async function handleChangeUsername(req: ApiRequest, res: ApiResponse): Promise<
         return res.status(400).json({ error: 'INSUFFICIENT_DIAMONDS', needed: cost - (stats.diamonds || 0) });
       }
       try {
-        await updatePlayerDiamonds(userId, -cost, 'Username change', req);
+        await updatePlayerDiamonds(supabase, userId, -cost, 'Username change', false, req);
       } catch (err) {
         if (err instanceof Error && err.message === 'Insufficient diamonds') {
           return res.status(400).json({ error: 'INSUFFICIENT_DIAMONDS', needed: cost });
@@ -212,7 +212,7 @@ async function handleChangeUsername(req: ApiRequest, res: ApiResponse): Promise<
       // Refund if update failed and we charged
       if (cost > 0) {
         try {
-          await updatePlayerDiamonds(userId, cost, 'Refund: username change failed', req);
+          await updatePlayerDiamonds(supabase, userId, cost, 'Refund: username change failed', false, req);
         } catch (refundErr) {
           console.error('Refund after username change failure failed:', refundErr instanceof Error ? refundErr.message : refundErr);
         }
