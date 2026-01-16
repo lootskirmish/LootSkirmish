@@ -96,50 +96,64 @@ declare global {
 
 const PACKAGES = [
   {
-    id: 'pkg_150',
+    id: 'pkg_250',
     name: 'STARTER PACK',
-    diamonds: 150,
+    diamonds: 250,
     price: 1.99, // USD
     priceBRL: 14.99,
     icon: '💎',
     popular: false,
     firstPurchaseBonus: {
       type: 'percentage',
-      value: 50,
-      label: '+50% First Purchase'
+      value: 10,
+      label: '+10% First Purchase'
     }
   },
   {
-    id: 'pkg_400',
+    id: 'pkg_600',
     name: 'BRONZE PACK',
-    diamonds: 400,
+    diamonds: 600,
     price: 4.49,
     priceBRL: 27.49,
     icon: '💎',
     popular: true
   },
   {
-    id: 'pkg_1000',
+    id: 'pkg_1400',
     name: 'SILVER PACK',
-    diamonds: 1000,
-    price: 11.99,
-    priceBRL: 69.99,
+    diamonds: 1400,
+    price: 9.99,
+    priceBRL: 59.99,
     icon: '💎',
     popular: false,
     timedBonus: {
-      percentage: 25,
-      endsAt: '2026-01-20T23:59:59Z',
-      label: '+25% Limited Time'
+      percentage: 40,
+      endsAt: '2026-01-16T23:59:59Z',
+      label: '+40% Limited Time'
     }
   },
   {
-    id: 'pkg_1800',
+    id: 'pkg_2800',
     name: 'GOLD PACK',
-    diamonds: 1800,
-    price: 19.99,
-    priceBRL: 119.99,
+    diamonds: 2800,
+    price: 17.99,
+    priceBRL: 109.99,
     icon: '💎',
     popular: false
+  },
+  {
+    id: 'pkg_3750',
+    name: 'PLATINUM PACK',
+    diamonds: 3750,
+    price: 27.99,
+    priceBRL: 159.99,
+    icon: '💎',
+    popular: false,
+    timedBonus: {
+      percentage: 20,
+      endsAt: '2026-02-20T23:59:59Z',
+      label: '+20% Limited Time'
+    }
   }
 ];
 
@@ -147,20 +161,39 @@ const SUBSCRIPTIONS = [
   {
     id: 'sub_premium',
     name: 'PREMIUM SUBSCRIPTION',
-    price: 4.99,
-    priceBRL: 29.99,
+    price: 5.99,
+    priceBRL: 34.99,
     duration: 30,
     icon: '👑',
-    diamonds: 250,
-    dailyDiamonds: 12,
+    diamonds: 300,
+    dailyDiamonds: 15,
     benefits: [
-      '250💎 instantly',
-      '12💎 daily (360 total/30 days)',
+      '300💎 instantly',
+      '15💎 daily (450 total/30 days)',
       'Premium badge on your profile',
       'Access to exclusive cases',
       'Priority support'
     ],
     popular: true
+  },
+  {
+    id: 'sub_premium_bp',
+    name: 'PREMIUM + BATTLE PASS',
+    price: 9.99,
+    priceBRL: 59.99,
+    duration: 30,
+    icon: '👑',
+    diamonds: 300,
+    dailyDiamonds: 15,
+    benefits: [
+      '300💎 instantly',
+      '15💎 daily (450 total/30 days)',
+      'Battle Pass included',
+      'Premium badge on your profile',
+      'Access to exclusive cases',
+      'Priority support'
+    ],
+    popular: false
   }
 ];
 
@@ -174,6 +207,7 @@ let userActiveSubscription: string | null = null;
 let selectedProduct: SelectedProduct | null = null;
 let selectedPaymentMethod: string = 'stripe';
 let isProcessing: boolean = false;
+let battlePassAddonEnabled: boolean = false; // Add-on Battle Pass
 
 // Timer para bônus temporários
 let bonusTimers: Map<string, NodeJS.Timeout> = new Map();
@@ -627,17 +661,46 @@ function openPaymentModal(productId: string, type: 'package' | 'subscription'): 
       </div>
     `;
   } else {
+    // É uma assinatura - verificar se é sub_premium (que pode ter Battle Pass add-on)
+    const canAddBattlePass = product.id === 'sub_premium';
+    
     productContainer.innerHTML = `
       <div class="payment-product-header subscription-header">
         <div class="payment-product-icon">${product.icon}</div>
         <div class="payment-product-info">
-          <h3>${product.name}</h3>
+          <h3 class="subscription-product-name">${product.name}</h3>
           <div class="subscription-features">
             ${(product as any).benefits?.map((b: string) => `<div class="feature-item">✓ ${b}</div>`).join('') || ''}
           </div>
         </div>
       </div>
+      ${canAddBattlePass ? `
+        <div class="battlepass-addon-section">
+          <label class="battlepass-addon-checkbox">
+            <input type="checkbox" id="battlepass-addon-checkbox" ${battlePassAddonEnabled ? 'checked' : ''}>
+            <span class="checkbox-custom"></span>
+            <div class="addon-info">
+              <span class="addon-title">🎮 Add Battle Pass</span>
+              <span class="addon-price">+$4.00</span>
+            </div>
+          </label>
+          <div class="addon-description">Unlock exclusive Battle Pass rewards and challenges!</div>
+        </div>
+      ` : ''}
     `;
+    
+    // Se pode adicionar Battle Pass, vincular evento do checkbox
+    if (canAddBattlePass) {
+      setTimeout(() => {
+        const checkbox = document.getElementById('battlepass-addon-checkbox') as HTMLInputElement;
+        if (checkbox) {
+          checkbox.addEventListener('change', () => {
+            battlePassAddonEnabled = checkbox.checked;
+            toggleBattlePassAddon(product, checkbox.checked);
+          });
+        }
+      }, 50);
+    }
   }
 
   // Atualizar preços nos métodos de pagamento
@@ -680,6 +743,54 @@ function openPaymentModal(productId: string, type: 'package' | 'subscription'): 
 }
 
 // ============================================================
+// ALTERNAR BATTLE PASS ADD-ON
+// ============================================================
+
+function toggleBattlePassAddon(baseProduct: any, enabled: boolean): void {
+  // Encontrar o produto correto
+  let newProduct;
+  if (enabled) {
+    // Mudar para sub_premium_bp
+    newProduct = SUBSCRIPTIONS.find(s => s.id === 'sub_premium_bp');
+  } else {
+    // Voltar para sub_premium
+    newProduct = SUBSCRIPTIONS.find(s => s.id === 'sub_premium');
+  }
+  
+  if (!newProduct) {
+    console.error('❌ Produto de assinatura não encontrado');
+    return;
+  }
+  
+  // Atualizar selectedProduct
+  selectedProduct = { ...newProduct, type: 'subscription' };
+  
+  // Atualizar nome do produto no modal
+  const productNameEl = document.querySelector('.subscription-product-name');
+  if (productNameEl) {
+    productNameEl.textContent = newProduct.name;
+  }
+  
+  // Atualizar preços nos métodos de pagamento com animação
+  const stripePriceEl = document.getElementById('stripe-price');
+  const mercadopagoEl = document.getElementById('mercadopago-price');
+  const nowpaymentsEl = document.getElementById('nowpayments-price');
+  
+  // Adicionar classe de atualização para animação
+  [stripePriceEl, mercadopagoEl, nowpaymentsEl].forEach(el => {
+    if (el) {
+      el.classList.add('price-updating');
+      setTimeout(() => el.classList.remove('price-updating'), 300);
+    }
+  });
+  
+  // Atualizar valores
+  if (stripePriceEl) stripePriceEl.textContent = `$${newProduct.price.toFixed(2)}`;
+  if (mercadopagoEl) mercadopagoEl.textContent = `R$ ${newProduct.priceBRL.toFixed(2)}`;
+  if (nowpaymentsEl) nowpaymentsEl.textContent = `$${newProduct.price.toFixed(2)}`;
+}
+
+// ============================================================
 // FECHAR MODAL
 // ============================================================
 
@@ -697,6 +808,7 @@ window.closeShopPaymentModal = function() {
   }
   selectedProduct = null;
   selectedPaymentMethod = 'stripe';
+  battlePassAddonEnabled = false;
 };
 
 // ============================================================
@@ -733,6 +845,7 @@ window.proceedToCheckout = async function() {
         productId: selectedProduct.id,
         productType: selectedProduct.type,
         paymentMethod: selectedPaymentMethod,
+        battlePassAddon: battlePassAddonEnabled, // 🎮 Battle Pass add-on
         idempotencyKey  // 🛡️ Enviar idempotency key
       })
     });

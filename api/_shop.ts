@@ -83,6 +83,7 @@ interface Subscription {
   duration: number;
   diamonds: number;
   dailyDiamonds: number;
+  battlepass?: boolean;
 }
 
 // Vercel webhook endpoints (Stripe) need raw body to validate signatures.
@@ -338,53 +339,67 @@ function maybeCleanupSecurity(): void {
 // ============================================================
 
 const STRIPE_PRICE_IDS = {
-  STARTER: 'price_1Sov9SC4sph1j0MSJggz6zvH',
-  BRONZE: 'price_1SovAjC4sph1j0MSdwo9fdRM',
-  SILVER: 'price_1SovCBC4sph1j0MS3ydPa7rP',
-  GOLD: 'price_1SovD8C4sph1j0MSslCHqV8J',
-  PREMIUM_SUB: 'price_1SpERfC4sph1j0MSbo6OCl7J'
+  STARTER: 'price_1SqJPQC4sph1j0MSvLNLrkwu',
+  BRONZE: 'price_1SqJQYC4sph1j0MSSQkVIedf',
+  SILVER: 'price_1SqJS8C4sph1j0MSRUeprzMN',
+  GOLD: 'price_1SqJSnC4sph1j0MS33EgkX3J',
+  PLATINUM: 'price_1SqJUlC4sph1j0MShNC5nlRN',
+  PREMIUM_SUB: 'price_1SqJWNC4sph1j0MSsOMyeaxv',
+  PREMIUM_SUB_BP: 'price_1SqJXpC4sph1j0MSLgmS9rd8'
 };
 
 const PACKAGES: Package[] = [
   {
-    id: 'pkg_150',
+    id: 'pkg_250',
     name: 'STARTER PACK',
-    diamonds: 150,
+    diamonds: 250,
     price: 1.99, // USD
     priceBRL: 14.99, // ← Adicione o preço em BRL
     priceId: STRIPE_PRICE_IDS.STARTER,
     firstPurchaseBonus: {
       type: 'percentage',
-      value: 50
+      value: 10
     }
   },
   {
-    id: 'pkg_400',
+    id: 'pkg_600',
     name: 'BRONZE PACK',
-    diamonds: 400,
+    diamonds: 600,
     price: 4.49,
     priceBRL: 27.49,
     priceId: STRIPE_PRICE_IDS.BRONZE
   },
   {
-    id: 'pkg_1000',
+    id: 'pkg_1400',
     name: 'SILVER PACK',
-    diamonds: 1000,
-    price: 11.99,
-    priceBRL: 69.99,
+    diamonds: 1400,
+    price: 9.99,
+    priceBRL: 59.99,
     priceId: STRIPE_PRICE_IDS.SILVER,
     timedBonus: {
-      percentage: 25,
-      endsAt: '2026-01-20T23:59:59Z'
+      percentage: 40,
+      endsAt: '2026-01-16T23:59:59Z'
     }
   },
   {
-    id: 'pkg_1800',
+    id: 'pkg_2800',
     name: 'GOLD PACK',
-    diamonds: 1800,
-    price: 19.99,
-    priceBRL: 119.99,
+    diamonds: 2800,
+    price: 17.99,
+    priceBRL: 109.99,
     priceId: STRIPE_PRICE_IDS.GOLD
+  },
+  {
+    id: 'pkg_3750',
+    name: 'PLATINUM PACK',
+    diamonds: 3750,
+    price: 27.99,
+    priceBRL: 159.99,
+    priceId: STRIPE_PRICE_IDS.PLATINUM,
+    timedBonus: {
+      percentage: 20,
+      endsAt: '2026-02-20T23:59:59Z'
+    }
   }
 ];
 
@@ -392,12 +407,23 @@ const SUBSCRIPTIONS: Subscription[] = [
   {
     id: 'sub_premium',
     name: 'PREMIUM SUBSCRIPTION',
-    price: 4.99,
-    priceBRL: 29.99,
+    price: 5.99,
+    priceBRL: 34.99,
     priceId: STRIPE_PRICE_IDS.PREMIUM_SUB,
     duration: 30,
-    diamonds: 250,
-    dailyDiamonds: 12
+    diamonds: 300,
+    dailyDiamonds: 15
+  },
+  {
+    id: 'sub_premium_bp',
+    name: 'PREMIUM SUBSCRIPTION + BP',
+    price: 9.99,
+    priceBRL: 59.99,
+    priceId: STRIPE_PRICE_IDS.PREMIUM_SUB_BP,
+    duration: 30,
+    diamonds: 300,
+    dailyDiamonds: 15,
+    battlepass: true
   }
 ];
 
@@ -957,6 +983,26 @@ async function processSuccessfulPayment(orderId: string, { gateway = 'unknown', 
       if (!subResult) {
         console.warn('⚠️ Subscription RPC returned null/undefined - possible constraint issue');
         throw new Error('Subscription activation validation failed');
+      }
+      
+      // 🎮 Ativar Battle Pass se a assinatura incluir
+      if (product?.battlepass === true) {
+        console.log('🎮 Activating Battle Pass for user:', userId);
+        
+        const { error: bpError } = await supabase
+          .from('player_stats')
+          .update({ 
+            battlepass: true,
+            updated_at: new Date().toISOString()
+          })
+          .eq('user_id', userId);
+        
+        if (bpError) {
+          console.error('❌ Failed to activate Battle Pass:', bpError?.message);
+          // Não-bloqueante, apenas log
+        } else {
+          console.log('✅ Battle Pass activated successfully');
+        }
       }
     }
 

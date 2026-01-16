@@ -1133,6 +1133,95 @@
 }
 
 /* ============================================================
+   BATTLE PASS ADD-ON SECTION
+   ============================================================ */
+
+.battlepass-addon-section {
+  background: linear-gradient(135deg, rgba(139, 92, 246, 0.1) 0%, rgba(236, 72, 153, 0.1) 100%);
+  border: 2px solid rgba(139, 92, 246, 0.3);
+  border-radius: 16px;
+  padding: 1.5rem;
+  margin: 1.5rem 0;
+}
+
+.battlepass-addon-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  cursor: pointer;
+  user-select: none;
+}
+
+.battlepass-addon-checkbox input[type="checkbox"] {
+  position: absolute;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.checkbox-custom {
+  width: 28px;
+  height: 28px;
+  border: 2px solid rgba(139, 92, 246, 0.5);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.05);
+  flex-shrink: 0;
+  position: relative;
+  transition: all 0.3s ease;
+}
+
+.battlepass-addon-checkbox:hover .checkbox-custom {
+  border-color: rgba(139, 92, 246, 0.8);
+  background: rgba(139, 92, 246, 0.1);
+}
+
+.battlepass-addon-checkbox input[type="checkbox"]:checked ~ .checkbox-custom {
+  background: linear-gradient(135deg, #8b5cf6 0%, #ec4899 100%);
+  border-color: #8b5cf6;
+}
+
+.battlepass-addon-checkbox input[type="checkbox"]:checked ~ .checkbox-custom::after {
+  content: '✓';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  color: #ffffff;
+  font-size: 18px;
+  font-weight: bold;
+}
+
+.addon-info {
+  flex: 1;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+}
+
+.addon-title {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #ffffff;
+}
+
+.addon-price {
+  font-size: 1.2rem;
+  font-weight: 800;
+  color: #8b5cf6;
+  background: rgba(139, 92, 246, 0.2);
+  padding: 0.4rem 0.9rem;
+  border-radius: 8px;
+}
+
+.addon-description {
+  margin-top: 0.75rem;
+  padding-left: 44px;
+  font-size: 0.9rem;
+  color: rgba(255, 255, 255, 0.6);
+  font-style: italic;
+}
+
+/* ============================================================
    PAYMENT METHODS - CLEANER
    ============================================================ */
 
@@ -1209,6 +1298,26 @@
   font-weight: 800;
   color: #06b6d4;
   flex-shrink: 0;
+  transition: all 0.3s ease;
+}
+
+.method-price.price-updating {
+  animation: priceUpdate 0.3s ease;
+}
+
+@keyframes priceUpdate {
+  0% {
+    transform: scale(1);
+    color: #06b6d4;
+  }
+  50% {
+    transform: scale(1.15);
+    color: #8b5cf6;
+  }
+  100% {
+    transform: scale(1);
+    color: #06b6d4;
+  }
 }
 
 /* ============================================================
@@ -1339,6 +1448,31 @@
 
   .subscription-icon {
     font-size: 3.5rem;
+  }
+  
+  /* Battle Pass Add-on Mobile */
+  .battlepass-addon-section {
+    padding: 1.25rem;
+  }
+  
+  .addon-info {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.5rem;
+  }
+  
+  .addon-title {
+    font-size: 1rem;
+  }
+  
+  .addon-price {
+    font-size: 1.1rem;
+    padding: 0.35rem 0.75rem;
+  }
+  
+  .addon-description {
+    padding-left: 44px;
+    font-size: 0.85rem;
   }
 
   .package-price {
