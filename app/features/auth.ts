@@ -77,7 +77,7 @@ export async function initializeSupabase(): Promise<boolean> {
     console.log('[AUTH] Carregando credenciais do Supabase...');
     
     // 🔐 Chamar backend para obter credenciais
-    const response = await fetch('/api/app', {
+    const response = await fetch('/api/config', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action: 'getConfig' })

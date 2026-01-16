@@ -98,21 +98,32 @@ export default async function handler(req: ApiRequest, res: ApiResponse): Promis
 
   // 🔐 ENDPOINT DE CONFIGURAÇÃO - Servir credenciais do Supabase de forma segura
   // Apenas POST para evitar cache e deixar claro que é uma ação
-  if (req.method === 'POST' && req.body?.action === 'getConfig') {
-    return res.status(200).json({
-      supabaseUrl: process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL,
-      supabaseKey: process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY
-    });
-  }
-
-  // CSP VIOLATION REPORTING ENDPOINT
-  if (req.method === 'POST' && req.body && typeof req.body === 'object') {
-    const body = req.body as any;
+  if (req.method === 'POST') {
+    let body = req.body;
     
-    // Detectar se é um CSP report
-    if (body['csp-report'] || body.documentUri || body['violated-directive']) {
+    // Se body é string, fazer parse
+    if (typeof body === 'string') {
       try {
-        const violation = body['csp-report'] || body;
+        body = JSON.parse(body);
+      } catch {
+        body = {};
+      }
+    }
+    
+    // Checar se é request de config
+    if (body?.action === 'getConfig') {
+      return res.status(200).json({
+        supabaseUrl: process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL,
+        supabaseKey: process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY
+      });
+    }
+
+    // CSP VIOLATION REPORTING ENDPOINT
+    if (body && typeof body === 'object') {
+      // Detectar se é um CSP report
+      if (body['csp-report'] || body.documentUri || body['violated-directive']) {
+        try {
+          const violation = body['csp-report'] || body;
         const ip = getRequestIp(req);
         
         // Log estruturado
@@ -147,6 +158,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse): Promis
     }
   }
 
+  // Se chegou aqui e não é POST, rejeitar
   if (req.method !== 'POST') {
     res.status(405).json({ error: 'Method not allowed' });
     return;
