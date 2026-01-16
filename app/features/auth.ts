@@ -971,7 +971,8 @@ export async function loadUserData(
   Promise.all([
     loadSavedColors ? Promise.resolve(loadSavedColors()) : Promise.resolve(),
     checkAndShowAdminButton ? checkAndShowAdminButton() : Promise.resolve(),
-    applyTranslations ? Promise.resolve(applyTranslations()) : Promise.resolve()
+    applyTranslations ? Promise.resolve(applyTranslations()) : Promise.resolve(),
+    fetchCsrfToken(user.id, authToken).catch(err => console.error('Error fetching CSRF token:', err))
   ]).catch(err => console.error('Error loading secondary data:', err));
 }
 

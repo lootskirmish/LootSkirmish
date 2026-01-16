@@ -58,18 +58,17 @@ app.use((req: Request, res: Response, next) => {
     'Content-Security-Policy',
     [
       "default-src 'self'",
-      "script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://hcaptcha.com https://*.hcaptcha.com",
-      "style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com",
+      "script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://unpkg.com https://hcaptcha.com https://*.hcaptcha.com",
+      "style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://fonts.googleapis.com",
       "img-src 'self' data: https: blob:",
-      "font-src 'self' https://cdnjs.cloudflare.com data:",
-      "connect-src 'self' https://xgcseugigsdgmyrfrofj.supabase.co https://hcaptcha.com https://*.hcaptcha.com",
+      "font-src 'self' https://cdnjs.cloudflare.com https://fonts.gstatic.com data:",
+      "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://ipapi.co https://hcaptcha.com https://*.hcaptcha.com",
       "frame-src 'self' https://hcaptcha.com https://*.hcaptcha.com",
       "media-src 'self' blob:",
       "object-src 'none'",
       "base-uri 'self'",
       "form-action 'self'",
-      "frame-ancestors 'none'",
-      "upgrade-insecure-requests"
+      "frame-ancestors 'none'"
     ].join('; ')
   );
   
