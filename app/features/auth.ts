@@ -8,6 +8,11 @@ import { store, authActions, dataActions } from '../core/store';
 import { clearActiveUser, setActiveUser, fetchCsrfToken, clearCsrfTokenOnServer, getActiveUser } from '../core/session';
 
 // ============ TYPE DEFINITIONS ============
+interface RememberedCredentials {
+  email: string;
+  password: string;
+}
+
 interface PendingReferral {
   code: string;
   userId?: string;
@@ -51,78 +56,31 @@ declare global {
 }
 
 // ============ SUPABASE CONFIG ============
-// 🔒 NUNCA hardcoded - sempre carregado do backend de forma segura
-let SUPABASE_URL: string | null = null;
-let SUPABASE_KEY: string | null = null;
-const LAST_ACTIVITY_KEY = 'ls-last-activity';
+const SUPABASE_URL = 'https://xgcseugigsdgmyrfrofj.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhnY3NldWdpZ3NkZ215cmZyb2ZqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjM3NzAwNjcsImV4cCI6MjA3OTM0NjA2N30.lzDmtmxi1D88MihkfSBnHeHpyfiqeo9C5XDqshQNOso';
+const REMEMBER_KEY = 'ls-remembered-auth';
 const PENDING_REFERRAL_KEY = 'pending-referral-link';
-const AUTO_LOGIN_EXPIRY_DAYS = 3; // Forçar login manual após 3 dias de inatividade
 // Vite substitui import.meta.env em build; fallback para window.* caso seja injetado manualmente
 const HCAPTCHA_SITEKEY = (import.meta.env?.VITE_HCAPTCHA_SITEKEY ?? null)
   || window.HCAPTCHA_SITEKEY
   || null;
 const CAPTCHA_REQUIRED = Boolean(HCAPTCHA_SITEKEY);
 
-// 🔐 Placeholder - será preenchido após carregar do backend
-export let supabase: any = null;
-
-/**
- * Carrega credenciais do Supabase do backend de forma segura
- * DEVE ser chamado antes de qualquer operação de auth
- */
-export async function initializeSupabase(): Promise<boolean> {
-  if (supabase) return true; // Já inicializado
-  
-  try {
-    console.log('[AUTH] Carregando credenciais do Supabase...');
-    
-    // 🔐 Chamar backend para obter credenciais
-    const response = await fetch('/api/config', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'getConfig' })
-    });
-    
-    if (!response.ok) {
-      throw new Error(`Backend retornou ${response.status}`);
+export const supabase = createClient(SUPABASE_URL, SUPABASE_KEY, {
+  auth: {
+    autoRefreshToken: true,
+    persistSession: true,
+    detectSessionInUrl: true, // 🔥 PRECISA TRUE para pegar tokens do reset link
+    storage: window.localStorage,
+    storageKey: 'sb-auth-token',
+    flowType: 'implicit' // 🔥 MUDEI PARA IMPLICIT (mais simples)
+  },
+  global: {
+    headers: {
+      'X-Client-Info': 'loot-skirmish-web'
     }
-    
-    const config = await response.json();
-    
-    if (!config.supabaseUrl || !config.supabaseKey) {
-      throw new Error('Configuração incompleta do backend');
-    }
-    
-    SUPABASE_URL = config.supabaseUrl;
-    SUPABASE_KEY = config.supabaseKey;
-    
-    console.log('[AUTH] ✅ Credenciais carregadas com sucesso');
-    
-    // Criar cliente Supabase
-    supabase = createClient(SUPABASE_URL, SUPABASE_KEY, {
-      auth: {
-        autoRefreshToken: true,
-        persistSession: true,
-        detectSessionInUrl: true,
-        storage: window.localStorage,
-        storageKey: 'sb-auth-token',
-        flowType: 'implicit'
-      },
-      global: {
-        headers: {
-          'X-Client-Info': 'loot-skirmish-web'
-        }
-      }
-    });
-    
-    return true;
-  } catch (err) {
-    console.error('[AUTH] ❌ Erro ao carregar credenciais:', err);
-    showAlert('error', '🔐 Erro de Segurança', 
-      'Não foi possível estabelecer conexão segura com o servidor. Por favor, recarregue a página.');
-    return false;
   }
-}
+});
 
 let authStateSubscription: { unsubscribe: () => void } | null = null;
 let loginCaptchaToken: string | null = null;
@@ -132,61 +90,51 @@ let hcaptchaScriptPromise: Promise<HCaptchaInstance> | null = null;
 
 // ============ HELPERS ============
 
-/**
- * Verifica se Supabase está inicializado e pronto
- * Lança erro se não estiver
- */
-export function ensureSupabaseInitialized(): any {
-  if (!supabase) {
-    throw new Error('[AUTH] Supabase não foi inicializado. Chame initializeSupabase() primeiro.');
-  }
-  return supabase;
-}
-
-/**
- * Atualiza timestamp de última atividade
- */
-function updateLastActivity(): void {
+function getRememberedCredentials(): RememberedCredentials | null {
   try {
-    localStorage.setItem(LAST_ACTIVITY_KEY, Date.now().toString());
-  } catch {
-    // Ignore storage errors
+    const raw = localStorage.getItem(REMEMBER_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed?.email || !parsed?.password) return null;
+    return {
+      email: parsed.email,
+      password: atob(parsed.password)
+    };
+  } catch (err) {
+    console.warn('Could not read remembered credentials', err);
+    return null;
   }
 }
 
-/**
- * Verifica se a sessão expirou por inatividade (3 dias)
- * Retorna true se precisa login manual
- */
-function shouldForceRelogin(): boolean {
+function persistRememberedCredentials(email: string, password: string, remember: boolean): void {
+  if (!remember || !email || !password) {
+    localStorage.removeItem(REMEMBER_KEY);
+    return;
+  }
+
   try {
-    const lastActivity = localStorage.getItem(LAST_ACTIVITY_KEY);
-    if (!lastActivity) return false;
-    
-    const lastActivityTime = parseInt(lastActivity, 10);
-    const threeDaysMs = AUTO_LOGIN_EXPIRY_DAYS * 24 * 60 * 60 * 1000;
-    const elapsed = Date.now() - lastActivityTime;
-    
-    if (elapsed > threeDaysMs) {
-      console.log('[AUTH] Sessão inativa por mais de 3 dias - forçando login manual');
-      return true;
-    }
-    
-    return false;
-  } catch {
-    return false;
+    localStorage.setItem(
+      REMEMBER_KEY,
+      JSON.stringify({ email, password: btoa(password) })
+    );
+  } catch (err) {
+    console.warn('Could not persist remembered credentials', err);
   }
 }
 
-/**
- * Limpa dados de sessão ao forçar relogin
- */
-function clearSessionData(): void {
-  try {
-    localStorage.removeItem(LAST_ACTIVITY_KEY);
-    localStorage.removeItem('sb-auth-token');
-  } catch {
-    // Ignore
+function hydrateAuthForm(): void {
+  const remembered = getRememberedCredentials();
+  const emailEl = document.getElementById('login-email');
+  const passwordEl = document.getElementById('login-password');
+  const rememberEl = document.getElementById('remember-me');
+
+  if (rememberEl) {
+    rememberEl.checked = true;
+  }
+
+  if (remembered && emailEl && passwordEl) {
+    emailEl.value = remembered.email;
+    passwordEl.value = remembered.password;
   }
 }
 
@@ -560,12 +508,14 @@ export async function handleLogin(): Promise<void> {
   const emailEl = document.getElementById('login-email');
   const passwordEl = document.getElementById('login-password');
   const errorEl = document.getElementById('login-error');
+  const rememberEl = document.getElementById('remember-me');
   const termsEl = document.getElementById('login-terms-accept');
   const loginBtn = document.querySelector('#login-form button');
   if (!emailEl || !passwordEl || !errorEl) return;
 
   const email = emailEl.value;
   const password = passwordEl.value;
+  const remember = !!rememberEl?.checked;
   const termsAccepted = !!termsEl?.checked;
   const captchaToken = CAPTCHA_REQUIRED ? loginCaptchaToken : null;
 
@@ -623,8 +573,7 @@ export async function handleLogin(): Promise<void> {
     return;
   }
   
-  // ✅ Atualizar timestamp de última atividade
-  updateLastActivity();
+  persistRememberedCredentials(email, password, remember);
   
   // Salvar aceitação dos termos e atualizar email
   if (data?.user) {
@@ -1048,12 +997,6 @@ export async function loadUserData(
  * @param {Function} loadUserDataCallback - Callback para carregar dados do usuário
  */
 export function setupAuthStateListener(loadUserDataCallback: (user: User) => void): void {
-  // 🔐 Garantir que Supabase foi inicializado
-  if (!supabase) {
-    console.error('[AUTH] setupAuthStateListener chamado antes de supabase estar pronto!');
-    return;
-  }
-  
   // Evitar múltiplos listeners (hot reload / chamadas repetidas)
   if (authStateSubscription) {
     try {
@@ -1071,19 +1014,6 @@ export function setupAuthStateListener(loadUserDataCallback: (user: User) => voi
 
     // Em refresh com sessão persistida, Supabase dispara INITIAL_SESSION
     if ((event === 'INITIAL_SESSION' || event === 'SIGNED_IN') && session?.user) {
-      // 🔒 Verificar se precisa forçar relogin por inatividade (3 dias)
-      if (shouldForceRelogin()) {
-        console.log('[AUTH] Forçando relogin por inatividade de 3 dias');
-        supabase.auth.signOut();
-        clearSessionData();
-        clearActiveUser();
-        showAlert('info', '🔐 Sessão Expirada', 'Sua sessão expirou por inatividade. Por favor, faça login novamente.');
-        return;
-      }
-      
-      // ✅ Atualizar timestamp de atividade
-      updateLastActivity();
-      
       loadUserDataCallback(session.user);
       return;
     }
@@ -1375,6 +1305,7 @@ export function prompt2FACode(): Promise<string | null> {
 }
 
 function initializeAuthUI(): void {
+  hydrateAuthForm();
   prefillReferralFromUrl();
   detectPasswordReset();
   renderHCaptcha();
@@ -1387,48 +1318,12 @@ if (document.readyState === 'loading') {
 }
 
 // 🌍 Expor funções para o escopo global (HTML onclick)
-// Wraps com verificação de inicialização
-window.handleLogin = async function() {
-  ensureSupabaseInitialized();
-  return handleLogin();
-};
-
-window.handleRegister = async function() {
-  ensureSupabaseInitialized();
-  return handleRegister();
-};
-
-window.handlePasswordReset = async function() {
-  ensureSupabaseInitialized();
-  return handlePasswordReset();
-};
-
-window.handleUpdatePassword = function() {
-  ensureSupabaseInitialized();
-  return handleUpdatePassword();
-};
-
-window.updatePasswordAfterReset = async function(password: string) {
-  ensureSupabaseInitialized();
-  return updatePasswordAfterReset(password);
-};
-
-window.requestSetup2FA = async function() {
-  ensureSupabaseInitialized();
-  return requestSetup2FA();
-};
-
-window.verifyAndEnable2FA = async function() {
-  ensureSupabaseInitialized();
-  return verifyAndEnable2FA();
-};
-
-window.disable2FA = async function() {
-  ensureSupabaseInitialized();
-  return disable2FA();
-};
-
-window.prompt2FACode = async function() {
-  ensureSupabaseInitialized();
-  return prompt2FACode();
-};
+window.handleLogin = handleLogin;
+window.handleRegister = handleRegister;
+window.handlePasswordReset = handlePasswordReset;
+window.handleUpdatePassword = handleUpdatePassword;
+window.updatePasswordAfterReset = updatePasswordAfterReset;
+window.requestSetup2FA = requestSetup2FA;
+window.verifyAndEnable2FA = verifyAndEnable2FA;
+window.disable2FA = disable2FA;
+window.prompt2FACode = prompt2FACode;

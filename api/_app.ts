@@ -34,7 +34,6 @@ type ApiRequestBody = {
   action?: string;
   userId?: string;
   authToken?: string;
-  [key: string]: unknown;
 };
 
 export interface ApiRequest {
@@ -97,70 +96,48 @@ export default async function handler(req: ApiRequest, res: ApiResponse): Promis
     return;
   }
 
-  // 🔐 ENDPOINT DE CONFIGURAÇÃO - Servir credenciais do Supabase de forma segura
-  // Apenas POST para evitar cache e deixar claro que é uma ação
-  if (req.method === 'POST') {
-    let body = req.body;
+  // CSP VIOLATION REPORTING ENDPOINT
+  if (req.method === 'POST' && req.body && typeof req.body === 'object') {
+    const body = req.body as any;
     
-    // Se body é string, fazer parse
-    if (typeof body === 'string') {
+    // Detectar se é um CSP report
+    if (body['csp-report'] || body.documentUri || body['violated-directive']) {
       try {
-        body = JSON.parse(body);
-      } catch {
-        body = {};
-      }
-    }
-    
-    // Checar se é request de config
-    if (body?.action === 'getConfig') {
-      return res.status(200).json({
-        supabaseUrl: process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL,
-        supabaseKey: process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY
-      });
-    }
-
-    // CSP VIOLATION REPORTING ENDPOINT
-    if (body && typeof body === 'object') {
-      // Detectar se é um CSP report
-      if ('csp-report' in body || 'documentUri' in body || 'violated-directive' in body) {
-        try {
-          const violation = (body['csp-report'] as Record<string, unknown>) || body;
-          const ip = getRequestIp(req);
+        const violation = body['csp-report'] || body;
+        const ip = getRequestIp(req);
         
-          // Log estruturado
-          const securityEvent = createSecurityEvent({
-            type: 'CSP_VIOLATION',
+        // Log estruturado
+        const securityEvent = createSecurityEvent({
+          type: 'CSP_VIOLATION',
+          severity: 'MEDIUM',
+          ip,
+          details: {
+            documentUri: violation['document-uri'] || violation.documentUri,
+            violatedDirective: violation['violated-directive'] || violation.violatedDirective,
+            blockedUri: violation['blocked-uri'] || violation.blockedUri,
+            effectiveDirective: violation['effective-directive'] || violation.effectiveDirective
+          }
+        });
+
+        // Salvar no banco (ignorar erros silenciosamente)
+        supabase
+          .from('security_events')
+          .insert({
+            event_type: 'CSP_VIOLATION',
             severity: 'MEDIUM',
-            ip,
-            details: {
-              documentUri: (violation['document-uri'] as string) || (violation.documentUri as string),
-              violatedDirective: (violation['violated-directive'] as string) || (violation.violatedDirective as string),
-              blockedUri: (violation['blocked-uri'] as string) || (violation.blockedUri as string),
-              effectiveDirective: (violation['effective-directive'] as string) || (violation.effectiveDirective as string)
-            }
-          });
+            ip_address: ip,
+            details: securityEvent.details,
+            created_at: new Date().toISOString()
+          })
+          .then(() => {}, () => {});
 
-          // Salvar no banco (ignorar erros silenciosamente)
-          supabase
-            .from('security_events')
-            .insert({
-              event_type: 'CSP_VIOLATION',
-              severity: 'MEDIUM',
-              ip_address: ip,
-              details: securityEvent.details,
-              created_at: new Date().toISOString()
-            })
-            .then(() => {}, () => {});
-
-          return res.status(204).end();
-        } catch {
-          return res.status(204).end();
-        }
+        return res.status(204).end();
+      } catch {
+        return res.status(204).end();
       }
     }
   }
 
-  // Se chegou aqui e não é POST, rejeitar
   if (req.method !== 'POST') {
     res.status(405).json({ error: 'Method not allowed' });
     return;
