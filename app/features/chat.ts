@@ -287,7 +287,7 @@ async function getSessionToken(): Promise<string | null> {
 async function callFriendsApi(action: string, payload: Record<string, any> = {}): Promise<any> {
   const token = await getSessionToken();
   if (!currentUserId || !token) throw new Error('Not authenticated');
-  const res = await fetch('/api/profile', {
+  const res = await fetch('/api/_profile', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ action, userId: currentUserId, authToken: token, ...payload })
@@ -655,7 +655,7 @@ export async function sendChatMessage(): Promise<void> {
       return;
     }
     
-    const response = await fetch('/api/chat', {
+    const response = await fetch('/api/_chat', {
       method: 'POST',
       headers: await addCsrfHeader({
         'Content-Type': 'application/json',

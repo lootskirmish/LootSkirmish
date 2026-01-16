@@ -161,7 +161,7 @@ async function callFriendsApi(action: string, payload: Record<string, any> = {})
   const token = await getSessionToken();
   if (!token) throw new Error('Not authenticated');
 
-  const response = await fetch('/api/profile', {
+  const response = await fetch('/api/_profile', {
     method: 'POST',
     headers: await addCsrfHeader({
       'Content-Type': 'application/json'

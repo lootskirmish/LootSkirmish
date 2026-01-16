@@ -723,7 +723,7 @@ window.proceedToCheckout = async function() {
     );
 
     // Criar pedido
-    const response = await fetch('/api/shop', {
+    const response = await fetch('/api/_shop', {
       method: 'POST',
       headers,
       body: JSON.stringify({

@@ -246,7 +246,7 @@ export async function loadPublicProfile(username: string, calculateLevel?: (xp: 
     // First, perform a STRICT server-side validation using the checkPublicProfile endpoint
     let profileCheckResponse;
     try {
-      profileCheckResponse = await fetch('/api/profile', {
+      profileCheckResponse = await fetch('/api/_profile', {
         method: 'POST',
         headers: await addCsrfHeader({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({

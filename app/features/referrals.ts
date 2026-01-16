@@ -119,7 +119,7 @@ async function fetchReferralStats(): Promise<{ data: any; session: any }> {
   const { data: { session } } = await supabase.auth.getSession();
   if (!session?.access_token) throw new Error('Not authenticated');
 
-  const response = await fetch('/api/referrals', {
+  const response = await fetch('/api/_referrals', {
     method: 'POST',
     headers: await addCsrfHeader({ 'Content-Type': 'application/json' }),
     body: JSON.stringify({
@@ -276,7 +276,7 @@ async function withdrawEarnings(): Promise<void> {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session?.access_token) throw new Error('Not authenticated');
 
-    const response = await fetch('/api/referrals', {
+    const response = await fetch('/api/_referrals', {
       method: 'POST',
       headers: await addCsrfHeader({ 'Content-Type': 'application/json' }),
       body: JSON.stringify({
@@ -314,7 +314,7 @@ async function loadMoreHistory(): Promise<void> {
   if (!session?.access_token) return;
 
   const nextPage = historyPage + 1;
-  const response = await fetch('/api/referrals', {
+  const response = await fetch('/api/_referrals', {
     method: 'POST',
     headers: await addCsrfHeader({ 'Content-Type': 'application/json' }),
     body: JSON.stringify({
