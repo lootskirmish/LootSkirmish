@@ -145,7 +145,7 @@ function showSuccess(ticketId: string, sent: 'immediately' | 'delayed'): void {
 
 async function submitTicket(formData: SupportFormData): Promise<TicketSubmitResponse> {
   try {
-    const response = await fetch('/api/_support', {
+    const response = await fetch('/api/support', {
       method: 'POST',
       headers: await addCsrfHeader({
         'Content-Type': 'application/json'

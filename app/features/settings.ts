@@ -156,7 +156,7 @@ function bindSettingsUIOnce(): void {
             (this.nextElementSibling as HTMLElement).textContent = 'Saving...';
           }
 
-          const response = await fetch('/api/_profile', {
+          const response = await fetch('/api/profile', {
             method: 'POST',
             headers: await addCsrfHeader({ 'Content-Type': 'application/json' }),
             body: JSON.stringify({
@@ -495,7 +495,7 @@ export async function enableUsernameEdit(): Promise<void> {
 
       if (button) button.disabled = true;
 
-      const response = await fetch('/api/_profile', {
+      const response = await fetch('/api/profile', {
         method: 'POST',
         headers: await addCsrfHeader({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({

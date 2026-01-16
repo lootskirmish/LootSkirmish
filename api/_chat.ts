@@ -109,7 +109,7 @@ async function handleSendMessage(req: ApiRequest, res: ApiResponse): Promise<voi
     const { userId, authToken, message } = req.body || {};
     
     // 1. Validação de schema
-    const userIdValidation = ValidationSchemas.email.validate(userId) || { success: false };
+    const userIdValidation = ValidationSchemas.userId.validate(userId) || { success: false };
     if (!userIdValidation.success) {
       const log = createSecureLog({
         action: 'INVALID_USER_ID',

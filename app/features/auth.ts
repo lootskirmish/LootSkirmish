@@ -340,7 +340,7 @@ function prefillReferralFromUrl(): void {
 async function attemptReferralLink(referralCode: string, userId: string, authToken: string): Promise<boolean> {
   if (!referralCode || !userId || !authToken) return false;
   try {
-    const response = await fetch('/api/_referrals', {
+    const response = await fetch('/api/referrals', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -1057,7 +1057,7 @@ export function setupAuthStateListener(loadUserDataCallback: (user: User) => voi
  */
 export async function requestSetup2FA(userId: string, authToken: string): Promise<{ secret: string; qrCode: string } | null> {
   try {
-    const response = await fetch('/api/_profile', {
+    const response = await fetch('/api/profile', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -1104,7 +1104,7 @@ export async function verifyAndEnable2FA(userId: string, authToken: string, secr
       return false;
     }
 
-    const response = await fetch('/api/_profile', {
+    const response = await fetch('/api/profile', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -1154,7 +1154,7 @@ export async function disable2FA(userId: string, authToken: string, code: string
       return false;
     }
 
-    const response = await fetch('/api/_profile', {
+    const response = await fetch('/api/profile', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

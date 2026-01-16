@@ -704,6 +704,7 @@ export interface ValidationSchema {
 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const usernameRegex = /^[a-zA-Z0-9_]{3,20}$/;
 const referralCodeRegex = /^[A-Z0-9]{6,}$/;
+const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export const ValidationSchemas = {
   email: {
@@ -754,6 +755,14 @@ export const ValidationSchemas = {
     validate: (data: unknown) => {
       if (typeof data !== 'string') return { success: false, error: 'Referral code must be string' };
       if (!referralCodeRegex.test(data)) return { success: false, error: 'Invalid referral code format' };
+      return { success: true, data };
+    }
+  },
+
+  userId: {
+    validate: (data: unknown) => {
+      if (typeof data !== 'string') return { success: false, error: 'User ID must be string' };
+      if (!uuidRegex.test(data)) return { success: false, error: 'Invalid user ID format' };
       return { success: true, data };
     }
   }

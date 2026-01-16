@@ -372,7 +372,7 @@ export async function fetchCsrfToken(userId: string, authToken: string): Promise
     retryAttempts.set(retryKey, attempts + 1);
     lastRetryTime.set(retryKey, Date.now());
     
-    const response = await fetch('/api/_profile', {
+    const response = await fetch('/api/profile', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -429,7 +429,7 @@ export async function renewCsrfToken(userId: string, authToken: string): Promise
  */
 export async function clearCsrfTokenOnServer(userId: string, authToken: string): Promise<void> {
   try {
-    await fetch('/api/_profile', {
+    await fetch('/api/profile', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

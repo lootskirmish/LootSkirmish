@@ -393,7 +393,7 @@ async function generatePreview(): Promise<void> {
       const requestToken = previewToken;
 
       try {
-        const response = await fetch('/api/_caseopening', {
+        const response = await fetch('/api/caseopening', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json'
@@ -711,7 +711,7 @@ async function purchasePass(passId: string): Promise<void> {
       return;
     }
     
-    const response = await fetch('/api/_caseopening', {
+    const response = await fetch('/api/caseopening', {
       method: 'POST',
       headers: await addCsrfHeader({
         'Content-Type': 'application/json',
@@ -819,7 +819,7 @@ async function upgradeCaseDiscount(): Promise<void> {
       return;
     }
 
-    const response = await fetch('/api/_caseopening', {
+    const response = await fetch('/api/caseopening', {
       method: 'POST',
       headers: await addCsrfHeader({
         'Content-Type': 'application/json'
@@ -1091,7 +1091,7 @@ async function openCase(): Promise<void> {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session?.access_token || !currentUser?.id) throw new Error('Not authenticated');
     
-    const response = await fetch('/api/_caseopening', {
+    const response = await fetch('/api/caseopening', {
       method: 'POST',
       headers: await addCsrfHeader({
         'Content-Type': 'application/json',

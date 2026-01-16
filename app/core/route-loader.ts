@@ -284,7 +284,7 @@ async function _loadProfileRoute(): Promise<void> {
 
       // GUARD: Perform strict server-side validation before attempting to load public profile
       try {
-        const checkResponse = await fetch('/api/_profile', {
+        const checkResponse = await fetch('/api/profile', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({

@@ -612,7 +612,7 @@ export async function purchaseInventoryUpgrade(): Promise<void> {
       ctaEl.textContent = 'Processing...';
     }
 
-    const response = await fetch('/api/_inventory', {
+    const response = await fetch('/api/inventory', {
       method: 'POST',
       headers: await addCsrfHeader({ 'Content-Type': 'application/json' }),
       body: JSON.stringify({
@@ -758,7 +758,7 @@ export async function sellItem(itemId: string, userId: string, renderCallback: (
       return;
     }
     
-    const response = await fetch('/api/_inventory', {
+    const response = await fetch('/api/inventory', {
       method: 'POST',
       headers: await addCsrfHeader({
         'Content-Type': 'application/json',
@@ -844,7 +844,7 @@ export async function sellSelected(): Promise<void> {
       return;
     }
     
-    const response = await fetch('/api/_inventory', {
+    const response = await fetch('/api/inventory', {
       method: 'POST',
       headers: await addCsrfHeader({
         'Content-Type': 'application/json',
@@ -928,7 +928,7 @@ export async function confirmSellAll(): Promise<void> {
       return;
     }
     
-    const response = await fetch('/api/_inventory', {
+    const response = await fetch('/api/inventory', {
       method: 'POST',
       headers: await addCsrfHeader({
         'Content-Type': 'application/json',
