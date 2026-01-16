@@ -733,15 +733,30 @@ function openPaymentModal(productId: string, type: 'package' | 'subscription'): 
     });
   });
 
-  // Bind evento de fechar modal
-  const closeBtn = modal.querySelector('.payment-close-btn');
-  if (closeBtn) {
-    const newCloseBtn = closeBtn.cloneNode(true) as HTMLElement;
-    closeBtn.parentNode?.replaceChild(newCloseBtn, closeBtn);
-    newCloseBtn.addEventListener('click', () => {
-      if (window.closeShopPaymentModal) {
-        window.closeShopPaymentModal();
+  // Bind evento de fechar modal - Usar delegação de evento
+  const closeBtnOld = modal.querySelector('.payment-close-btn');
+  if (closeBtnOld && closeBtnOld.parentNode) {
+    const newCloseBtn = closeBtnOld.cloneNode(true) as HTMLElement;
+    closeBtnOld.parentNode.replaceChild(newCloseBtn, closeBtnOld);
+    
+    // Remover evento onclick do HTML e adicionar via addEventListener
+    newCloseBtn.onclick = null;
+    newCloseBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const modal = document.getElementById('shop-payment-modal');
+      if (modal) {
+        modal.classList.remove('active');
+        setTimeout(() => {
+          const productContainer = document.getElementById('payment-product-container');
+          if (productContainer) {
+            productContainer.innerHTML = '';
+          }
+        }, 300);
       }
+      selectedProduct = null;
+      selectedPaymentMethod = 'stripe';
+      battlePassAddonEnabled = false;
     });
   }
   
