@@ -533,13 +533,13 @@ export function requiresCsrfProtection(req: ApiRequest, path?: string): boolean 
 
 /**
  * Middleware para validar CSRF em requisições
- * Retorna informações detalhadas incluindo novo token quando necessário
+ * Retorna true se válido, false se inválido
  */
 export function validateCsrfMiddleware(
   req: ApiRequest,
   userId: string,
   path?: string
-): { valid: boolean; error?: string; newToken?: string } {
+): { valid: boolean; error?: string } {
   // Verifica se a requisição precisa de proteção CSRF
   if (!requiresCsrfProtection(req, path)) {
     return { valid: true };
@@ -549,45 +549,11 @@ export function validateCsrfMiddleware(
   const csrfToken = req.headers?.['x-csrf-token'];
   const tokenString = Array.isArray(csrfToken) ? csrfToken[0] : csrfToken;
   
-  // Se não tem token, gerar novo
-  if (!tokenString) {
-    console.warn(`[CSRF] ❌ Token ausente para user ${maskUserId(userId)}`);
-    const newToken = generateCsrfToken(userId);
-    
-    // Log de evento de segurança
-    createSecurityEvent({
-      type: 'CSRF_VIOLATION',
-      severity: 'MEDIUM',
-      userId,
-      details: { reason: 'Token ausente', path }
-    });
-    
-    return { 
-      valid: false, 
-      error: 'Missing CSRF token',
-      newToken // Retornar novo token para o cliente
-    };
-  }
-  
   // Valida o token
   if (!validateCsrfToken(userId, tokenString)) {
-    console.error(`[CSRF] ❌ Validação falhou para user ${maskUserId(userId)}`);
-    
-    // Gerar novo token para o cliente usar
-    const newToken = generateCsrfToken(userId);
-    
-    // Log de evento de segurança
-    createSecurityEvent({
-      type: 'CSRF_VIOLATION',
-      severity: 'HIGH',
-      userId,
-      details: { reason: 'Token inválido', path }
-    });
-    
     return { 
       valid: false, 
-      error: 'Invalid CSRF token',
-      newToken // Retornar novo token para o cliente
+      error: 'Invalid or missing CSRF token' 
     };
   }
   
