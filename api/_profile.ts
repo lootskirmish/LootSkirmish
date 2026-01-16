@@ -872,7 +872,7 @@ async function handleGetCsrfToken(req: ApiRequest, res: ApiResponse, body: any) 
     return res.status(401).json({ error: session.error || 'Invalid session' });
   }
 
-  // Gera o token CSRF e armazena no Supabase
+  // Reusa token existente se válido; caso contrário, gera e armazena no Supabase
   const csrfToken = await generateCsrfToken(supabase, userId);
   
   if (!csrfToken) {

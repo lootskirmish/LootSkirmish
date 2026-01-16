@@ -3,6 +3,7 @@
 // ============================================================
 
 import { store, dataActions, authActions } from './store';
+import { routerActions } from './store';
 
 // ============================================================
 // CONSTANTS
@@ -23,6 +24,13 @@ interface PersistedState {
   timestamp: number;
   expiresAt: number;
   data: {
+    // Router
+    route?: {
+      currentPath: string;
+      currentScreen: string;
+      previousPath: string | null;
+    };
+
     // Screen & Navigation
     currentScreen: string;
     
@@ -57,6 +65,12 @@ interface PersistedState {
     
     // Leaderboard
     leaderboard?: {
+      data?: any[];
+      lastFetched?: number;
+    };
+
+    // Cases catalog
+    cases?: {
       data?: any[];
       lastFetched?: number;
     };
@@ -109,6 +123,11 @@ function getCurrentState(): PersistedState | null {
   
   // Recolher dados de diferentes partes da aplicação
   const persistData: PersistedState['data'] = {
+    route: {
+      currentPath: state.router?.currentPath ?? '/',
+      currentScreen: state.router?.currentScreen ?? 'menu',
+      previousPath: state.router?.previousPath ?? null,
+    },
     currentScreen: (document.querySelector('.screen.active') as HTMLElement)?.id || 'menu',
     
     // Inventory
@@ -133,6 +152,12 @@ function getCurrentState(): PersistedState | null {
     leaderboard: {
       data: state.data?.leaderboard?.data || [],
       lastFetched: state.data?.leaderboard?.isLoaded ? now : 0,
+    },
+
+    // Cases
+    cases: {
+      data: state.data?.cases?.data || [],
+      lastFetched: state.data?.cases?.isLoaded ? now : 0,
     },
     
     // Window globals
@@ -264,6 +289,20 @@ export async function restoreState(): Promise<boolean> {
       store.dispatch(dataActions.setLeaderboard({
         data: state.data.leaderboard.data,
         isLoaded: true,
+      }));
+    }
+
+    if (state.data.cases?.data?.length) {
+      store.dispatch(dataActions.setCases({
+        data: state.data.cases.data,
+        isLoaded: true,
+      }));
+    }
+
+    if (state.data.route) {
+      store.dispatch(routerActions.setRoute({
+        path: state.data.route.currentPath,
+        screen: state.data.route.currentScreen,
       }));
     }
     

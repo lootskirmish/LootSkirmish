@@ -376,6 +376,25 @@ export function getIdentifier(req: ApiRequest, userId?: string): string {
  */
 export async function generateCsrfToken(supabase: SupabaseClient, userId: string): Promise<string | null> {
   try {
+    // Tentar reusar token existente se ainda válido
+    const { data: existing, error: fetchErr } = await supabase
+      .from('player_stats')
+      .select('csrf_token, csrf_token_expires_at')
+      .eq('user_id', userId)
+      .single();
+
+    if (fetchErr) {
+      console.warn('[CSRF] Não foi possível ler token atual, gerando novo:', fetchErr.message);
+    }
+
+    if (existing?.csrf_token && existing?.csrf_token_expires_at) {
+      const expiresAtDate = new Date(existing.csrf_token_expires_at);
+      if (expiresAtDate > new Date()) {
+        // Token ainda válido, reusar
+        return existing.csrf_token;
+      }
+    }
+
     // Gera token aleatório de 32 bytes (256 bits)
     const token = crypto.randomBytes(32).toString('base64url');
     
