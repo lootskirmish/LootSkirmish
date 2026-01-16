@@ -64,8 +64,10 @@ interface CaseCost {
 
 interface AdjustedPoolItem {
   item: CaseItem;
-  min: number;
-  max: number;
+  min?: number;
+  max?: number;
+  rarity?: Rarity;
+  cumulative?: number;
 }
 
 interface SlotData {
@@ -121,10 +123,10 @@ function getCaseOpeningEls(): CaseOpeningElements {
     lootTableGrid: document.getElementById('loot-table-grid'),
     reelWrapper: document.getElementById('reel-wrapper'),
     backToGallery: document.getElementById('back-to-gallery'),
-    quickSpin: document.getElementById('quick-spin-checkbox'),
+    quickSpin: document.getElementById('quick-spin-checkbox') as HTMLInputElement | null,
     openCaseBtn: document.getElementById('open-case-btn'),
     resultContinueBtn: document.getElementById('result-continue-btn'),
-    priceFilter: document.getElementById('price-filter'),
+    priceFilter: document.getElementById('price-filter') as HTMLSelectElement | null,
     totalCostDisplay: document.getElementById('total-cost-display'),
     baseCostDisplay: document.getElementById('base-cost-display'),
     discountChip: document.getElementById('discount-chip'),
@@ -211,20 +213,23 @@ function createSeededRNG(seed: number | string): () => number {
 // ============================================================
 // ITEM GENERATION (CLIENT-SIDE - FOR VISUAL ONLY)
 // ============================================================
+// ITEM GENERATION (CLIENT-SIDE - FOR VISUAL ONLY)
+// ============================================================
 
 function buildAdjustedPools(caseData: Case): AdjustedPoolItem[] {
-  const pools = [];
+  const pools: AdjustedPoolItem[] = [];
   const buckets = RARITIES.map((rarity, idx) => {
     const items = caseData.items.filter((it) => it.rarityIndex === idx);
     return items.length ? { rarity, items } : null;
-  }).filter(Boolean);
+  }).filter((b): b is { rarity: Rarity; items: CaseItem[] } => b !== null);
 
   if (!buckets.length) return pools;
 
-  const totalBase = buckets.reduce((sum, b) => sum + b.rarity.chance, 0);
+  const totalBase = buckets.reduce((sum, b) => sum + (b?.rarity?.chance || 0), 0);
   let cumulative = 0;
 
   for (const bucket of buckets) {
+    if (!bucket) continue;
     const rarityChance = (bucket.rarity.chance / totalBase) * 100;
     const perItemChance = rarityChance / bucket.items.length;
     for (const item of bucket.items) {
@@ -238,7 +243,9 @@ function buildAdjustedPools(caseData: Case): AdjustedPoolItem[] {
   return pools;
 }
 
-function generateRandomItem(caseData: Case): CaseItem {
+function generateRandomItem(caseData: Case | null): CaseItem | null {
+  if (!caseData) return null;
+  
   const pools = buildAdjustedPools(caseData);
   if (!pools.length) {
     const fallback = caseData.items?.[0];
@@ -246,25 +253,25 @@ function generateRandomItem(caseData: Case): CaseItem {
       ? {
           name: fallback.name,
           icon: fallback.icon,
-          rarity: RARITIES[Math.min(fallback.rarityIndex, RARITIES.length - 1)].name,
-          rarityIcon: RARITIES[Math.min(fallback.rarityIndex, RARITIES.length - 1)].icon,
-          color: RARITIES[Math.min(fallback.rarityIndex, RARITIES.length - 1)].color,
-          value: parseFloat(((fallback.minValue + fallback.maxValue) / 2).toFixed(2))
+          minValue: RARITIES[Math.min(fallback.rarityIndex, RARITIES.length - 1)]?.chance || 0,
+          maxValue: RARITIES[Math.min(fallback.rarityIndex, RARITIES.length - 1)]?.chance || 0,
+          rarityIndex: fallback.rarityIndex
         }
       : null;
   }
 
   const roll = Math.random() * 100;
-  const hit = pools.find(p => roll <= p.cumulative) || pools[pools.length - 1];
+  const hit = pools.find(p => (p.cumulative || 0) >= roll) || pools[pools.length - 1];
+  if (!hit) return null;
+  
   const value = hit.item.minValue + (Math.random() * (hit.item.maxValue - hit.item.minValue));
 
   return {
     name: hit.item.name,
     icon: hit.item.icon,
-    rarity: hit.rarity.name,
-    rarityIcon: hit.rarity.icon,
-    color: hit.rarity.color,
-    value: parseFloat(value.toFixed(2))
+    minValue: parseFloat(value.toFixed(2)),
+    maxValue: parseFloat(value.toFixed(2)),
+    rarityIndex: hit.item.rarityIndex
   };
 }
 
@@ -474,12 +481,12 @@ function renderPreviewItems(slotIndex: number, isHorizontal: boolean): void {
   const track = document.getElementById(`reel-track-${slotIndex}`);
   if (!track) return;
   
-  const items = previewItems[slotIndex] || [];
-  if (items.length === 0) return;
+  const slotItems = previewItems[slotIndex];
+  if (!Array.isArray(slotItems) || slotItems.length === 0) return;
   
   const itemClass = isHorizontal ? 'reel-item-horizontal' : 'reel-item-vertical';
   
-  track.innerHTML = items.map(item => `
+  track.innerHTML = slotItems.map((item: PreviewItem) => `
     <div class="reel-item ${itemClass}" style="border-color: ${item.color}; background: ${item.color}20;">
       <div class="reel-item-icon">${item.icon}</div>
       <div class="reel-item-name">${item.name}</div>
@@ -498,31 +505,37 @@ function renderPreviewItems(slotIndex: number, isHorizontal: boolean): void {
 
 function updateQuantityButtons(): void {
   document.querySelectorAll('.qty-btn').forEach(btn => {
-    const qty = parseInt(btn.getAttribute('data-qty'));
+    const element = btn as HTMLElement;
+    const qtyStr = element.getAttribute('data-qty');
+    if (!qtyStr) return;
+    
+    const qty = parseInt(qtyStr);
     const isActive = qty === selectedQuantity;
     const canOpen = canOpenQuantity(ownedPasses, qty);
     const requiredPass = getRequiredPassForQuantity(qty);
     
-    btn.classList.toggle('active', isActive);
-    btn.classList.toggle('locked', !canOpen && !!requiredPass);
-    btn.setAttribute('aria-disabled', String(!canOpen));
+    element.classList.toggle('active', isActive);
+    element.classList.toggle('locked', !canOpen && !!requiredPass);
+    element.setAttribute('aria-disabled', String(!canOpen));
     
     // Visual feedback
     if (!canOpen && requiredPass) {
       const config = getPassConfig(requiredPass);
-      btn.style.opacity = '0.65';
-      btn.style.cursor = 'pointer';
-      btn.title = `Requires ${config.name} (${config.cost} 💎)`;
+      if (config) {
+        (element as HTMLElement).style.opacity = '0.65';
+        (element as HTMLElement).style.cursor = 'pointer';
+        (element as HTMLElement).title = `Requires ${config.name} (${config.cost} 💎)`;
+      }
     } else {
-      btn.style.opacity = '1';
-      btn.style.cursor = 'pointer';
-      btn.title = '';
+      (element as HTMLElement).style.opacity = '1';
+      (element as HTMLElement).style.cursor = 'pointer';
+      (element as HTMLElement).title = '';
     }
   });
 }
 
 function updateTotalCost(): void {
-  const caseData = getCaseById(currentCaseId);
+  const caseData = getCaseById(currentCaseId || undefined);
   if (!caseData) return;
   
   const { totalCostDisplay, openCaseBtn, baseCostDisplay, discountChip } = getCaseOpeningEls();
@@ -548,7 +561,7 @@ function updateTotalCost(): void {
 
   const availableMoney = getCurrentMoney();
   if (openCaseBtn) {
-    openCaseBtn.disabled = discountedTotal > availableMoney || isOpening;
+    (openCaseBtn as HTMLButtonElement).disabled = discountedTotal > availableMoney || isOpening;
   }
 }
 
@@ -583,12 +596,12 @@ function updateDiscountUI(): void {
   if (upgradeDiscountBtn) {
     if (isMaxed) {
       upgradeDiscountBtn.textContent = 'Max Level Reached';
-      upgradeDiscountBtn.disabled = true;
+      (upgradeDiscountBtn as HTMLButtonElement).disabled = true;
     } else {
       const nextCost = calcDiscountUpgradeCost(caseDiscountLevel);
       const canAfford = getCurrentMoney() >= nextCost;
       upgradeDiscountBtn.textContent = `Upgrade for ${formatCurrency(nextCost)}`;
-      upgradeDiscountBtn.disabled = isOpening || isUpgradingDiscount || !canAfford;
+      (upgradeDiscountBtn as HTMLButtonElement).disabled = isOpening || isUpgradingDiscount || !canAfford;
     }
   }
 }
@@ -599,7 +612,7 @@ function updateDiscountUI(): void {
 
 function updatePassUI(): void {
   const { quickSpinCost } = getCaseOpeningEls();
-  const quickSpinToggleEl = document.querySelector('.quick-spin-toggle');
+  const quickSpinToggleEl = document.querySelector('.quick-spin-toggle') as HTMLElement | null;
   
   // Atualizar custo do Quick Roll
   const hasQuickRoll = ownedPasses.includes('quick_roll');
@@ -610,7 +623,9 @@ function updatePassUI(): void {
       quickSpinCost.classList.add('unlocked');
     } else {
       const config = getPassConfig('quick_roll');
-      quickSpinCost.textContent = `${config.cost} 💎`;
+      if (config) {
+        quickSpinCost.textContent = `${config.cost} 💎`;
+      }
       quickSpinCost.classList.remove('unlocked');
       quickSpinCost.classList.add('locked');
     }
@@ -691,6 +706,10 @@ async function purchasePass(passId: string): Promise<void> {
 
   try {
     const { data: { session } } = await supabase.auth.getSession();
+    if (!session || !currentUser) {
+      showAlert('error', 'Auth Error', 'Not logged in');
+      return;
+    }
     
     const response = await fetch('/api/_caseopening', {
       method: 'POST',
@@ -716,7 +735,9 @@ async function purchasePass(passId: string): Promise<void> {
         showAlert('error', 'Insufficient Diamonds! 💎', `You need ${result.needed} diamonds but only have ${result.current}.`);
       } else if (result.error === 'REQUIRED_PASS_NOT_OWNED') {
         const requiredConfig = getPassConfig(result.requiredPass);
-        showAlert('warning', 'Pass Required!', `You need ${requiredConfig.name} first.`);
+        if (requiredConfig) {
+          showAlert('warning', 'Pass Required!', `You need ${requiredConfig.name} first.`);
+        }
       } else {
         showAlert('error', 'Purchase Failed', result.error || 'An error occurred. Please try again.');
       }
@@ -895,7 +916,8 @@ function bindCaseOpeningUIOnce(): void {
 
   if (galleryGrid && !galleryGrid.dataset.bound) {
     galleryGrid.addEventListener('click', (e) => {
-      const card = e.target?.closest?.('.case-card');
+      const target = e.target as HTMLElement;
+      const card = target?.closest?.('.case-card') as HTMLElement | null;
       if (!card) return;
       const caseId = card.getAttribute('data-case-id');
       if (caseId) openCaseView(caseId);
@@ -903,14 +925,18 @@ function bindCaseOpeningUIOnce(): void {
     galleryGrid.dataset.bound = '1';
   }
 
-  const qtyContainer = document.querySelector('#case-opening-screen .quantity-selector');
+  const qtyContainer = document.querySelector('#case-opening-screen .quantity-selector') as HTMLElement | null;
   if (qtyContainer && !qtyContainer.dataset.bound) {
     qtyContainer.addEventListener('click', async (e) => {
-      const btn = e.target?.closest?.('.qty-btn');
+      const target = e.target as HTMLElement;
+      const btn = target?.closest?.('.qty-btn') as HTMLElement | null;
       if (!btn) return;
       if (isOpening) return;
 
-      const nextQty = parseInt(btn.getAttribute('data-qty'));
+      const qtyStr = btn.getAttribute('data-qty');
+      if (!qtyStr) return;
+      
+      const nextQty = parseInt(qtyStr);
       if (!Number.isFinite(nextQty)) return;
       
       // Verificar se pode abrir essa quantidade
@@ -942,12 +968,13 @@ function bindCaseOpeningUIOnce(): void {
 
   if (quickSpin && !quickSpin.dataset.bound) {
     quickSpin.addEventListener('change', (e) => {
-      const wantsQuickSpin = !!e.target?.checked;
+      const target = e.target as HTMLInputElement | null;
+      const wantsQuickSpin = !!target?.checked;
       playSound('switch', { volume: 0.35 });
       
       // Se não tem o pass, mostrar modal
       if (wantsQuickSpin && !ownedPasses.includes('quick_roll')) {
-        e.target.checked = false;
+        if (target) target.checked = false;
         showPassModal('quick_roll');
         return;
       }
@@ -977,7 +1004,8 @@ function bindCaseOpeningUIOnce(): void {
 
   if (priceFilter && !priceFilter.dataset.bound) {
     priceFilter.addEventListener('change', (e) => {
-      filterCases(e.target.value);
+      const target = e.target as HTMLSelectElement | null;
+      if (target?.value) filterCases(target.value);
     });
     priceFilter.dataset.bound = '1';
   }
@@ -1043,7 +1071,7 @@ function bindCaseOpeningUIOnce(): void {
 async function openCase(): Promise<void> {
   if (isOpening) return;
   
-  const caseData = getCaseById(currentCaseId);
+  const caseData = getCaseById(currentCaseId || undefined);
   if (!caseData) return;
   
   const { discountedTotal } = computeCaseCost(caseData, selectedQuantity);
@@ -1055,14 +1083,15 @@ async function openCase(): Promise<void> {
   
   isOpening = true;
   const { openCaseBtn } = getCaseOpeningEls();
-  if (openCaseBtn) openCaseBtn.disabled = true;
+  if (openCaseBtn) (openCaseBtn as HTMLButtonElement).disabled = true;
   updateDiscountUI();
   playSound('open_case', { volume: 0.55 });
   
   try {
     const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.access_token || !currentUser?.id) throw new Error('Not authenticated');
     
-        const response = await fetch('/api/_caseopening', {
+    const response = await fetch('/api/_caseopening', {
       method: 'POST',
       headers: addCsrfHeader({
         'Content-Type': 'application/json',
@@ -1097,7 +1126,7 @@ async function openCase(): Promise<void> {
       }
       
       isOpening = false;
-      if (openCaseBtn) openCaseBtn.disabled = false;
+      if (openCaseBtn) (openCaseBtn as HTMLButtonElement).disabled = false;
       return;
     }
     
@@ -1133,7 +1162,7 @@ async function openCase(): Promise<void> {
     showAlert('error', 'Connection Error! 🌐', 'Unable to connect to server. Please check your internet connection.');
   } finally {
     isOpening = false;
-    if (openCaseBtn) openCaseBtn.disabled = false;
+    if (openCaseBtn) (openCaseBtn as HTMLButtonElement).disabled = false;
     if (reelLoopHandle) {
       reelLoopHandle.stop();
       reelLoopHandle = null;
@@ -1192,6 +1221,7 @@ async function animateHorizontalReel(slotIndex: number, slotData: SlotData, dura
     
     // 🔥 CALCULAR DISTÂNCIA PARA CENTRALIZAR O VENCEDOR
     const ITEM_WIDTH = 116; // 110px + 6px margin
+    if (!track.parentElement) return;
     const CONTAINER_CENTER = track.parentElement.offsetWidth / 2;
     
     const itemPosition = winnerIndex * ITEM_WIDTH;
@@ -1245,6 +1275,7 @@ async function animateVerticalReel(slotIndex: number, slotData: SlotData, durati
     
     // 🔥 CALCULAR DISTÂNCIA PARA CENTRALIZAR O VENCEDOR
     const ITEM_HEIGHT = 96; // 90px + 6px margin
+    if (!track.parentElement) return;
     const CONTAINER_CENTER = track.parentElement.offsetHeight / 2;
     
     const itemPosition = winnerIndex * ITEM_HEIGHT;
@@ -1301,6 +1332,7 @@ function showWinner(slotIndex: number, item: PreviewItem, isHorizontal: boolean)
 
 function showResultModal(items: PreviewItem[], totalValue: number): void {
   const grid = document.getElementById('result-items-grid');
+  if (!grid) return;
   
   grid.innerHTML = items.map((item, i) => `
     <div class="result-item" style="border-color: ${item.color}; animation-delay: ${i * 0.1}s;">
@@ -1310,8 +1342,10 @@ function showResultModal(items: PreviewItem[], totalValue: number): void {
     </div>
   `).join('');
   
-  document.getElementById('result-total-value').textContent = `$${totalValue.toFixed(2)}`;
-  document.getElementById('result-modal').classList.add('active');
+  const resultTotalEl = document.getElementById('result-total-value');
+  const resultModalEl = document.getElementById('result-modal');
+  if (resultTotalEl) resultTotalEl.textContent = `$${totalValue.toFixed(2)}`;
+  if (resultModalEl) resultModalEl.classList.add('active');
   
   // 🔥 Alert with final result (delay to avoid overlap with toast)
   setTimeout(() => {
@@ -1336,6 +1370,7 @@ function filterCases(priceRange: string): void {
   
   cards.forEach(card => {
     const caseId = card.getAttribute('data-case-id');
+    if (!caseId) return;
     const caseData = getCaseById(caseId);
     
     if (!caseData) return;
@@ -1361,7 +1396,7 @@ function filterCases(priceRange: string): void {
       }
     }
     
-    card.style.display = show ? 'block' : 'none';
+    (card as HTMLElement).style.display = show ? 'block' : 'none';
   });
 }
 

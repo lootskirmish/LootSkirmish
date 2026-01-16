@@ -33,11 +33,12 @@ interface CurrentUser {
   session?: {
     access_token: string;
   };
+  [key: string]: any;
 }
 
 declare global {
   interface Window {
-    currentUser?: CurrentUser;
+    currentUser?: any;
     openSupport?: typeof openSupportModal;
     closeSupport?: typeof closeModal;
     initSupport?: typeof initSupport;
@@ -64,10 +65,10 @@ function isValidEmail(email: string): boolean {
 // ============================================================
 
 function validateForm(): FormValidationResult {
-  const nome = document.getElementById('support-name')?.value || '';
-  const email = document.getElementById('support-email')?.value || '';
-  const assunto = document.getElementById('support-subject')?.value || '';
-  const mensagem = document.getElementById('support-message')?.value || '';
+  const nome = (document.getElementById('support-name') as HTMLInputElement)?.value || '';
+  const email = (document.getElementById('support-email') as HTMLInputElement)?.value || '';
+  const assunto = (document.getElementById('support-subject') as HTMLInputElement)?.value || '';
+  const mensagem = (document.getElementById('support-message') as HTMLTextAreaElement)?.value || '';
   
   const errors = [];
   
@@ -194,7 +195,7 @@ async function handleSubmit(e: SubmitEvent): Promise<void> {
   const loadingEl = document.getElementById('support-loading');
   const formEl = document.getElementById('support-form-content');
   
-  if (submitBtn) submitBtn.disabled = true;
+  if (submitBtn) (submitBtn as HTMLButtonElement).disabled = true;
   if (loadingEl) loadingEl.style.display = 'flex';
   if (formEl) formEl.style.opacity = '0.5';
   
@@ -207,19 +208,24 @@ async function handleSubmit(e: SubmitEvent): Promise<void> {
       showSuccess(result.ticketId, result.sent);
       
       // Clear form
-      document.getElementById('support-name').value = '';
-      document.getElementById('support-email').value = '';
-      document.getElementById('support-subject').value = '';
-      document.getElementById('support-message').value = '';
+      const nameEl = document.getElementById('support-name') as HTMLInputElement | null;
+      const emailEl = document.getElementById('support-email') as HTMLInputElement | null;
+      const subjectEl = document.getElementById('support-subject') as HTMLInputElement | null;
+      const messageEl = document.getElementById('support-message') as HTMLTextAreaElement | null;
+      
+      if (nameEl) nameEl.value = '';
+      if (emailEl) emailEl.value = '';
+      if (subjectEl) subjectEl.value = '';
+      if (messageEl) messageEl.value = '';
     } else {
       showError(result.error || 'Error sending ticket');
     }
     
   } catch (error) {
-    showError(error.message || 'Error sending ticket. Please try again.');
+    showError(((error as any)?.message || 'Error sending ticket. Please try again.'));
   } finally {
     // Re-enable button and hide loading
-    if (submitBtn) submitBtn.disabled = false;
+    if (submitBtn) (submitBtn as HTMLButtonElement).disabled = false;
     if (loadingEl) loadingEl.style.display = 'none';
     if (formEl) formEl.style.opacity = '1';
   }

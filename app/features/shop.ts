@@ -287,6 +287,11 @@ export async function initShop(): Promise<void> {
 
 async function loadUserData(): Promise<void> {
   try {
+    if (!currentUser?.id) {
+      console.error('No currentUser.id available');
+      return;
+    }
+    
     const { data: stats, error } = await supabase
       .from('player_stats')
       .select('total_purchases, active_subscription, subscription_expires_at, diamonds')
@@ -347,7 +352,7 @@ function renderShop(): void {
   // Renderizar Pacotes
   console.log(`📦 Renderizando ${PACKAGES.length} pacotes...`);
   PACKAGES.forEach(pkg => {
-    const card = createPackageCard(pkg);
+    const card = createPackageCard(pkg as any);
     packagesGrid.appendChild(card);
   });
 
@@ -486,7 +491,7 @@ function createSubscriptionCard(sub: ShopSubscription): HTMLDivElement {
 
 function calculateBonus(pkg: ShopPackage, isFirstPurchase: boolean): BonusCalculation {
   let bonus = 0;
-  let bonusType = null;
+  let bonusType: 'first_purchase' | 'timed' | null = null;
   let label = '';
 
   // Bônus de primeira compra
@@ -536,8 +541,8 @@ function startTimerForPackage(pkgId: string, endsAt: string): void {
   if (!timerEl) return;
 
   const intervalId = setInterval(() => {
-    const now = new Date();
-    const end = new Date(endsAt);
+    const now = new Date().getTime();
+    const end = new Date(endsAt).getTime();
     const diff = end - now;
 
     if (diff <= 0) {
@@ -572,16 +577,17 @@ function startTimerForPackage(pkgId: string, endsAt: string): void {
 function bindShopEvents(): void {
   // Botões de compra de pacotes
   document.addEventListener('click', (e) => {
-    const buyBtn = e.target.closest('[data-package-id]');
+    const target = e.target as HTMLElement;
+    const buyBtn = target?.closest('[data-package-id]') as HTMLElement | null;
     if (buyBtn) {
-      const pkgId = buyBtn.dataset.packageId;
-      openPaymentModal(pkgId, 'package');
+      const pkgId = buyBtn.getAttribute('data-package-id');
+      if (pkgId) openPaymentModal(pkgId, 'package');
     }
 
-    const subBtn = e.target.closest('[data-subscription-id]');
+    const subBtn = target?.closest('[data-subscription-id]') as HTMLElement | null;
     if (subBtn) {
-      const subId = subBtn.dataset.subscriptionId;
-      openPaymentModal(subId, 'subscription');
+      const subId = subBtn.getAttribute('data-subscription-id');
+      if (subId) openPaymentModal(subId, 'subscription');
     }
   });
 }
@@ -626,9 +632,9 @@ function openPaymentModal(productId: string, type: 'package' | 'subscription'): 
 
   // Preencher informações do produto
   const isFirstPurchase = userTotalPurchases === 0;
-  const bonus = type === 'package' ? calculateBonus(product, isFirstPurchase) : null;
+  const bonus = type === 'package' ? calculateBonus(product as any, isFirstPurchase) : null;
 
-  if (type === 'package') {
+  if (type === 'package' && bonus) {
     productContainer.innerHTML = `
       <div class="payment-product-header">
         <div class="payment-product-icon">${product.icon}</div>
@@ -649,7 +655,7 @@ function openPaymentModal(productId: string, type: 'package' | 'subscription'): 
         <div class="payment-product-info">
           <h3>${product.name}</h3>
           <div class="subscription-features">
-            ${product.benefits.map(b => `<div class="feature-item">✓ ${b}</div>`).join('')}
+            ${(product as any).benefits?.map((b: string) => `<div class="feature-item">✓ ${b}</div>`).join('') || ''}
           </div>
         </div>
       </div>
@@ -657,9 +663,13 @@ function openPaymentModal(productId: string, type: 'package' | 'subscription'): 
   }
 
   // Atualizar preços nos métodos de pagamento
-  document.getElementById('stripe-price').textContent = `$${product.price.toFixed(2)}`;
-  document.getElementById('mercadopago-price').textContent = `R$ ${product.priceBRL.toFixed(2)}`;
-  document.getElementById('nowpayments-price').textContent = `$${product.price.toFixed(2)}`;
+  const stripePriceEl = document.getElementById('stripe-price');
+  const mercadopagoEl = document.getElementById('mercadopago-price');
+  const nowpaymentsEl = document.getElementById('nowpayments-price');
+  
+  if (stripePriceEl) stripePriceEl.textContent = `$${product.price.toFixed(2)}`;
+  if (mercadopagoEl) mercadopagoEl.textContent = `R$ ${product.priceBRL.toFixed(2)}`;
+  if (nowpaymentsEl) nowpaymentsEl.textContent = `$${product.price.toFixed(2)}`;
 
   // Resetar seleção para Stripe por padrão
   modal.querySelectorAll('.payment-method-btn').forEach(b => b.classList.remove('active'));
@@ -670,13 +680,15 @@ function openPaymentModal(productId: string, type: 'package' | 'subscription'): 
   // Bind eventos de seleção de método (remover listeners antigos primeiro)
   modal.querySelectorAll('.payment-method-btn').forEach(btn => {
     // Clonar o elemento para remover todos os listeners antigos
-    const newBtn = btn.cloneNode(true);
-    btn.parentNode.replaceChild(newBtn, btn);
+    const newBtn = btn.cloneNode(true) as HTMLElement;
+    if (btn.parentNode) {
+      btn.parentNode.replaceChild(newBtn, btn);
+    }
     
     newBtn.addEventListener('click', () => {
       modal.querySelectorAll('.payment-method-btn').forEach(b => b.classList.remove('active'));
       newBtn.classList.add('active');
-      selectedPaymentMethod = newBtn.dataset.method;
+      selectedPaymentMethod = newBtn.dataset.method || 'stripe';
     });
   });
 
@@ -717,7 +729,7 @@ window.proceedToCheckout = async function() {
   if (isProcessing || !selectedProduct) return;
 
   isProcessing = true;
-  const continueBtn = document.querySelector('.payment-continue-btn');
+  const continueBtn = document.querySelector('.payment-continue-btn') as HTMLButtonElement | null;
   if (continueBtn) {
     continueBtn.disabled = true;
     continueBtn.innerHTML = '<span class="loading-spinner"></span><span>Processing...</span>';
@@ -725,7 +737,7 @@ window.proceedToCheckout = async function() {
 
   try {
     const { data: { session } } = await supabase.auth.getSession();
-    if (!session?.access_token) throw new Error('Not authenticated');
+    if (!session?.access_token || !currentUser?.id) throw new Error('Not authenticated');
 
     // 🔑 Gerar chave de idempotência para prevenir cliques duplos
     const { headers, idempotencyKey } = addIdempotencyHeader(
@@ -754,7 +766,7 @@ window.proceedToCheckout = async function() {
     }
 
     // Fechar modal atual
-    window.closeShopPaymentModal();
+    ((window as any).closeShopPaymentModal as Function)?.();
 
     // Redirecionar para checkout do gateway
     if (result.checkoutUrl) {
@@ -771,13 +783,24 @@ window.proceedToCheckout = async function() {
 
   } catch (error) {
     console.error('❌ Erro ao processar checkout:', error);
-    showAlert('error', 'Checkout Error', error.message || 'Failed to process payment. Please try again.');
+    showAlert('error', 'Checkout Error', ((error as any)?.message || 'Failed to process payment. Please try again.'));
   } finally {
     isProcessing = false;
     if (continueBtn) {
       continueBtn.disabled = false;
       continueBtn.innerHTML = '<span data-translate>Continue to Checkout</span><span class="btn-icon">→</span>';
     }
+  }
+};
+
+// ============================================================
+// EXPORTS DE FUNÇÕES
+// ============================================================
+
+window.closeShopPaymentModal = function closeShopPaymentModal() {
+  const modal = document.getElementById('payment-modal');
+  if (modal) {
+    modal.classList.remove('active');
   }
 };
 
@@ -799,6 +822,10 @@ function updateActiveSubscriptionUI(subId: string, expiresAt: Date): void {
 
 if (typeof window !== 'undefined') {
   window.initShop = initShop;
-  window.closeShopPaymentModal = closeShopPaymentModal;
-  window.proceedToCheckout = proceedToCheckout;
+  window.closeShopPaymentModal = function closeShopPaymentModal() {
+    const modal = document.getElementById('payment-modal');
+    if (modal) {
+      modal.classList.remove('active');
+    }
+  };
 }

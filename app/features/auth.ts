@@ -4,7 +4,7 @@
 
 import { createClient, Session, User, AuthError } from '@supabase/supabase-js';
 import { showToast, showAlert } from '../shared/effects';
-import { store, authActions, dataActions } from '../core/store';
+import { store, authActions, dataActions } from '../core/persistence';
 import { clearActiveUser, setActiveUser, fetchCsrfToken, clearCsrfTokenOnServer, getActiveUser, isCsrfTokenValid } from '../core/session';
 
 // ============ TYPE DEFINITIONS ============
@@ -35,12 +35,8 @@ declare global {
     cachedCaseDiscountLevel?: number;
     willRestoreState?: boolean;
     __suppressCurrencyPopups?: boolean;
-    cleanupChat?: () => void;
-    cleanupFriends?: () => void;
-    invalidateAdminRoleCache?: () => void;
     checkRouteAuth?: () => void;
     goTo?: (screen: string) => void;
-    setChatToggleIcon?: (config: any) => void;
     refreshLucideIcons?: () => void;
     handleLogin: typeof handleLogin;
     handleRegister: typeof handleRegister;
@@ -55,8 +51,8 @@ const SUPABASE_URL = 'https://xgcseugigsdgmyrfrofj.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhnY3NldWdpZ3NkZ215cmZyb2ZqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjM3NzAwNjcsImV4cCI6MjA3OTM0NjA2N30.lzDmtmxi1D88MihkfSBnHeHpyfiqeo9C5XDqshQNOso';
 const PENDING_REFERRAL_KEY = 'pending-referral-link';
 // Vite substitui import.meta.env em build; fallback para window.* caso seja injetado manualmente
-const HCAPTCHA_SITEKEY = (import.meta.env?.VITE_HCAPTCHA_SITEKEY ?? null)
-  || window.HCAPTCHA_SITEKEY
+const HCAPTCHA_SITEKEY = (globalThis as any).VITE_HCAPTCHA_SITEKEY
+  || (window as any).HCAPTCHA_SITEKEY
   || null;
 const CAPTCHA_REQUIRED = Boolean(HCAPTCHA_SITEKEY);
 
@@ -119,7 +115,7 @@ function loadHCaptchaScript(): Promise<HCaptchaInstance> | null {
     script.src = 'https://js.hcaptcha.com/1/api.js?render=explicit';
     script.async = true;
     script.defer = true;
-    script.onload = () => resolve(window.hcaptcha);
+    script.onload = () => resolve(window.hcaptcha!);
     script.onerror = () => reject(new Error('Failed to load hCaptcha'));
     document.head.appendChild(script);
   });
@@ -169,7 +165,7 @@ function clearPendingReferral(): void {
 }
 
 export async function handlePasswordReset(): Promise<void> {
-  const emailEl = document.getElementById('login-email');
+  const emailEl = document.getElementById('login-email') as HTMLInputElement | null;
   const errorEl = document.getElementById('login-error');
   
   if (!emailEl?.value) {
@@ -181,7 +177,7 @@ export async function handlePasswordReset(): Promise<void> {
   const captchaToken = CAPTCHA_REQUIRED ? loginCaptchaToken : null;
   
   if (CAPTCHA_REQUIRED && !captchaToken) {
-    errorEl.textContent = 'Complete the captcha before sending reset link.';
+    if (errorEl) errorEl.textContent = 'Complete the captcha before sending reset link.';
     showAlert('warning', 'Captcha Required', 'Please complete the captcha to continue.');
     return;
   }
@@ -205,8 +201,10 @@ export async function handlePasswordReset(): Promise<void> {
     
     console.log('🔑 Reset email sent successfully');
     showAlert('success', 'Check Your Email! 📧', 'Password reset link sent. Check your email to continue.');
-    errorEl.textContent = 'Password reset link sent to your email!';
-    errorEl.className = 'auth-success';
+    if (errorEl) {
+      errorEl.textContent = 'Password reset link sent to your email!';
+      errorEl.className = 'auth-success';
+    }
     resetCaptcha('login');
   } catch (err) {
     console.error('Password reset error:', err);
@@ -238,14 +236,14 @@ export async function updatePasswordAfterReset(newPassword: string): Promise<boo
 }
 
 export function handleUpdatePassword(): void {
-  const newPasswordEl = document.getElementById('reset-new-password');
-  const confirmPasswordEl = document.getElementById('reset-confirm-password');
+  const newPasswordEl = document.getElementById('reset-new-password') as HTMLInputElement | null;
+  const confirmPasswordEl = document.getElementById('reset-confirm-password') as HTMLInputElement | null;
   const errorEl = document.getElementById('reset-error');
   
   if (!newPasswordEl || !confirmPasswordEl || !errorEl) return;
   
-  const newPassword = newPasswordEl.value;
-  const confirmPassword = confirmPasswordEl.value;
+  const newPassword = (newPasswordEl as HTMLInputElement).value;
+  const confirmPassword = (confirmPasswordEl as HTMLInputElement).value;
   
   errorEl.textContent = '';
   
@@ -315,7 +313,7 @@ async function checkEmailVerification(): Promise<void> {
     // Email não confirmado - mostrar modal grande e visível
     showAlert('warning', '📧 Email Not Verified!', 
       'Please check your email and click the confirmation link to activate your account. You may need to check your spam folder.', 
-      { duration: 0 }
+      { duration: 0 } as any
     );
   }
 }
@@ -336,7 +334,7 @@ function prefillReferralFromUrl(): void {
     // Ativar aba de signup automáticamente se vem por ref
     switchTab('register');
     
-    const input = document.getElementById('register-referral-code');
+    const input = document.getElementById('register-referral-code') as HTMLInputElement | null;
     if (input) {
       input.value = ref;
     }
@@ -363,7 +361,7 @@ async function attemptReferralLink(referralCode: string, userId: string, authTok
       return true;
     }
   } catch (err) {
-    console.warn('referral linking failed', err?.message || err);
+    console.warn('referral linking failed', (err as any)?.message || err);
   }
   return false;
 }
@@ -397,7 +395,7 @@ async function renderHCaptcha(): Promise<void> {
 
     const buttons = [document.querySelector('#login-form button'), document.querySelector('#register-form button')];
     buttons.forEach(btn => {
-      if (btn) {
+      if (btn && btn instanceof HTMLButtonElement) {
         btn.disabled = true;
         btn.classList.add('loading');
       }
@@ -416,7 +414,7 @@ async function renderHCaptcha(): Promise<void> {
     try {
       const widgetId = hcaptcha.render(loginContainer, {
         sitekey: HCAPTCHA_SITEKEY,
-        callback: token => { loginCaptchaToken = token; },
+        callback: (token: string) => { loginCaptchaToken = token; },
         'expired-callback': () => { loginCaptchaToken = null; }
       });
       hcaptchaWidgets.login = widgetId;
@@ -431,7 +429,7 @@ async function renderHCaptcha(): Promise<void> {
     try {
       const widgetId = hcaptcha.render(registerContainer, {
         sitekey: HCAPTCHA_SITEKEY,
-        callback: token => { registerCaptchaToken = token; },
+        callback: (token: string) => { registerCaptchaToken = token; },
         'expired-callback': () => { registerCaptchaToken = null; }
       });
       hcaptchaWidgets.register = widgetId;
@@ -466,20 +464,20 @@ export function switchTab(tab: 'login' | 'register'): void {
  * Realiza o login do usuário
  */
 export async function handleLogin(): Promise<void> {
-  const emailEl = document.getElementById('login-email');
-  const passwordEl = document.getElementById('login-password');
+  const emailEl = document.getElementById('login-email') as HTMLInputElement | null;
+  const passwordEl = document.getElementById('login-password') as HTMLInputElement | null;
   const errorEl = document.getElementById('login-error');
-  const termsEl = document.getElementById('login-terms-accept');
-  const loginBtn = document.querySelector('#login-form button');
+  const termsEl = document.getElementById('login-terms-accept') as HTMLInputElement | null;
+  const loginBtn = document.querySelector('#login-form button') as HTMLButtonElement | null;
   if (!emailEl || !passwordEl || !errorEl) return;
 
-  const email = emailEl.value;
-  const password = passwordEl.value;
-  const termsAccepted = !!termsEl?.checked;
+  const email = (emailEl as HTMLInputElement).value;
+  const password = (passwordEl as HTMLInputElement).value;
+  const termsAccepted = !!(termsEl as HTMLInputElement)?.checked;
   const captchaToken = CAPTCHA_REQUIRED ? loginCaptchaToken : null;
 
   errorEl.textContent = '';
-  setButtonLoading(loginBtn, true);
+  setButtonLoading(loginBtn as HTMLButtonElement | null, true);
   
   if (!email || !password) {
     errorEl.textContent = 'Complete all the fields';
@@ -521,7 +519,7 @@ export async function handleLogin(): Promise<void> {
       errorEl.textContent = 'Please verify your email before logging in.';
       showAlert('warning', '⚠️ Email Not Verified', 
         'You must confirm your email before logging in. Check your email (including spam folder) for the confirmation link.',
-        { duration: 0 }
+        { duration: 0 } as any
       );
     } else {
       errorEl.textContent = error.message;
@@ -588,25 +586,25 @@ export async function handleLogin(): Promise<void> {
  * Realiza o registro de um novo usuário
  */
 export async function handleRegister(): Promise<void> {
-  const usernameEl = document.getElementById('register-username');
-  const emailEl = document.getElementById('register-email');
-  const passwordEl = document.getElementById('register-password');
-  const confirmEl = document.getElementById('register-confirm');
-  const referralEl = document.getElementById('register-referral-code');
-  const termsEl = document.getElementById('register-terms-accept');
+  const usernameEl = document.getElementById('register-username') as HTMLInputElement | null;
+  const emailEl = document.getElementById('register-email') as HTMLInputElement | null;
+  const passwordEl = document.getElementById('register-password') as HTMLInputElement | null;
+  const confirmEl = document.getElementById('register-confirm') as HTMLInputElement | null;
+  const referralEl = document.getElementById('register-referral-code') as HTMLInputElement | null;
+  const termsEl = document.getElementById('register-terms-accept') as HTMLInputElement | null;
   const errorEl = document.getElementById('register-error');
-  const registerBtn = document.querySelector('#register-form button');
+  const registerBtn = document.querySelector('#register-form button') as HTMLButtonElement | null;
   if (!usernameEl || !emailEl || !passwordEl || !confirmEl || !errorEl) return;
 
-  const username = usernameEl.value;
-  const email = emailEl.value;
-  const password = passwordEl.value;
-  const confirm = confirmEl.value;
-  const referralCode = referralEl?.value?.trim() || '';
+  const username = (usernameEl as HTMLInputElement).value;
+  const email = (emailEl as HTMLInputElement).value;
+  const password = (passwordEl as HTMLInputElement).value;
+  const confirm = (confirmEl as HTMLInputElement).value;
+  const referralCode = (referralEl as HTMLInputElement)?.value?.trim() || '';
   const captchaToken = CAPTCHA_REQUIRED ? registerCaptchaToken : null;
 
   errorEl.textContent = '';
-  setButtonLoading(registerBtn, true);
+  setButtonLoading(registerBtn as HTMLButtonElement | null, true);
   
   if (!username || !email || !password || !confirm) {
     errorEl.textContent = 'Complete all the fields';
@@ -615,7 +613,7 @@ export async function handleRegister(): Promise<void> {
     return;
   }
 
-  if (!termsEl?.checked) {
+  if (!(termsEl as HTMLInputElement)?.checked) {
     errorEl.textContent = 'You must accept the Terms of Use and Privacy Policy to continue.';
     showAlert('warning', 'Terms Required! 📜', 'Please accept the Terms of Use and Privacy Policy to create your account.');
     setButtonLoading(registerBtn, false);
@@ -721,7 +719,7 @@ export async function handleRegister(): Promise<void> {
     // 🔥 Alert grande e visível sobre email
     showAlert('success', '🎉 Account Created Successfully!', 
       `A confirmation email has been sent to ${email}. \n\nPlease check your email (including spam folder) and click the confirmation link to activate your account. You must verify your email before you can log in.`,
-      { duration: 0 }
+      { duration: 0 } as any
     );
     
     usernameEl.value = '';
@@ -810,7 +808,7 @@ export async function handleLogout(isInBattle: boolean = false): Promise<void> {
   
   // Verificar rota após logout
   if (window.checkRouteAuth) {
-    setTimeout(() => window.checkRouteAuth(), 100);
+    setTimeout(() => (window as any).checkRouteAuth?.(), 100);
   }
   
   // Não usar reload - deixar o onAuthStateChange cuidar da limpeza
@@ -836,11 +834,11 @@ export async function loadUserData(
   goTo?: (screen: string) => void
 ): Promise<void> {
   // Fonte única: sincroniza window + Redux
-  setActiveUser(user, { persist: false });
+  setActiveUser(user as any, { persist: false });
   try {
     await syncPendingReferral(user);
   } catch (err) {
-    console.warn('Pending referral sync failed', err?.message || err);
+    console.warn('Pending referral sync failed', (err as any)?.message || err);
   }
   
   const { data, error } = await supabase
@@ -889,7 +887,7 @@ export async function loadUserData(
   
   // Verificar rota após login (router vai mostrar a tela correta baseado na URL)
   if (window.checkRouteAuth) {
-    setTimeout(() => window.checkRouteAuth(), 100);
+    setTimeout(() => (window as any).checkRouteAuth?.(), 100);
   } else if (window.location.pathname === '/auth' && goTo) {
     // Se ainda estiver em /auth após login, ir para menu
     goTo('menu');
@@ -920,18 +918,18 @@ export async function loadUserData(
   const cacheBust = Date.now();
   if (headerAvatar) {
     if (data.avatar_url) {
-      headerAvatar.src = data.avatar_url + '?t=' + cacheBust;
+      (headerAvatar as any).src = data.avatar_url + '?t=' + cacheBust;
     } else {
       const avatarUrl = `https://api.dicebear.com/7.x/avataaars/svg?seed=${data.username}`;
-      headerAvatar.src = avatarUrl;
+      (headerAvatar as any).src = avatarUrl;
     }
   }
   if (menuAvatar) {
     if (data.avatar_url) {
-      menuAvatar.src = data.avatar_url + '?t=' + cacheBust;
+      (menuAvatar as any).src = data.avatar_url + '?t=' + cacheBust;
     } else {
       const avatarUrl = `https://api.dicebear.com/7.x/avataaars/svg?seed=${data.username}`;
-      menuAvatar.src = avatarUrl;
+      (menuAvatar as any).src = avatarUrl;
     }
   }
 
@@ -1040,7 +1038,7 @@ export function setupAuthStateListener(loadUserDataCallback: (user: User) => voi
       
       // Verificar rota após estado de não autenticado
       if (window.checkRouteAuth) {
-        setTimeout(() => window.checkRouteAuth(), 100);
+        setTimeout(() => (window as any).checkRouteAuth?.(), 100);
       }
       
       // Ativar a tab de login
@@ -1299,7 +1297,7 @@ window.handleRegister = handleRegister;
 window.handlePasswordReset = handlePasswordReset;
 window.handleUpdatePassword = handleUpdatePassword;
 window.updatePasswordAfterReset = updatePasswordAfterReset;
-window.requestSetup2FA = requestSetup2FA;
-window.verifyAndEnable2FA = verifyAndEnable2FA;
-window.disable2FA = disable2FA;
-window.prompt2FACode = prompt2FACode;
+(window as any).requestSetup2FA = requestSetup2FA;
+(window as any).verifyAndEnable2FA = verifyAndEnable2FA;
+(window as any).disable2FA = disable2FA;
+(window as any).prompt2FACode = prompt2FACode;

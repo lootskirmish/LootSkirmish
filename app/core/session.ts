@@ -2,7 +2,7 @@
 // SESSION.TS - Fonte única (segura) do usuário ativo (TypeScript)
 // ============================================================
 
-import { store, authActions } from './store';
+import { store, authActions } from './persistence';
 
 // ============================================================
 // TYPES

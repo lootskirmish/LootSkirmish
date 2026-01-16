@@ -100,6 +100,7 @@ function createSkillTreeBadges(): void {
   Object.keys(SKILL_TREE_BADGES).forEach(id => {
     const badge = SKILL_TREE_BADGES[id];
     const cat = getSkillTreeCategoryByBadge(id);
+    if (!cat) return;
     
     const div = document.createElement('div');
     div.id = id;
@@ -134,7 +135,7 @@ function createSkillTreeBadges(): void {
  * Desenha as linhas conectando os badges
  */
 function drawSkillTreeLines(): void {
-  const svg = document.getElementById('st-lines');
+  const svg = document.getElementById('st-lines') as SVGSVGElement | null;
   if (!svg) return;
   
   svg.innerHTML = '';
@@ -183,7 +184,7 @@ function createSkillTreeLine(svg: SVGSVGElement, x1: number, y1: number, x2: num
   
   path.setAttribute('d', d);
   path.setAttribute('stroke', color);
-  path.setAttribute('stroke-width', width);
+  path.setAttribute('stroke-width', String(width));
   path.setAttribute('fill', 'none');
   path.setAttribute('opacity', '0.6');
   path.setAttribute('stroke-linecap', 'round');
@@ -194,10 +195,11 @@ function createSkillTreeLine(svg: SVGSVGElement, x1: number, y1: number, x2: num
 /**
  * Obtém a categoria de um badge
  */
-function getSkillTreeCategoryByBadge(badgeId: string): SkillCategory | null {
+function getSkillTreeCategoryByBadge(badgeId: string): any {
   for (const catKey in SKILL_TREE_CATEGORIES) {
-    if (SKILL_TREE_CATEGORIES[catKey].badges.includes(badgeId)) {
-      return SKILL_TREE_CATEGORIES[catKey];
+    const cat = SKILL_TREE_CATEGORIES[catKey as keyof typeof SKILL_TREE_CATEGORIES];
+    if (cat && cat.badges && cat.badges.includes(badgeId)) {
+      return cat;
     }
   }
   return null;
@@ -285,7 +287,8 @@ function setupSkillTreePanning(): void {
   if (skillTreePanningBound) return;
   
   viewport.addEventListener('mousedown', (e) => {
-    if (e.target.closest('.st-badge') || e.target.closest('.st-hub')) return;
+    const target = e.target as HTMLElement;
+    if (target?.closest('.st-badge') || target?.closest('.st-hub')) return;
     isSkillTreePanning = true;
     skillTreeStartX = e.clientX;
     skillTreeStartY = e.clientY;
@@ -359,7 +362,8 @@ export function setupSkillTreeModalClose(): void {
   const skillTreeModal = document.getElementById('st-modal');
   if (skillTreeModal) {
     skillTreeModal.addEventListener('click', (e) => {
-      if (e.target.id === 'st-modal') closeSkillTreeModal();
+      const target = e.target as HTMLElement;
+      if (target?.id === 'st-modal') closeSkillTreeModal();
     });
 
     skillTreeModalCloseBound = true;

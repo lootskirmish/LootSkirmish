@@ -646,7 +646,13 @@ async function fetchAdminStats(): Promise<AdminStats> {
       pendingCount: 0, 
       totalUSD: 0, 
       totalBRL: 0, 
-      totalLTC: 0 
+      totalLTC: 0,
+      totalAmount: 0,
+      totalQuantity: 0,
+      orderCount: 0,
+      statusBreakdown: {},
+      paymentMethodBreakdown: {},
+      orderTypeBreakdown: {}
     };
   }
 }
@@ -705,7 +711,7 @@ async function renderAdminPendingOrders(): Promise<void> {
     list.innerHTML = orders.map(order => {
       const date = new Date(order.created_at).toLocaleString('en-US');
       const orderId = String(order.id || '').slice(0, 12);
-      const amount = parseFloat((order.total_amount ?? order.amount_paid ?? 0) as number).toFixed(2);
+      const amount = parseFloat(String(order.total_amount ?? order.amount_paid ?? 0)).toFixed(2);
       const quantity = Number(order.total_quantity ?? order.quantity ?? 0);
       const paymentMethod = sanitizeHTML(String(order.payment_method || 'N/A').toUpperCase());
       const productName = sanitizeHTML(String(order.product_name || 'N/A'));
@@ -815,29 +821,31 @@ async function renderAdminHistoryOrders(): Promise<void> {
             const type = order.order_type || 'N/A';
             const userId = sanitizeHTML(order.user_id || 'N/A');
             
-            const statusColor = {
+            const statusColor: Record<string, string> = {
               'completed': '#22c55e',
               'pending': '#f59e0b',
               'cancelled': '#ef4444',
               'failed': '#ec4899'
-            }[status] || '#6b7280';
+            };
+            const color = statusColor[status] || '#6b7280';
             
-            const statusEmoji = {
+            const statusEmoji: Record<string, string> = {
               'completed': '✅',
               'pending': '⏳',
               'cancelled': '❌',
               'failed': '⚠️'
-            }[status] || '❓';
+            };
+            const emoji = statusEmoji[status] || '❓';
             
             return `
-              <div class="admin-order-card expandable" style="border-left: 4px solid ${statusColor}">
+              <div class="admin-order-card expandable" style="border-left: 4px solid ${color}">
                 <div class="admin-order-header" onclick="this.closest('.expandable').classList.toggle('expanded')">
                   <div class="order-header-left">
                     <span class="admin-order-id">#${orderId}</span>
                     <span class="order-date">${date}</span>
                   </div>
                   <div class="order-header-right">
-                    <span class="admin-order-status" style="color: ${statusColor}">${statusEmoji} ${status}</span>
+                    <span class="admin-order-status" style="color: ${color}">${emoji} ${status}</span>
                     <span class="expand-icon">▼</span>
                   </div>
                 </div>
@@ -911,8 +919,8 @@ export async function handleApproveOrder(orderId: string): Promise<void> {
     if (!confirmar) return;
     
     // 4. BUSCAR BOTÃO
-    const btn = document.querySelector(`.approve-btn[data-order-id="${orderId}"]`);
-    const card = btn?.closest('.admin-order-card');
+    const btn = document.querySelector(`.approve-btn[data-order-id="${orderId}"]`) as HTMLButtonElement | null;
+    const card = btn?.closest('.admin-order-card') as HTMLDivElement | null;
     
     if (!btn || !card) {
       alert('❌ Button not found');
@@ -920,11 +928,11 @@ export async function handleApproveOrder(orderId: string): Promise<void> {
     }
     
     const originalText = btn.textContent;
-    const approveBtn = card.querySelector('.approve-btn');
-    const rejectBtn = card.querySelector('.reject-btn');
+    const approveBtn = card.querySelector('.approve-btn') as HTMLButtonElement | null;
+    const rejectBtn = card.querySelector('.reject-btn') as HTMLButtonElement | null;
     
-    approveBtn.disabled = true;
-    rejectBtn.disabled = true;
+    if (approveBtn) approveBtn.disabled = true;
+    if (rejectBtn) rejectBtn.disabled = true;
     btn.textContent = '⏳ Approving...';
     btn.style.opacity = '0.6';
     
@@ -966,9 +974,9 @@ export async function handleApproveOrder(orderId: string): Promise<void> {
         }
       }
       
-      card.style.transition = 'all 0.3s ease';
-      card.style.opacity = '0';
-      card.style.transform = 'translateX(20px)';
+      (card as HTMLDivElement).style.transition = 'all 0.3s ease';
+      (card as HTMLDivElement).style.opacity = '0';
+      (card as HTMLDivElement).style.transform = 'translateX(20px)';
       
       await new Promise(resolve => setTimeout(resolve, 300));
       
@@ -982,8 +990,8 @@ export async function handleApproveOrder(orderId: string): Promise<void> {
       const approvedCountEl = document.getElementById('admin-approved-count');
       const totalBrlEl = document.getElementById('admin-total-brl');
       
-      if (pendingCountEl) pendingCountEl.textContent = stats.pendingCount;
-      if (approvedCountEl) approvedCountEl.textContent = stats.approvedCount;
+      if (pendingCountEl) pendingCountEl.textContent = String(stats.pendingCount);
+      if (approvedCountEl) approvedCountEl.textContent = String(stats.approvedCount);
       if (totalBrlEl) totalBrlEl.textContent = `R$ ${stats.totalBRL.toFixed(2)}`;
       
       alert(result.message || '✅ Order approved successfully!');
@@ -991,7 +999,7 @@ export async function handleApproveOrder(orderId: string): Promise<void> {
     
   } catch (err) {
     console.error('❌ Error in handler:', err);
-    alert('❌ Error: ' + err.message);
+    alert('❌ Error: ' + ((err as any)?.message || String(err)));
     
     // Restaurar botões
     const btn = document.querySelector(`.approve-btn[data-order-id="${orderId}"]`);
@@ -999,12 +1007,12 @@ export async function handleApproveOrder(orderId: string): Promise<void> {
     
     if (card) {
       const approveBtn = card.querySelector('.approve-btn');
-      const rejectBtn = card.querySelector('.reject-btn');
+      const rejectBtn = card.querySelector('.reject-btn') as HTMLButtonElement | null;
       
       if (approveBtn) {
-        approveBtn.disabled = false;
+        (approveBtn as HTMLButtonElement).disabled = false;
         approveBtn.textContent = '✅ Approve';
-        approveBtn.style.opacity = '1';
+        (approveBtn as HTMLButtonElement).style.opacity = '1';
       }
       
       if (rejectBtn) {
@@ -1039,8 +1047,8 @@ export async function handleRejectOrder(orderId: string): Promise<void> {
     if (!confirmar) return;
     
     // 4. BUSCAR BOTÃO
-    const btn = document.querySelector(`.reject-btn[data-order-id="${orderId}"]`);
-    const card = btn?.closest('.admin-order-card');
+    const btn = document.querySelector(`.reject-btn[data-order-id="${orderId}"]`) as HTMLButtonElement | null;
+    const card = btn?.closest('.admin-order-card') as HTMLDivElement | null;
     
     if (!btn || !card) {
       alert('❌ Button not found');
@@ -1048,11 +1056,11 @@ export async function handleRejectOrder(orderId: string): Promise<void> {
     }
     
     const originalText = btn.textContent;
-    const approveBtn = card.querySelector('.approve-btn');
-    const rejectBtn = card.querySelector('.reject-btn');
+    const approveBtn = card.querySelector('.approve-btn') as HTMLButtonElement | null;
+    const rejectBtn = card.querySelector('.reject-btn') as HTMLButtonElement | null;
     
-    approveBtn.disabled = true;
-    rejectBtn.disabled = true;
+    if (approveBtn) approveBtn.disabled = true;
+    if (rejectBtn) rejectBtn.disabled = true;
     btn.textContent = '⏳ Rejecting...';
     btn.style.opacity = '0.6';
     
@@ -1087,9 +1095,9 @@ export async function handleRejectOrder(orderId: string): Promise<void> {
     
     // 7. SUCESSO
     if (result.success) {
-      card.style.transition = 'all 0.3s ease';
-      card.style.opacity = '0';
-      card.style.transform = 'translateX(20px)';
+      (card as HTMLDivElement).style.transition = 'all 0.3s ease';
+      (card as HTMLDivElement).style.opacity = '0';
+      (card as HTMLDivElement).style.transform = 'translateX(20px)';
       
       await new Promise(resolve => setTimeout(resolve, 300));
       
@@ -1099,22 +1107,22 @@ export async function handleRejectOrder(orderId: string): Promise<void> {
       
       const stats = await fetchAdminStats();
       const pendingCountEl = document.getElementById('admin-pending-count');
-      if (pendingCountEl) pendingCountEl.textContent = stats.pendingCount;
+      if (pendingCountEl) pendingCountEl.textContent = String(stats.pendingCount);
       
       alert('✅ Order rejected!');
     }
     
   } catch (err) {
     console.error('❌ Handler error:', err);
-    alert('❌ Error: ' + err.message);
+    alert('❌ Error: ' + ((err as any)?.message || String(err)));
     
     // Restaurar botões
-    const btn = document.querySelector(`.reject-btn[data-order-id="${orderId}"]`);
-    const card = btn?.closest('.admin-order-card');
+    const btn = document.querySelector(`.reject-btn[data-order-id="${orderId}"]`) as HTMLButtonElement | null;
+    const card = btn?.closest('.admin-order-card') as HTMLDivElement | null;
     
     if (card) {
-      const approveBtn = card.querySelector('.approve-btn');
-      const rejectBtn = card.querySelector('.reject-btn');
+      const approveBtn = card.querySelector('.approve-btn') as HTMLButtonElement | null;
+      const rejectBtn = card.querySelector('.reject-btn') as HTMLButtonElement | null;
       
       if (rejectBtn) {
         rejectBtn.disabled = false;
@@ -1159,7 +1167,7 @@ export function switchSupportSubTab(subtab: string): void {
   document.querySelectorAll('.admin-support-tab-btn').forEach(b => b.classList.remove('active'));
   
   document.getElementById(`admin-support-${subtab}`)?.classList.remove('hidden');
-  event?.target?.classList.add('active');
+  (event?.target as HTMLElement)?.classList.add('active');
 }
 
 /**
@@ -1188,7 +1196,7 @@ export async function markTicketResolved(ticketId: string): Promise<void> {
     
     await renderAdminPanel();
   } catch (err) {
-    alert('Error: ' + err.message);
+    alert('Error: ' + ((err as any)?.message || String(err)));
   }
 }
 
@@ -1198,10 +1206,14 @@ export async function markTicketResolved(ticketId: string): Promise<void> {
 export function openReplyForm(ticketId: string, email: string): void {
   switchSupportSubTab('reply');
   
-  document.getElementById('reply-ticket-id').value = ticketId;
-  document.getElementById('reply-to-email').value = email;
-  document.getElementById('reply-resolution').value = '';
-  document.getElementById('reply-message').value = '';
+  const ticketIdElem = document.getElementById('reply-ticket-id') as HTMLInputElement | null;
+  if (ticketIdElem) ticketIdElem.value = ticketId ?? '';
+  const toEmailElem = document.getElementById('reply-to-email') as HTMLInputElement | null;
+  if (toEmailElem) toEmailElem.value = email ?? '';
+  const resolutionElem = document.getElementById('reply-resolution') as HTMLInputElement | null;
+  if (resolutionElem) resolutionElem.value = '';
+  const messageElem = document.getElementById('reply-message') as HTMLInputElement | null;
+  if (messageElem) messageElem.value = '';
   
   // Remover seleção anterior
   document.querySelectorAll('.resolution-btn').forEach(btn => btn.classList.remove('selected'));
@@ -1211,7 +1223,8 @@ export function openReplyForm(ticketId: string, email: string): void {
  * Define categoria de resolução
  */
 export function setResolution(value: string): void {
-  document.getElementById('reply-resolution').value = value;
+  const resolutionElem = document.getElementById('reply-resolution') as HTMLInputElement | null;
+  if (resolutionElem) resolutionElem.value = value ?? '';
   
   document.querySelectorAll('.resolution-btn').forEach(btn => {
     btn.classList.remove('selected');
@@ -1232,10 +1245,10 @@ export function selectInboxEmail(ticketId: string): void {
  */
 export async function sendSupportReply(): Promise<void> {
   try {
-    const ticketId = document.getElementById('reply-ticket-id').value;
-    const toEmail = document.getElementById('reply-to-email').value;
-    const resolutionRaw = document.getElementById('reply-resolution').value;
-    const message = document.getElementById('reply-message').value;
+    const ticketId = (document.getElementById('reply-ticket-id') as HTMLInputElement | null)?.value ?? '';
+    const toEmail = (document.getElementById('reply-to-email') as HTMLInputElement | null)?.value ?? '';
+    const resolutionRaw = (document.getElementById('reply-resolution') as HTMLInputElement | null)?.value ?? '';
+    const message = (document.getElementById('reply-message') as HTMLInputElement | null)?.value ?? '';
     const resolution = resolutionRaw || 'resolvable';
     
     if (!ticketId || !toEmail || !resolution || !message) {
@@ -1271,16 +1284,20 @@ export async function sendSupportReply(): Promise<void> {
     alert('✅ Response sent successfully!');
     
     // Limpar form
-    document.getElementById('reply-ticket-id').value = '';
-    document.getElementById('reply-to-email').value = '';
-    document.getElementById('reply-resolution').value = '';
-    document.getElementById('reply-message').value = '';
+    const ticketIdClear = document.getElementById('reply-ticket-id') as HTMLInputElement | null;
+    if (ticketIdClear) ticketIdClear.value = '';
+    const toEmailClear = document.getElementById('reply-to-email') as HTMLInputElement | null;
+    if (toEmailClear) toEmailClear.value = '';
+    const resolutionClear = document.getElementById('reply-resolution') as HTMLInputElement | null;
+    if (resolutionClear) resolutionClear.value = '';
+    const messageClear = document.getElementById('reply-message') as HTMLInputElement | null;
+    if (messageClear) messageClear.value = '';
     
     // Recarregar tickets
     await renderAdminPanel();
     
   } catch (err) {
-    alert('❌ Error: ' + err.message);
+    alert('❌ Error: ' + ((err as any)?.message || String(err)));
   }
 }
 
@@ -1297,10 +1314,10 @@ function normalizeTicketStatus(status: string | null | undefined): string {
  * Troca entre abas do admin (OLD VERSION - MANTIDO POR COMPATIBILIDADE)
  */
 export function switchAdminTab(tab: string): void {
-  const currentTab = (typeof event !== 'undefined') ? event?.currentTarget : null;
+  const currentTab = (typeof event !== 'undefined') ? (event?.currentTarget as HTMLElement | null) : null;
   
   document.querySelectorAll('.admin-tab').forEach(t => t.classList.remove('active'));
-  if (currentTab) currentTab.classList.add('active');
+  if (currentTab) (currentTab as HTMLElement).classList.add('active');
   
   const pendingList = document.getElementById('admin-pending-list');
   const historyList = document.getElementById('admin-history-list');

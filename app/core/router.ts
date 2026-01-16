@@ -3,7 +3,7 @@
 // ROUTER.TS - Sistema de Rotas com History API + Redux (TypeScript)
 // ============================================================
 
-import { store, routerActions } from './store';
+import { store, routerActions } from './persistence';
 import { loadRouteData } from './route-loader';
 import { getActiveUser, setActiveUser } from './session';
 

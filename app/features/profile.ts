@@ -73,12 +73,15 @@ function showProfileError(context: string, message: string, details: Record<stri
   console.error(`[PROFILE_ERROR] ${context}:`, { message, details });
   // Don't show popup immediately - let toast show first
   setTimeout(() => {
-    showToast(message, 'error');
+    showToast('error', message);
   }, 100);
 }
 
 function $(id: string): HTMLElement | null {
-  if (_elCache.has(id)) return _elCache.get(id);
+  if (_elCache.has(id)) {
+    const cached = _elCache.get(id);
+    return cached !== undefined ? cached : null;
+  }
   const el = document.getElementById(id);
   _elCache.set(id, el);
   return el;
@@ -86,7 +89,7 @@ function $(id: string): HTMLElement | null {
 
 function setText(id: string, value: string | number): void {
   const el = $(id);
-  if (el) el.textContent = value;
+  if (el) el.textContent = String(value);
 }
 
 function formatNumber(value: number | string, decimals: number = 2): string {
@@ -142,7 +145,9 @@ export async function loadProfileData(user: User, calculateLevel?: (xp: number) 
       (window as any).publicProfileUsername = null;
     }
     setProfileViewMode(false); // Garantir modo privado
-    syncPublicProfileFriendButton(null);
+    if (typeof (window as any).syncPublicProfileFriendButton === 'function') {
+      (window as any).syncPublicProfileFriendButton(null);
+    }
     
     const { data: stats, error } = await supabase
       .from('player_stats')
@@ -199,17 +204,17 @@ export async function loadProfileData(user: User, calculateLevel?: (xp: number) 
     // Avatar
     const cacheBust = Date.now();
     if (stats.avatar_url) {
-      const headerAvatar = $('header-avatar');
-      const profileAvatar = $('profile-avatar');
-      const menuAvatar = $('menu-avatar');
+      const headerAvatar = $('header-avatar') as HTMLImageElement | null;
+      const profileAvatar = $('profile-avatar') as HTMLImageElement | null;
+      const menuAvatar = $('menu-avatar') as HTMLImageElement | null;
       if (headerAvatar) headerAvatar.src = stats.avatar_url + '?t=' + cacheBust;
       if (profileAvatar) profileAvatar.src = stats.avatar_url + '?t=' + cacheBust;
       if (menuAvatar) menuAvatar.src = stats.avatar_url + '?t=' + cacheBust;
     } else {
       const dice = `https://api.dicebear.com/7.x/avataaars/svg?seed=${stats.username}`;
-      const headerAvatar = $('header-avatar');
-      const profileAvatar = $('profile-avatar');
-      const menuAvatar = $('menu-avatar');
+      const headerAvatar = $('header-avatar') as HTMLImageElement | null;
+      const profileAvatar = $('profile-avatar') as HTMLImageElement | null;
+      const menuAvatar = $('menu-avatar') as HTMLImageElement | null;
       if (headerAvatar) headerAvatar.src = dice;
       if (profileAvatar) profileAvatar.src = dice;
       if (menuAvatar) menuAvatar.src = dice;
@@ -231,7 +236,7 @@ export async function loadPublicProfile(username: string, calculateLevel?: (xp: 
   try {
     if (!username || typeof username !== 'string') {
       console.error('Invalid username provided');
-      showToast('Invalid profile URL.', 'error');
+      showToast('error', 'Invalid profile URL.');
       // Return to safe state via router
       window.history.replaceState({}, '', '/');
       if (window.checkRouteAuth) window.checkRouteAuth();
@@ -273,7 +278,7 @@ export async function loadPublicProfile(username: string, calculateLevel?: (xp: 
         return;
       }
     } catch (err) {
-      console.error(`[LOAD_PUBLIC_PROFILE] Fetch error for "${username}":`, err.message || err);
+      console.error(`[LOAD_PUBLIC_PROFILE] Fetch error for "${username}":`, ((err as any)?.message || err));
       showToast('error', 'Could not access profile. Please try again.');
       // Return to safe state via router
       window.history.replaceState({}, '', '/');
@@ -320,7 +325,9 @@ export async function loadPublicProfile(username: string, calculateLevel?: (xp: 
     }
 
     const user = { id: stats.user_id, email: stats.email, username: stats.username };
-    syncPublicProfileFriendButton({ user_id: user.id, username: stats.username });
+    if (typeof (window as any).syncPublicProfileFriendButton === 'function') {
+      (window as any).syncPublicProfileFriendButton({ user_id: user.id, username: stats.username, id: user.id });
+    }
 
     setText('profile-username', stats.username ?? '');
     setText('profile-level', stats.level ?? '');
@@ -351,16 +358,16 @@ export async function loadPublicProfile(username: string, calculateLevel?: (xp: 
 
     const cacheBust = Date.now();
     if (stats.avatar_url) {
-      const profileAvatar = $('profile-avatar');
+      const profileAvatar = $('profile-avatar') as HTMLImageElement | null;
       if (profileAvatar) profileAvatar.src = stats.avatar_url + '?t=' + cacheBust;
     } else {
       const dice = `https://api.dicebear.com/7.x/avataaars/svg?seed=${stats.username}`;
-      const profileAvatar = $('profile-avatar');
+      const profileAvatar = $('profile-avatar') as HTMLImageElement | null;
       if (profileAvatar) profileAvatar.src = dice;
     }
 
     if (stats.banner_url) {
-      const bannerElement = document.querySelector('.profile-banner');
+      const bannerElement = document.querySelector('.profile-banner') as HTMLElement | null;
       if (bannerElement) {
         bannerElement.style.backgroundImage = `url(${stats.banner_url}?t=${Date.now()})`;
         bannerElement.style.backgroundSize = 'cover';
@@ -388,25 +395,25 @@ function setProfileViewMode(isPublic: boolean): void {
   }
   const uploadInputs = ['avatar-upload', 'banner-upload'];
   uploadInputs.forEach(id => {
-    const el = $(id);
+    const el = $(id) as HTMLButtonElement | null;
     if (el) {
       el.classList.add('upload-hidden');
       el.disabled = !!isPublic;
     }
   });
 
-  const uploadNotice = $('upload-notification');
+  const uploadNotice = $('upload-notification') as HTMLElement | null;
   if (uploadNotice) uploadNotice.style.display = isPublic ? 'none' : 'flex';
-  const quickActions = document.querySelector('.profile-actions-grid');
+  const quickActions = document.querySelector('.profile-actions-grid') as HTMLElement | null;
   if (quickActions) {
     quickActions.style.display = isPublic ? 'none' : '';
-    const actionsSection = quickActions.closest('.profile-section');
+    const actionsSection = quickActions.closest('.profile-section') as HTMLElement | null;
     if (actionsSection) actionsSection.style.display = isPublic ? 'none' : '';
   }
-  const themesSection = document.querySelector('.themes-shop-container');
+  const themesSection = document.querySelector('.themes-shop-container') as HTMLElement | null;
   if (themesSection) themesSection.style.display = isPublic ? 'none' : '';
 
-  const publicActions = document.getElementById('profile-public-actions');
+  const publicActions = document.getElementById('profile-public-actions') as HTMLElement | null;
   if (publicActions) {
     publicActions.style.display = isPublic ? 'flex' : 'none';
   }
@@ -453,14 +460,14 @@ export async function resizeImage(file: File, maxWidth: number, maxHeight: numbe
         canvas.width = width;
         canvas.height = height;
         
-        if (isCircle) {
+        if (isCircle && ctx) {
           ctx.beginPath();
           ctx.arc(width / 2, height / 2, Math.min(width, height) / 2, 0, Math.PI * 2);
           ctx.closePath();
           ctx.clip();
         }
         
-        ctx.drawImage(img, 0, 0, width, height);
+        if (ctx) ctx.drawImage(img, 0, 0, width, height);
         
         canvas.toBlob((blob) => {
           if (blob) {
@@ -472,7 +479,9 @@ export async function resizeImage(file: File, maxWidth: number, maxHeight: numbe
       };
       
       img.onerror = () => reject(new Error('Failed to load image'));
-      img.src = e.target.result;
+      if (typeof e.target?.result === 'string') {
+        img.src = e.target.result;
+      }
     };
     
     reader.onerror = () => reject(new Error('Failed to read file'));
@@ -557,9 +566,9 @@ export async function updateAvatar(file: File, userId: string): Promise<void> {
     if (dbError) throw dbError;
     
     const cacheBust = Date.now();
-    const profileAvatar = $('profile-avatar');
-    const headerAvatar = $('header-avatar');
-    const menuAvatar = $('menu-avatar');
+    const profileAvatar = $('profile-avatar') as HTMLImageElement | null;
+    const headerAvatar = $('header-avatar') as HTMLImageElement | null;
+    const menuAvatar = $('menu-avatar') as HTMLImageElement | null;
     if (profileAvatar) profileAvatar.src = avatarUrl + '?t=' + cacheBust;
     if (headerAvatar) headerAvatar.src = avatarUrl + '?t=' + cacheBust;
     if (menuAvatar) menuAvatar.src = avatarUrl + '?t=' + cacheBust;
@@ -602,7 +611,7 @@ export async function updateBanner(file: File, userId: string): Promise<void> {
       return;
     }
     
-    const bannerElement = document.querySelector('.profile-banner');
+    const bannerElement = document.querySelector('.profile-banner') as HTMLElement | null;
     if (!bannerElement) return;
     const loadingDiv = document.createElement('div');
     loadingDiv.className = 'upload-loading active';
@@ -659,9 +668,9 @@ export async function loadUserImages(userId: string): Promise<void> {
     }
     
     if (data.avatar_url) {
-      const avatarImg = $('profile-avatar');
-      const headerAvatar = $('header-avatar');
-      const menuAvatar = $('menu-avatar');
+      const avatarImg = $('profile-avatar') as HTMLImageElement | null;
+      const headerAvatar = $('header-avatar') as HTMLImageElement | null;
+      const menuAvatar = $('menu-avatar') as HTMLImageElement | null;
       const cacheBust = Date.now();
       
       if (avatarImg) avatarImg.src = data.avatar_url + '?t=' + cacheBust;
@@ -670,7 +679,7 @@ export async function loadUserImages(userId: string): Promise<void> {
     }
     
     if (data.banner_url) {
-      const bannerElement = document.querySelector('.profile-banner');
+      const bannerElement = document.querySelector('.profile-banner') as HTMLElement | null;
       if (bannerElement) {
         bannerElement.style.backgroundImage = `url(${data.banner_url}?t=${Date.now()})`;
         bannerElement.style.backgroundSize = 'cover';
@@ -743,7 +752,7 @@ export function setupProfileDropdownClose(): void {
     const container = document.querySelector('.profile-dropdown-container');
     const dropdown = document.getElementById('profile-dropdown');
     
-    if (container && dropdown && !container.contains(e.target)) {
+    if (container && dropdown && e.target && !container.contains(e.target as Node)) {
       // Garantir que está fechado e não clicável
       dropdown.classList.remove('active');
       dropdown.style.pointerEvents = 'none';
@@ -772,17 +781,17 @@ setupProfileDropdownClose._bound = false;
  * @param {string} userId - ID do usuário
  */
 export function setupProfileUploadListeners(userId: string): void {
-  const avatarUploadInput = document.getElementById('avatar-upload');
-  const bannerUploadInput = document.getElementById('banner-upload');
-  const avatarContainer = document.querySelector('.profile-avatar-container');
-  const bannerElement = document.querySelector('.profile-banner');
+  const avatarUploadInput = document.getElementById('avatar-upload') as HTMLInputElement | null;
+  const bannerUploadInput = document.getElementById('banner-upload') as HTMLInputElement | null;
+  const avatarContainer = document.querySelector('.profile-avatar-container') as HTMLElement | null;
+  const bannerElement = document.querySelector('.profile-banner') as HTMLElement | null;
 
   // Evitar duplicação de listeners (chamado no login e pode ser chamado mais de uma vez)
-  if (avatarContainer && avatarContainer.dataset.bound === '1') return;
+  if (avatarContainer && (avatarContainer as any).dataset?.bound === '1') return;
   
   // Click no avatar
   if (avatarContainer) {
-    avatarContainer.dataset.bound = '1';
+    (avatarContainer as any).dataset.bound = '1';
     avatarContainer.addEventListener('click', () => {
       if (avatarUploadInput && !avatarUploadInput.disabled) {
         avatarUploadInput.click();
@@ -793,7 +802,7 @@ export function setupProfileUploadListeners(userId: string): void {
   // Click no banner
   if (bannerElement) {
     bannerElement.addEventListener('click', () => {
-      if (bannerUploadInput && !bannerUploadInput.disabled) {
+      if (bannerUploadInput && !(bannerUploadInput as HTMLInputElement).disabled) {
         bannerUploadInput.click();
       }
     });
@@ -802,22 +811,24 @@ export function setupProfileUploadListeners(userId: string): void {
   // Upload avatar
   if (avatarUploadInput) {
     avatarUploadInput.addEventListener('change', (e) => {
-      const file = e.target.files[0];
+      const target = e.target as HTMLInputElement;
+      const file = target.files?.[0];
       if (file) {
         updateAvatar(file, userId);
       }
-      e.target.value = '';
+      target.value = '';
     });
   }
   
   // Upload banner
   if (bannerUploadInput) {
     bannerUploadInput.addEventListener('change', (e) => {
-      const file = e.target.files[0];
+      const target = e.target as HTMLInputElement;
+      const file = target.files?.[0];
       if (file) {
         updateBanner(file, userId);
       }
-      e.target.value = '';
+      target.value = '';
     });
   }
 }

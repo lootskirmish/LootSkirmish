@@ -93,7 +93,7 @@ export function initLegal(): void {
   
   tabs.forEach(tab => {
     tab.addEventListener('click', () => {
-      const targetTab = tab.dataset.legalTab;
+      const targetTab = (tab as HTMLElement).dataset.legalTab;
       
       // Se for Support, abrir o modal ao invés de trocar aba
       if (targetTab === 'support') {
@@ -132,13 +132,15 @@ window.goToLegal = function(tab = 'terms') {
     return;
   }
   
-  window.goTo('legal');
+  if (window.goTo) {
+    window.goTo('legal');
+  }
   
   // Ativar a tab específica
   setTimeout(() => {
     const targetTab = document.querySelector(`[data-legal-tab="${tab}"]`);
     if (targetTab) {
-      targetTab.click();
+      (targetTab as HTMLElement).click();
     }
   }, 100);
 };

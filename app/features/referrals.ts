@@ -138,7 +138,7 @@ async function fetchReferralStats(): Promise<{ data: any; session: any }> {
 
 function startCountdown(nextWithdrawAt: string | null): void {
   const { countdown } = getEls();
-  clearInterval(countdownTimer);
+  if (countdownTimer) clearInterval(countdownTimer);
   if (!countdown) return;
 
   if (!nextWithdrawAt) {
@@ -152,7 +152,7 @@ function startCountdown(nextWithdrawAt: string | null): void {
   const tick = () => {
     const diff = target - Date.now();
     if (diff <= 0) {
-      clearInterval(countdownTimer);
+      if (countdownTimer) clearInterval(countdownTimer);
       countdown.textContent = 'Ready to withdraw';
       return;
     }
@@ -213,7 +213,7 @@ function renderStats(data: ReferralStats): void {
   } = getEls();
 
   if (code) code.textContent = data.code || 'username';
-  if (link) link.value = data.shareLink || `${window.location.origin}/auth?ref=${data.code || ''}`;
+  if (link) (link as HTMLInputElement).value = data.shareLink || `${window.location.origin}/auth?ref=${data.code || ''}`;
   const percentFormatted = parseFloat((data.tierPercent || 0).toFixed(1));
   if (badge) badge.textContent = `${data.tierLabel || 'Level'} • ${percentFormatted}%`;
   if (tierLabel) tierLabel.textContent = data.tierLabel || 'Tier';
@@ -226,7 +226,7 @@ function renderStats(data: ReferralStats): void {
 
   const canWithdraw = data.canWithdraw !== false && (data.pendingBalance || 0) > 0;
   if (withdrawBtn) {
-    withdrawBtn.disabled = !canWithdraw;
+    (withdrawBtn as HTMLButtonElement).disabled = !canWithdraw;
   }
   if (withdrawNote) {
     if (data.canWithdraw === false) {
@@ -260,7 +260,7 @@ async function loadReferralPanel(): Promise<void> {
     renderHistory(data.transactions || [], { reset: true });
   } catch (err) {
     console.error('referrals load error', err);
-    showAlert('error', 'Referral error', err.message || 'Could not load referrals');
+    showAlert('error', 'Referral error', ((err as any)?.message || 'Could not load referrals'));
   } finally {
     toggleLoading(false);
     isLoading = false;
@@ -270,7 +270,7 @@ async function loadReferralPanel(): Promise<void> {
 async function withdrawEarnings(): Promise<void> {
   const { withdrawBtn } = getEls();
   if (!withdrawBtn) return;
-  withdrawBtn.disabled = true;
+  (withdrawBtn as HTMLButtonElement).disabled = true;
   withdrawBtn.classList.add('loading');
   try {
     const { data: { session } } = await supabase.auth.getSession();
@@ -299,17 +299,17 @@ async function withdrawEarnings(): Promise<void> {
     await loadReferralPanel();
   } catch (err) {
     console.error('withdraw error', err);
-    showAlert('error', 'Withdraw error', err.message || 'Unable to withdraw');
+    showAlert('error', 'Withdraw error', ((err as any)?.message || 'Unable to withdraw'));
   } finally {
     withdrawBtn.classList.remove('loading');
-    withdrawBtn.disabled = false;
+    (withdrawBtn as HTMLButtonElement).disabled = false;
   }
 }
 
 async function loadMoreHistory(): Promise<void> {
   if (!historyHasMore) return;
   const { historyLoad } = getEls();
-  if (historyLoad) historyLoad.disabled = true;
+  if (historyLoad) (historyLoad as HTMLButtonElement).disabled = true;
   const { data: { session } } = await supabase.auth.getSession();
   if (!session?.access_token) return;
 
@@ -329,7 +329,7 @@ async function loadMoreHistory(): Promise<void> {
   const result = await response.json();
   if (!response.ok) {
     showAlert('error', 'History error', result.error || 'Unable to load history');
-    if (historyLoad) historyLoad.disabled = false;
+    if (historyLoad) (historyLoad as HTMLButtonElement).disabled = false;
     return;
   }
 
@@ -339,7 +339,7 @@ async function loadMoreHistory(): Promise<void> {
   historyPage = nextPage;
   renderHistory(result.transactions || [], { reset: false });
   if (historyLoad) {
-    historyLoad.disabled = !historyHasMore;
+    (historyLoad as HTMLButtonElement).disabled = !historyHasMore;
     historyLoad.textContent = historyHasMore ? 'Load more' : 'All caught up';
   }
 }
@@ -347,7 +347,7 @@ async function loadMoreHistory(): Promise<void> {
 function copyLink(): void {
   const { link, copyBtn } = getEls();
   if (!link || !copyBtn) return;
-  navigator.clipboard.writeText(link.value).then(() => {
+  navigator.clipboard.writeText((link as HTMLInputElement).value).then(() => {
     copyBtn.classList.add('copied');
     copyBtn.textContent = 'Copied!';
     setTimeout(() => {

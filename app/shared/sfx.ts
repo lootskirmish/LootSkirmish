@@ -11,7 +11,7 @@ interface PlaySoundOptions {
   loop?: boolean;
 }
 
-interface LoopHandle {
+export interface LoopHandle {
   stop(): void;
 }
 
@@ -123,9 +123,9 @@ export function bindGlobalClickSfx(): void {
     const target = e.target instanceof Element ? e.target : null;
     const skip = target?.closest('[data-no-click-sfx]');
     if (skip) return;
-    const custom = target?.closest('[data-click-sfx]');
-    if (custom?.dataset?.clickSfx) {
-      playSound(custom.dataset.clickSfx as SoundKey, { volume: 0.35 });
+    const custom = target?.closest('[data-click-sfx]') as HTMLElement | null;
+    if (custom && (custom as HTMLElement).dataset?.clickSfx) {
+      playSound(((custom as HTMLElement).dataset.clickSfx) as SoundKey, { volume: 0.35 });
       return;
     }
     playSound('click', { volume: 0.35 });

@@ -3,7 +3,7 @@
 // ROUTE-LOADER.TS - Carregador de Dados por Rota
 // ============================================================
 
-import { store, dataActions } from './store';
+import { store, dataActions } from './persistence';
 import { getActiveUser } from './session';
 
 /**

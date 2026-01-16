@@ -46,6 +46,9 @@ interface ChatMessage {
   message: string;
   created_at: string;
   avatar_url?: string;
+  is_drop_notification?: boolean;
+  user_rank?: number;
+  user_level?: number;
 }
 
 interface User {
@@ -117,7 +120,7 @@ function getChatEls(): ChatElements {
   chatPanelEl ||= document.getElementById('chat-panel');
   chatBtnEl ||= document.getElementById('chat-toggle-icon');
   chatContainerEl ||= document.getElementById('chat-messages-container');
-  chatInputEl ||= document.getElementById('chat-input');
+  chatInputEl ||= document.getElementById('chat-input') as HTMLInputElement | null;
   chatSendBtnEl ||= document.getElementById('chat-send-btn');
 
   return {
@@ -200,6 +203,7 @@ function initializePresence(user: User): void {
   // Rastrear mudanças de presence
   presenceChannel
     .on('presence', { event: 'sync' }, () => {
+      if (!presenceChannel) return;
       const state = presenceChannel.presenceState();
       onlineUsers = new Set(Object.keys(state));
       updateOnlineCount();
@@ -213,7 +217,7 @@ function initializePresence(user: User): void {
       updateOnlineCount();
     })
     .subscribe(async (status) => {
-      if (status === 'SUBSCRIBED') {
+      if (status === 'SUBSCRIBED' && presenceChannel) {
         // Enviar presence
         await presenceChannel.track({
           user_id: user.id,
@@ -252,7 +256,10 @@ function getUserActionMenu(): HTMLElement {
     const btn = target instanceof Element ? target.closest('button[data-action]') : null;
     if (!btn) return;
     const { userId, username } = menu.dataset;
-    handleUserAction(btn.dataset.action, { userId, username });
+    const action = (btn as HTMLElement).dataset.action || '';
+    if (userId && username) {
+      handleUserAction(action, { userId, username });
+    }
     hideUserActionMenu();
   });
 
@@ -294,9 +301,9 @@ async function relationToUser(targetUserId: string): Promise<string> {
   try {
     const data = await callFriendsApi('fetchState');
     const st = data?.state || { friends: [], incoming: [], outgoing: [] };
-    if (st.friends?.some((f) => f.user_id === targetUserId)) return 'friend';
-    if (st.incoming?.some((f) => f.user_id === targetUserId)) return 'incoming';
-    if (st.outgoing?.some((f) => f.user_id === targetUserId)) return 'outgoing';
+    if (st.friends?.some((f: any) => f.user_id === targetUserId)) return 'friend';
+    if (st.incoming?.some((f: any) => f.user_id === targetUserId)) return 'incoming';
+    if (st.outgoing?.some((f: any) => f.user_id === targetUserId)) return 'outgoing';
     return 'none';
   } catch (_) {
     return 'none';
@@ -323,7 +330,7 @@ function handleUserAction(action: string, { userId, username }: { userId: string
         await callFriendsApi('removeFriend', { targetUserId: userId });
         showToast('info', `Removed ${username}`);
       } catch (err) {
-        showToast('error', err.message || 'Failed to remove');
+        showToast('error', ((err as any)?.message || 'Failed to remove'));
       }
     })();
     return;
@@ -335,7 +342,7 @@ function handleUserAction(action: string, { userId, username }: { userId: string
         await callFriendsApi('acceptRequest', { fromUserId: userId });
         showToast('success', `Accepted ${username}`);
       } catch (err) {
-        showToast('error', err.message || 'Failed to accept');
+        showToast('error', ((err as any)?.message || 'Failed to accept'));
       }
     })();
     return;
@@ -372,7 +379,7 @@ function showUserActionMenu(targetEl: HTMLElement, { userId, username }: { userI
   // Update friend action button text/state based on relation
   (async () => {
     const relation = await relationToUser(userId);
-    const btn = document.getElementById('chat-action-friend-btn');
+    const btn = document.getElementById('chat-action-friend-btn') as HTMLButtonElement | null;
     if (!btn) return;
     btn.disabled = false;
     btn.dataset.action = 'add-friend';
@@ -381,7 +388,7 @@ function showUserActionMenu(targetEl: HTMLElement, { userId, username }: { userI
       btn.dataset.action = 'remove-friend';
     } else if (relation === 'outgoing') {
       btn.textContent = 'Pending';
-      btn.disabled = true;
+      (btn as HTMLButtonElement).disabled = true;
     } else if (relation === 'incoming') {
       btn.textContent = 'Accept Request';
       btn.dataset.action = 'accept-request';
@@ -485,7 +492,7 @@ function subscribeToChat(): void {
         table: 'chat_messages'
       },
       (payload) => {
-        void renderMessage(payload.new);
+        void renderMessage(payload.new as ChatMessage);
         if (isChatOpen) scrollToBottom();
         
         // Remover empty state se existir
@@ -554,9 +561,11 @@ async function renderMessage(msg: ChatMessage): Promise<void> {
         // 🛡️ Sanitizar username antes de usar na URL
         const safeUsername = encodeURIComponent(msg.username || 'Player');
         avatarUrl = data?.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${safeUsername}`;
-        avatarCache.set(msg.user_id, avatarUrl);
+        if (msg.user_id && avatarUrl) {
+          avatarCache.set(msg.user_id, avatarUrl);
+        }
       } else {
-        avatarUrl = avatarCache.get(msg.user_id);
+        avatarUrl = avatarCache.get(msg.user_id) || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(msg.username || 'Player')}`;
       }
     }
     
@@ -594,11 +603,11 @@ function updateOnlineCount(): void {
   const onlineUsersEl = document.getElementById('chat-online-users');
   
   if (onlineCountEl) {
-    onlineCountEl.textContent = count;
+    onlineCountEl.textContent = String(count);
   }
   
   if (onlineUsersEl) {
-    onlineUsersEl.textContent = count;
+    onlineUsersEl.textContent = String(count);
   }
 }
 
@@ -606,7 +615,7 @@ function updateOnlineCount(): void {
 // SEND MESSAGE
 // ============================================================
 export async function sendChatMessage(): Promise<void> {
-  const input = document.getElementById('chat-input');
+  const input = document.getElementById('chat-input') as HTMLInputElement | null;
   if (!input) return;
   
   const message = input.value.trim();
@@ -633,7 +642,7 @@ export async function sendChatMessage(): Promise<void> {
   
   // Desabilitar input temporariamente
   input.disabled = true;
-  const sendBtn = document.getElementById('chat-send-btn');
+  const sendBtn = document.getElementById('chat-send-btn') as HTMLButtonElement | null;
   if (sendBtn) {
     sendBtn.disabled = true;
     sendBtn.textContent = '⏳';
@@ -783,7 +792,7 @@ function formatTime(timestamp: string): string {
   const date = new Date(timestamp);
   const now = new Date();
   
-  const diffMs = now - date;
+  const diffMs = now.getTime() - date.getTime();
   const diffMins = Math.floor(diffMs / 60000);
   
   if (diffMins < 1) return 'now';
@@ -856,7 +865,7 @@ function bindChatDomOnce(): void {
 
   // Prevenir abertura acidental no resize
   window.addEventListener('resize', () => {
-    clearTimeout(resizeTimeout);
+    if (resizeTimeout) clearTimeout(resizeTimeout);
     resizeTimeout = setTimeout(() => {
       if (!isChatOpen && chatPanel) {
         chatPanel.classList.remove('active');

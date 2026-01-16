@@ -27,9 +27,9 @@ interface LeaderboardType {
   name: string;
   icon: string;
   isSpecial?: boolean;
-  column?: string;
-  order?: 'asc' | 'desc';
-  format?: (value: number) => string;
+  column: string;
+  order: 'asc' | 'desc';
+  format: (value: number) => string;
 }
 
 interface LeaderboardTypes {
@@ -64,7 +64,10 @@ general: {
     id: 'general',
     name: '⭐ General',
     icon: '⭐',
-    isSpecial: true
+    isSpecial: true,
+    column: 'average_rank',
+    order: 'asc' as const,
+    format: (value: number) => `Rank ${value.toFixed(1)}`
   },
   money: {
     id: 'money',
@@ -241,9 +244,11 @@ function setupLeaderboardUI(): void {
 // TROCAR CATEGORIA
 // ============================================================
 
-window.switchLeaderboardCategory = function(categoryId) {
+window.switchLeaderboardCategory = function(categoryId: string) {
   if (currentLeaderboardType === categoryId) {
-    toggleCategoryDropdown();
+    if (typeof window.toggleCategoryDropdown === 'function') {
+      window.toggleCategoryDropdown();
+    }
     return;
   }
   
@@ -262,10 +267,12 @@ window.switchLeaderboardCategory = function(categoryId) {
   
   // Atualizar opções ativas
   document.querySelectorAll('.category-option').forEach(opt => {
-    opt.classList.toggle('active', opt.dataset.category === categoryId);
+    (opt as HTMLElement).classList.toggle('active', (opt as HTMLElement).dataset.category === categoryId);
   });
   
-  toggleCategoryDropdown();
+  if (typeof window.toggleCategoryDropdown === 'function') {
+    window.toggleCategoryDropdown();
+  }
   renderLeaderboard();
 };
 
@@ -378,9 +385,9 @@ export async function renderLeaderboard(): Promise<void> {
 function renderTop3(players: PlayerData[], typeConfig: LeaderboardType): string {
   const listContainer = document.getElementById('leader-list');
   
-  if (players.length === 0) return;
+  if (players.length === 0) return '';
   
-  const maxValue = players[0]?.[typeConfig.column] || 1;
+  const maxValue = (players[0]?.[typeConfig.column] as number) || 1;
   
   const podiumHTML = `
     <div class="leaderboard-podium">
@@ -390,24 +397,25 @@ function renderTop3(players: PlayerData[], typeConfig: LeaderboardType): string 
     </div>
   `;
   
-  listContainer.innerHTML = podiumHTML;
+  if (listContainer) listContainer.innerHTML = podiumHTML;
+  return podiumHTML;
 }
 
 function renderPodiumCard(player: PlayerData, rank: number, maxValue: number, typeConfig: LeaderboardType, medal: string): string {
   if (!player) return '<div></div>';
   
-  const value = player[typeConfig.column] || 0;
+  const value = (player[typeConfig.column] as number) || 0;
   const progress = (value / maxValue) * 100;
   const progressText = rank === 1 ? '100%' : `${progress.toFixed(0)}%`;
   
-  const medalIcons = {
+  const medalIcons: Record<string, string> = {
     gold: '<div class="podium-crown">👑</div>',
     silver: '<div class="podium-medal">🥈</div>',
     bronze: '<div class="podium-medal">🥉</div>'
   };
   
-  const badges = (player.collected_badges || []).slice(0, 3).map(badgeId => {
-    const badgeEmojis = {
+  const badges = (player.collected_badges || []).slice(0, 3).map((badgeId: string) => {
+    const badgeEmojis: Record<string, string> = {
       'starter': '🎯',
       'lucky': '🔥',
       'veteran': '⚡',
@@ -423,7 +431,7 @@ function renderPodiumCard(player: PlayerData, rank: number, maxValue: number, ty
   return `
     <div class="podium-card ${medal} ${isYou ? 'you' : ''}">
       <div class="podium-rank">#${rank}</div>
-      ${medalIcons[medal]}
+      ${medalIcons[medal] || ''}
       
       <img src="${player.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${player.username}`}" alt="${player.username}" class="podium-avatar-img" loading="lazy">
       
@@ -472,17 +480,19 @@ function renderPodiumCard(player: PlayerData, rank: number, maxValue: number, ty
 // ============================================================
 
 function renderList(players: PlayerData[], startRank: number, typeConfig: LeaderboardType): string {
-  const listContainer = document.getElementById('leader-list');
+  const listContainer = document.getElementById('leader-list') as HTMLElement | null;
   
-  if (players.length === 0) return;
+  if (players.length === 0) return '';
   
-  const maxValue = allPlayersData[0]?.[typeConfig.column] || 1;
+  const maxValue = allPlayersData[0]?.[typeConfig.column as keyof PlayerData] || 1;
   
   const listHTML = `
     <div class="leaderboard-list">
       ${players.map((player, index) => renderListItem(player, startRank + index, maxValue, typeConfig)).join('')}
     </div>
   `;
+  
+  if (!listContainer) return listHTML;
   
   if (currentPage === 0) {
     listContainer.innerHTML += listHTML;
@@ -494,25 +504,28 @@ function renderList(players: PlayerData[], startRank: number, typeConfig: Leader
       listContainer.innerHTML += listHTML;
     }
   }
+  
+  return listHTML;
 }
 
 function renderListItem(player: PlayerData, rank: number, maxValue: number, typeConfig: LeaderboardType): string {
-  const value = player[typeConfig.column] || 0;
+  const value = (player[typeConfig.column as keyof PlayerData] as number) || 0;
   const progress = (value / maxValue) * 100;
   
-  const badges = (player.collected_badges || []).slice(0, 2).map(badgeId => {
-    const badgeEmojis = {
-      'starter': '🎯',
-      'lucky': '🔥',
-      'veteran': '⚡',
-      'rich': '💎',
-      'champion': '👑',
-      'legendary': '🌟'
-    };
+  const badgeEmojis: Record<string, string> = {
+    'starter': '🎯',
+    'lucky': '🔥',
+    'veteran': '⚡',
+    'rich': '💎',
+    'champion': '👑',
+    'legendary': '🌟'
+  };
+  
+  const badges = (player.collected_badges || []).slice(0, 2).map((badgeId: string) => {
     return `<span class="leader-badge-small">${badgeEmojis[badgeId] || '⭐'}</span>`;
   }).join('');
   
-  const winRate = player.total_battles > 0 
+  const winRate = player.total_battles && player.total_wins
     ? ((player.total_wins / player.total_battles) * 100).toFixed(0)
     : 0;
   
@@ -573,23 +586,24 @@ window.loadMorePlayers = async function() {
     return;
   }
   const originalHTML = btn.innerHTML;
+  const btnElement = btn as HTMLButtonElement;
   
-  btn.innerHTML = `
+  btnElement.innerHTML = `
     <span class="loading-spinner-small"></span>
     <span data-translate>Loading...</span>
   `;
-  btn.disabled = true;
+  btnElement.disabled = true;
   
   currentPage++;
   
   await renderLeaderboard();
   
-  btn.innerHTML = originalHTML;
-  btn.disabled = false;
+  btnElement.innerHTML = originalHTML;
+  btnElement.disabled = false;
   isLoading = false;
 };
 
-async function getUserPositionForType(typeConfig: LeaderboardType, token: number): Promise<number | null> {
+async function getUserPositionForType(typeConfig: LeaderboardType, token: number): Promise<{ userRank: number; username: string; valueText: string } | null> {
   if (!currentUserData?.id) return null;
   if (token !== renderToken) return null;
 
@@ -602,13 +616,13 @@ async function getUserPositionForType(typeConfig: LeaderboardType, token: number
   const { data: userRow, error: userError } = await supabase
     .from('player_stats')
     .select(`user_id, username, ${typeConfig.column}, role`)
-    .eq('user_id', currentUserData.id)
+    .eq('user_id', currentUserData!.id)
     .single();
 
   if (token !== renderToken) return null;
-  if (userError || !userRow || userRow.role === 'bot') return null;
+  if (userError || !userRow || (userRow as any).role === 'bot') return null;
 
-  const userValue = userRow[typeConfig.column] ?? 0;
+  const userValue = (userRow as any)[typeConfig.column] ?? 0;
 
   // 2) Contar quantos usuários estão acima/abaixo (evita baixar a tabela inteira)
   let countQuery = supabase
@@ -629,9 +643,9 @@ async function getUserPositionForType(typeConfig: LeaderboardType, token: number
   const userRank = (count || 0) + 1;
   const valueText = typeConfig.format(userValue);
 
-  const value = {
+  const value: any = {
     userRank,
-    username: userRow.username,
+    username: (userRow as any).username,
     valueText
   };
 
@@ -687,6 +701,7 @@ async function updateUserPosition(typeConfig: LeaderboardType, token: number): P
 
 async function renderGeneralLeaderboard(token: number): Promise<void> {
   const listContainer = document.getElementById('leader-list');
+  if (!listContainer) return;
   
   listContainer.innerHTML = `
     <div class="leaderboard-loading">
@@ -705,19 +720,19 @@ async function renderGeneralLeaderboard(token: number): Promise<void> {
     if (token !== renderToken) return;
     
     if (error || !allPlayers) {
-      listContainer.innerHTML = `<p style="color: #ef4444;">Error loading data</p>`;
+      if (listContainer) listContainer.innerHTML = `<p style="color: #ef4444;">Error loading data</p>`;
       return;
     }
     
     // Calcular rankings para cada categoria
-    const rankMaps = {};
+    const rankMaps: Record<string, Map<string, number>> = {};
     
     Object.entries(LEADERBOARD_TYPES).forEach(([key, config]) => {
       if (config.isSpecial) return;
       
       const sorted = [...allPlayers].sort((a, b) => {
-        const valA = a[config.column] || 0;
-        const valB = b[config.column] || 0;
+        const valA = Number((a as any)[config.column] || 0);
+        const valB = Number((b as any)[config.column] || 0);
         return config.order === 'desc' ? valB - valA : valA - valB;
       });
 
@@ -726,7 +741,7 @@ async function renderGeneralLeaderboard(token: number): Promise<void> {
     
     // Calcular média de posições para cada jogador
     const playerAverages = allPlayers.map(player => {
-      const positions = Object.values(rankMaps).map(map => map.get(player.user_id) ?? 999);
+      const positions = Object.values(rankMaps).map((map: Map<string, number>) => map.get(player.user_id) ?? 999);
       
       const average = positions.reduce((sum, pos) => sum + pos, 0) / positions.length;
       
@@ -752,7 +767,7 @@ async function renderGeneralLeaderboard(token: number): Promise<void> {
     
     // Atualizar posição do usuário
     if (currentUserData) {
-      const userIndex = playerAverages.findIndex(p => p.user_id === currentUserData.id);
+      const userIndex = playerAverages.findIndex(p => p.user_id === (currentUserData?.id || ''));
       if (userIndex !== -1 && userIndex >= 10) {
         const overlay = document.getElementById('user-position-overlay');
         if (overlay) {
@@ -769,12 +784,12 @@ async function renderGeneralLeaderboard(token: number): Promise<void> {
     
   } catch (err) {
     console.error('Error rendering general leaderboard:', err);
-    listContainer.innerHTML = `<p style="color: #ef4444;">Unexpected error</p>`;
+    if (listContainer) listContainer.innerHTML = `<p style="color: #ef4444;">Unexpected error</p>`;
   }
 }
 
-function renderGeneralTop3(players: PlayerData[], rankMaps: RankMaps): string {
-  const listContainer = document.getElementById('leader-list');
+function renderGeneralTop3(players: PlayerData[], rankMaps: Record<string, Map<string, number>>): string {
+  const listContainer = document.getElementById('leader-list') as HTMLElement | null;
   
   const podiumHTML = `
     <div class="leaderboard-podium">
@@ -784,13 +799,17 @@ function renderGeneralTop3(players: PlayerData[], rankMaps: RankMaps): string {
     </div>
   `;
   
-  listContainer.innerHTML = podiumHTML;
+  if (listContainer) {
+    listContainer.innerHTML = podiumHTML;
+  }
+  
+  return podiumHTML;
 }
 
-function renderGeneralPodiumCard(player: PlayerData, rank: number, rankMaps: RankMaps, medal: string): string {
+function renderGeneralPodiumCard(player: PlayerData, rank: number, rankMaps: Record<string, Map<string, number>>, medal: string): string {
   if (!player) return '<div></div>';
   
-  const medalIcons = {
+  const medalIcons: Record<string, string> = {
     gold: '<div class="podium-crown">👑</div>',
     silver: '<div class="podium-medal">🥈</div>',
     bronze: '<div class="podium-medal">🥉</div>'
@@ -836,8 +855,9 @@ function renderGeneralPodiumCard(player: PlayerData, rank: number, rankMaps: Ran
   `;
 }
 
-function renderGeneralList(players: PlayerData[], startRank: number, rankMaps: RankMaps): string {
+function renderGeneralList(players: PlayerData[], startRank: number, rankMaps: Record<string, Map<string, number>>): string {
   const listContainer = document.getElementById('leader-list');
+  if (!listContainer) return '';
   
   const listHTML = `
     <div class="leaderboard-list">
@@ -866,10 +886,11 @@ function renderGeneralList(players: PlayerData[], startRank: number, rankMaps: R
   `;
   
   listContainer.innerHTML += listHTML;
+  return listHTML;
 }
 
 // ============================================================
 // EXPORTS GLOBAIS
 // ============================================================
-window.initLeaderboard = initLeaderboard;
-window.renderLeaderboard = renderLeaderboard;
+(window as any).initLeaderboard = initLeaderboard;
+(window as any).renderLeaderboard = renderLeaderboard;

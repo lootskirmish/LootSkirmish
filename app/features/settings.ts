@@ -48,8 +48,8 @@ export async function loadSettingsData(): Promise<void> {
     }
     
     // Preencher dados
-    const emailInput = document.getElementById('settings-email');
-    const usernameInput = document.getElementById('settings-username');
+    const emailInput = document.getElementById('settings-email') as HTMLInputElement | null;
+    const usernameInput = document.getElementById('settings-username') as HTMLInputElement | null;
     
     if (emailInput) emailInput.value = user.email || '';
     if (usernameInput) usernameInput.value = stats.username || '';
@@ -87,7 +87,7 @@ let usernameChangeCount: number = 0;
 
 function applySavedPreferencesToUI(): void {
   for (const { id, storageKey, defaultChecked } of checkboxBindings) {
-    const checkbox = document.getElementById(id);
+    const checkbox = document.getElementById(id) as HTMLInputElement | null;
     if (!checkbox) continue;
 
     const saved = localStorage.getItem(storageKey);
@@ -99,14 +99,14 @@ function applySavedPreferencesToUI(): void {
     }
   }
 
-  const volumeSlider = document.getElementById('volume-slider');
+  const volumeSlider = document.getElementById('volume-slider') as HTMLInputElement | null;
   if (volumeSlider) {
     const savedVolume = localStorage.getItem('volume') || '50';
     volumeSlider.value = savedVolume;
-    setMasterVolume(savedVolume);
+    setMasterVolume(Number(savedVolume));
   }
 
-  const languageSelect = document.getElementById('language-select');
+  const languageSelect = document.getElementById('language-select') as HTMLSelectElement | null;
   if (languageSelect) {
     const savedLanguage = localStorage.getItem('language') || 'en';
     languageSelect.value = savedLanguage;
@@ -121,39 +121,39 @@ function bindSettingsUIOnce(): void {
   settingsUIBound = true;
 
   for (const { id, storageKey } of checkboxBindings) {
-    const checkbox = document.getElementById(id);
+    const checkbox = document.getElementById(id) as HTMLInputElement | null;
     if (!checkbox) continue;
     if (checkbox.dataset.bound === '1') continue;
     checkbox.dataset.bound = '1';
 
-    checkbox.addEventListener('change', async function() {
+    checkbox.addEventListener('change', async function(this: HTMLInputElement) {
       // For publicProfile, handle specially with rigorous validation
       if (storageKey === 'publicProfile') {
         const wasChecked = this.checked;
         const previousState = localStorage.getItem(storageKey) === 'true';
         
         try {
-          const user = getActiveUser({ sync: true, allowStored: true }) || window.currentUser;
+          const user = getActiveUser({ sync: true, allowStored: true }) || (window as any).currentUser;
           const session = await supabase.auth.getSession();
           
           if (!user?.id) {
             console.error('No user found for public profile update');
             this.checked = previousState;
-            showToast('Error: User not found', 'error');
+            showToast('error', 'Error: User not found');
             return;
           }
 
           if (!session?.data?.session?.access_token) {
             console.error('No valid session for public profile update');
             this.checked = previousState;
-            showToast('Error: Session expired. Please refresh.', 'error');
+            showToast('error', 'Error: Session expired. Please refresh.');
             return;
           }
 
           // Show loading state
-          const originalText = this.nextElementSibling?.textContent;
+          const originalText = this.nextElementSibling?.textContent || '';
           if (this.nextElementSibling) {
-            this.nextElementSibling.textContent = 'Saving...';
+            (this.nextElementSibling as HTMLElement).textContent = 'Saving...';
           }
 
           const response = await fetch('/api/_profile', {
@@ -182,7 +182,7 @@ function bindSettingsUIOnce(): void {
             const errorMsg = wasChecked 
               ? 'Failed to make profile public'
               : 'Failed to make profile private';
-            showToast(errorMsg, 'error');
+            showToast('error', errorMsg);
             return;
           }
 
@@ -193,10 +193,10 @@ function bindSettingsUIOnce(): void {
             localStorage.setItem(storageKey, String(previousState));
             
             if (this.nextElementSibling) {
-              this.nextElementSibling.textContent = originalText;
+              (this.nextElementSibling as HTMLElement).textContent = originalText || '';
             }
             
-            showToast('Failed to update profile privacy setting', 'error');
+            showToast('error', 'Failed to update profile privacy setting');
             return;
           }
 
@@ -204,14 +204,14 @@ function bindSettingsUIOnce(): void {
           localStorage.setItem(storageKey, String(wasChecked));
           
           if (this.nextElementSibling) {
-            this.nextElementSibling.textContent = originalText;
+            (this.nextElementSibling as HTMLElement).textContent = originalText || '';
           }
 
           // Show success message
           const successMsg = wasChecked 
             ? '✓ Your profile is now public' 
             : '✓ Your profile is now private';
-          showToast(successMsg, 'success');
+          showToast('success', successMsg);
 
           // Play feedback sound
           playSound('switch', { volume: 0.3 });
@@ -223,7 +223,7 @@ function bindSettingsUIOnce(): void {
           this.checked = previousState;
           localStorage.setItem(storageKey, String(previousState));
           
-          showToast('Error updating profile privacy setting', 'error');
+          showToast('error', 'Error updating profile privacy setting');
         }
         return; // Exit early, don't do the general localStorage update below
       }
@@ -242,19 +242,19 @@ function bindSettingsUIOnce(): void {
     });
   }
 
-  const volumeSlider = document.getElementById('volume-slider');
+  const volumeSlider = document.getElementById('volume-slider') as HTMLInputElement | null;
   if (volumeSlider && volumeSlider.dataset.bound !== '1') {
     volumeSlider.dataset.bound = '1';
-    volumeSlider.addEventListener('input', function() {
+    volumeSlider.addEventListener('input', function(this: HTMLInputElement) {
       localStorage.setItem('volume', String(this.value));
-      setMasterVolume(this.value);
+      setMasterVolume(Number(this.value));
     });
   }
 
-  const languageSelect = document.getElementById('language-select');
+  const languageSelect = document.getElementById('language-select') as HTMLSelectElement | null;
   if (languageSelect && languageSelect.dataset.bound !== '1') {
     languageSelect.dataset.bound = '1';
-    languageSelect.addEventListener('change', async function() {
+    languageSelect.addEventListener('change', async function(this: HTMLSelectElement) {
       const newLang = this.value;
       localStorage.setItem('language', newLang);
 
@@ -271,9 +271,9 @@ function bindSettingsUIOnce(): void {
       // Se o profile estiver aberto, recarregar com os argumentos esperados
       const profileScreen = document.getElementById('profile');
       if (profileScreen && profileScreen.classList.contains('active')) {
-        if (window.loadProfileData) {
-          const user = getActiveUser({ sync: true, allowStored: true }) || window.currentUser;
-          await window.loadProfileData(user, window.calculateLevel, window.applyTranslations);
+        if ((window as any).loadProfileData) {
+          const user = getActiveUser({ sync: true, allowStored: true }) || (window as any).currentUser;
+          await ((window as any).loadProfileData)(user, (window as any).calculateLevel, (window as any).applyTranslations);
         }
       }
 
@@ -307,13 +307,14 @@ function updateUsernameUI(): void {
   }
 
   if (button) {
-    if (input?.disabled) {
-      button.textContent = window.t ? window.t('edit') : 'Edit';
+    const inputEl = input as HTMLInputElement | null;
+    if (inputEl?.disabled) {
+      button.textContent = ((window as any).t ? ((window as any).t('edit')) : 'Edit');
       button.style.background = 'var(--button-primary)';
       if (cancelBtn) cancelBtn.style.display = 'none';
     } else {
       button.textContent = cost === 0
-        ? (window.t ? window.t('save') : 'Save (Free)')
+        ? (((window as any).t ? ((window as any).t('save')) : 'Save (Free)'))
         : `Save · ${cost} 💎`;
       button.style.background = cost === 0 ? '#22c55e' : '#f59e0b';
       if (cancelBtn) cancelBtn.style.display = 'inline-flex';
@@ -339,7 +340,7 @@ const SOUND_TOGGLE_IDS = [
 
 function syncSoundModalCheckboxes(): void {
   for (const { id, key } of SOUND_TOGGLE_IDS) {
-    const el = document.getElementById(id);
+    const el = document.getElementById(id) as HTMLInputElement | null;
     if (!el) continue;
     const prefs = localStorage.getItem('soundPrefs');
     let enabled = true;
@@ -358,10 +359,10 @@ function syncSoundModalCheckboxes(): void {
 }
 
 function updateSoundChannelEnabledState(): void {
-  const master = document.getElementById('sound-effects');
+  const master = document.getElementById('sound-effects') as HTMLInputElement | null;
   const masterOn = master ? master.checked : true;
   for (const { id } of SOUND_TOGGLE_IDS) {
-    const el = document.getElementById(id);
+    const el = document.getElementById(id) as HTMLInputElement | null;
     if (!el) continue;
     el.disabled = !masterOn;
   }
@@ -395,19 +396,19 @@ function bindSoundModal(): void {
   }
 
   for (const { id, key } of SOUND_TOGGLE_IDS) {
-    const el = document.getElementById(id);
+    const el = document.getElementById(id) as HTMLInputElement | null;
     if (!el || el.dataset.bound === '1') continue;
     el.dataset.bound = '1';
-    el.addEventListener('change', function() {
-      setSoundPreference(key, this.checked);
+    el.addEventListener('change', function(this: HTMLInputElement) {
+      setSoundPreference(key as any, this.checked);
       playSound('switch', { volume: 0.3 });
     });
   }
 
-  const masterSound = document.getElementById('sound-effects');
+  const masterSound = document.getElementById('sound-effects') as HTMLInputElement | null;
   if (masterSound && masterSound.dataset.bound !== '1') {
     masterSound.dataset.bound = '1';
-    masterSound.addEventListener('change', function() {
+    masterSound.addEventListener('change', function(this: HTMLInputElement) {
       localStorage.setItem('soundEffects', String(this.checked));
       setSoundEnabled(this.checked);
       updateSoundChannelEnabledState();
@@ -415,10 +416,10 @@ function bindSoundModal(): void {
     });
   }
 
-  const masterMusic = document.getElementById('background-music');
+  const masterMusic = document.getElementById('background-music') as HTMLInputElement | null;
   if (masterMusic && masterMusic.dataset.bound !== '1') {
     masterMusic.dataset.bound = '1';
-    masterMusic.addEventListener('change', function() {
+    masterMusic.addEventListener('change', function(this: HTMLInputElement) {
       localStorage.setItem('backgroundMusic', String(this.checked));
       playSound('switch', { volume: 0.3 });
     });
@@ -451,9 +452,9 @@ function bindSoundModal(): void {
  * Habilita/salva edição do username
  */
 export async function enableUsernameEdit(): Promise<void> {
-  const input = document.getElementById('settings-username');
-  const button = document.getElementById('edit-username-btn');
-  const cancelBtn = document.getElementById('cancel-username-btn');
+  const input = document.getElementById('settings-username') as HTMLInputElement | null;
+  const button = document.getElementById('edit-username-btn') as HTMLButtonElement | null;
+  const cancelBtn = document.getElementById('cancel-username-btn') as HTMLButtonElement | null;
   
   if (!input || !button) return;
   
@@ -480,7 +481,7 @@ export async function enableUsernameEdit(): Promise<void> {
     }
 
     try {
-      const user = getActiveUser({ sync: true, allowStored: true }) || window.currentUser;
+      const user = getActiveUser({ sync: true, allowStored: true }) || (window as any).currentUser;
       if (!user?.id) {
         showAlert('error', 'Not logged in', 'Sign in to change your username.');
         return;
@@ -492,7 +493,7 @@ export async function enableUsernameEdit(): Promise<void> {
         return;
       }
 
-      button.disabled = true;
+      if (button) button.disabled = true;
 
       const response = await fetch('/api/_profile', {
         method: 'POST',
@@ -520,7 +521,7 @@ export async function enableUsernameEdit(): Promise<void> {
         } else {
           showAlert('error', 'Rename failed', result.error || 'Could not change username now.');
         }
-        button.disabled = false;
+        if (button) button.disabled = false;
         updateUsernameUI();
         return;
       }
@@ -534,15 +535,15 @@ export async function enableUsernameEdit(): Promise<void> {
       if (profileUsername) profileUsername.textContent = result.username || newUsername;
       input.value = result.username || newUsername;
 
-      if (window.playerDiamonds && typeof result.diamonds === 'number') {
-        window.playerDiamonds.value = result.diamonds;
-        window.cachedDiamonds = result.diamonds;
+      if ((window as any).playerDiamonds && typeof result.diamonds === 'number') {
+        (window as any).playerDiamonds.value = result.diamonds;
+        (window as any).cachedDiamonds = result.diamonds;
       }
 
       showToast('success', 'Username updated ✨', usernameChangeCount === 1 ? 'First change was free.' : '100 💎 deducted.');
 
       input.disabled = true;
-      button.disabled = false;
+      if (button) button.disabled = false;
       if (cancelBtn) {
         cancelBtn.style.display = 'none';
         delete input.dataset.originalUsername;
@@ -552,16 +553,16 @@ export async function enableUsernameEdit(): Promise<void> {
     } catch (err) {
       console.error('Username change error:', err);
       showAlert('error', 'Connection error', 'Could not reach the server. Please try again.');
-      button.disabled = false;
+      if (button) button.disabled = false;
       updateUsernameUI();
     }
   }
 }
 
 export function cancelUsernameEdit(): void {
-  const input = document.getElementById('settings-username');
-  const button = document.getElementById('edit-username-btn');
-  const cancelBtn = document.getElementById('cancel-username-btn');
+  const input = document.getElementById('settings-username') as HTMLInputElement | null;
+  const button = document.getElementById('edit-username-btn') as HTMLButtonElement | null;
+  const cancelBtn = document.getElementById('cancel-username-btn') as HTMLButtonElement | null;
 
   if (!input || !button) return;
 
@@ -573,7 +574,7 @@ export function cancelUsernameEdit(): void {
     input.disabled = true;
   }
 
-  if (button.disabled) button.disabled = false;
+  if (button && button.disabled) button.disabled = false;
   if (cancelBtn) cancelBtn.style.display = 'none';
   updateUsernameUI();
 }
@@ -608,7 +609,7 @@ export async function changePassword(): Promise<void> {
     alert('✅ Password changed successfully!');
     
   } catch (err) {
-    alert('❌ Unexpected error: ' + err.message);
+    alert('❌ Unexpected error: ' + ((err as any)?.message || String(err)));
   }
 }
 
@@ -632,8 +633,8 @@ export function goToSettings(): void {
 // EXPOR FUNÇÕES GLOBALMENTE
 // ============================================================
 
-window.loadSettingsData = loadSettingsData;
-window.enableUsernameEdit = enableUsernameEdit;
-window.cancelUsernameEdit = cancelUsernameEdit;
-window.changePassword = changePassword;
-window.goToSettings = goToSettings;
+(window as any).loadSettingsData = loadSettingsData;
+  (window as any).enableUsernameEdit = enableUsernameEdit;
+  (window as any).cancelUsernameEdit = cancelUsernameEdit;
+  (window as any).changePassword = changePassword;
+  (window as any).goToSettings = goToSettings;

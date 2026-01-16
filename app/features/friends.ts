@@ -48,7 +48,6 @@ interface SearchResult {
 declare global {
   interface Window {
     publicProfileUsername?: string;
-    setChatToggleIcon?: (config: any) => void;
     refreshLucideIcons?: () => void;
     initializeFriends: typeof initializeFriends;
     cleanupFriends: typeof cleanupFriends;
@@ -96,7 +95,7 @@ function getSessionToken(): Promise<string | null> {
 
 function normalizeState(raw: any): FriendState {
   if (!raw || typeof raw !== 'object') return { ...EMPTY_STATE };
-  const safe = (arr) => Array.isArray(arr) ? arr.filter((x) => x && x.user_id) : [];
+  const safe = (arr: any[]): any[] => Array.isArray(arr) ? arr.filter((x: any) => x && x.user_id) : [];
   return {
     friends: safe(raw.friends),
     incoming: safe(raw.incoming),
@@ -119,7 +118,7 @@ function ensureEls(): void {
   friendsListEl ||= document.getElementById('friends-list');
   incomingListEl ||= document.getElementById('friends-incoming');
   outgoingListEl ||= document.getElementById('friends-outgoing');
-  searchInputEl ||= document.getElementById('friend-search-input');
+  searchInputEl = (searchInputEl || document.getElementById('friend-search-input')) as HTMLInputElement | null;
   searchResultsEl ||= document.getElementById('friend-search-results');
   notificationsPopoverEl ||= document.getElementById('notifications-popover');
   notificationsListEl ||= document.getElementById('notification-items');
@@ -183,7 +182,7 @@ async function callFriendsApi(action: string, payload: Record<string, any> = {})
   }
 
   if (!response.ok) {
-    throw new Error(data?.error || 'Request failed');
+    throw new Error((data as any)?.error || 'Request failed');
   }
 
   return data;
@@ -218,12 +217,12 @@ function renderFriendsList(): void {
 
   const fragment = document.createDocumentFragment();
   friendState.friends.forEach((f) => {
-    const profile = profileCache.get(f.user_id) || {};
+    const profile = (profileCache.get(f.user_id) || {}) as any;
     const item = document.createElement('div');
     item.className = 'friend-item';
     item.innerHTML = `
       <div class="friend-meta">
-        <img src="${profile.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(f.username)}`}" alt="${f.username}" class="friend-avatar" style="cursor:pointer;">
+        <img src="${profile.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(f.username || '')}`}" alt="${f.username}" class="friend-avatar" style="cursor:pointer;">
         <div>
           <div class="friend-name">${f.username}</div>
           <div class="friend-sub">Lv ${profile.level || 1}</div>
@@ -235,7 +234,7 @@ function renderFriendsList(): void {
     `;
 
     // Abrir perfil público ao clicar no avatar ou no bloco meta
-    const navigateToProfile = () => openPublicProfile(f.username);
+    const navigateToProfile = () => openPublicProfile(f.username || '');
     const avatarEl = item.querySelector('.friend-avatar');
     const metaEl = item.querySelector('.friend-meta');
     avatarEl?.addEventListener('click', navigateToProfile);
@@ -245,15 +244,18 @@ function renderFriendsList(): void {
       navigateToProfile();
     });
 
-    item.querySelector('[data-action="remove"]').addEventListener('click', async () => {
-      try {
-        await callFriendsApi('removeFriend', { targetUserId: f.user_id });
-        await refreshState();
-        showToast('info', `Removed ${f.username}`);
-      } catch (err) {
-        showToast('error', err.message || 'Failed to remove friend');
-      }
-    });
+    const removeBtn = item.querySelector('[data-action="remove"]') as HTMLElement | null;
+    if (removeBtn) {
+      removeBtn.addEventListener('click', async () => {
+        try {
+          await callFriendsApi('removeFriend', { targetUserId: f.user_id });
+          await refreshState();
+          showToast('info', `Removed ${f.username}`);
+        } catch (err) {
+          showToast('error', ((err as any)?.message || 'Failed to remove friend'));
+        }
+      });
+    }
 
     fragment.appendChild(item);
   });
@@ -271,12 +273,12 @@ function renderIncoming(): void {
 
   const frag = document.createDocumentFragment();
   friendState.incoming.forEach((f) => {
-    const profile = profileCache.get(f.user_id) || {};
+    const profile = (profileCache.get(f.user_id) || {}) as any;
     const item = document.createElement('div');
     item.className = 'friend-item';
     item.innerHTML = `
       <div class="friend-meta">
-        <img src="${profile.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(f.username)}`}" alt="${f.username}" class="friend-avatar" style="cursor:pointer;">
+        <img src="${profile.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(f.username || '')}`}" alt="${f.username}" class="friend-avatar" style="cursor:pointer;">
         <div>
           <div class="friend-name">${f.username}</div>
           <div class="friend-sub">Lv ${profile.level || 1}</div>
@@ -289,32 +291,38 @@ function renderIncoming(): void {
     `;
 
     // Clique no avatar/meta abre perfil público
-    const go = () => openPublicProfile(f.username);
+    const go = () => openPublicProfile(f.username || '');
     item.querySelector('.friend-avatar')?.addEventListener('click', go);
     item.querySelector('.friend-meta')?.addEventListener('click', (e) => {
       if (!(e.target instanceof Element) || e.target.closest('.friend-actions')) return;
       go();
     });
 
-    item.querySelector('[data-action="accept"]').addEventListener('click', async () => {
-      try {
-        await callFriendsApi('acceptRequest', { fromUserId: f.user_id });
-        await refreshState();
-        showToast('success', `Accepted ${f.username}`);
-      } catch (err) {
-        showToast('error', err.message || 'Failed to accept');
-      }
-    });
+    const acceptBtn = item.querySelector('[data-action="accept"]') as HTMLElement | null;
+    if (acceptBtn) {
+      acceptBtn.addEventListener('click', async () => {
+        try {
+          await callFriendsApi('acceptRequest', { fromUserId: f.user_id });
+          await refreshState();
+          showToast('success', `Accepted ${f.username}`);
+        } catch (err) {
+          showToast('error', ((err as any)?.message || 'Failed to accept'));
+        }
+      });
+    }
 
-    item.querySelector('[data-action="reject"]').addEventListener('click', async () => {
-      try {
-        await callFriendsApi('rejectRequest', { fromUserId: f.user_id });
-        await refreshState();
-        showToast('info', `Declined ${f.username}`);
-      } catch (err) {
-        showToast('error', err.message || 'Failed to decline');
-      }
-    });
+    const rejectBtn = item.querySelector('[data-action="reject"]') as HTMLElement | null;
+    if (rejectBtn) {
+      rejectBtn.addEventListener('click', async () => {
+        try {
+          await callFriendsApi('rejectRequest', { fromUserId: f.user_id });
+          await refreshState();
+          showToast('info', `Declined ${f.username}`);
+        } catch (err) {
+          showToast('error', ((err as any)?.message || 'Failed to decline'));
+        }
+      });
+    }
 
     frag.appendChild(item);
   });
@@ -332,12 +340,12 @@ function renderOutgoing(): void {
 
   const frag = document.createDocumentFragment();
   friendState.outgoing.forEach((f) => {
-    const profile = profileCache.get(f.user_id) || {};
+    const profile = (profileCache.get(f.user_id) || {}) as any;
     const item = document.createElement('div');
     item.className = 'friend-item';
     item.innerHTML = `
       <div class="friend-meta">
-        <img src="${profile.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(f.username)}`}" alt="${f.username}" class="friend-avatar" style="cursor:pointer;">
+        <img src="${profile.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(f.username || '')}`}" alt="${f.username}" class="friend-avatar" style="cursor:pointer;">
         <div>
           <div class="friend-name">${f.username}</div>
           <div class="friend-sub">Lv ${profile.level || 1}</div>
@@ -349,22 +357,25 @@ function renderOutgoing(): void {
     `;
 
     // Clique no avatar/meta abre perfil público
-    const go = () => openPublicProfile(f.username);
+    const go = () => openPublicProfile(f.username || '');
     item.querySelector('.friend-avatar')?.addEventListener('click', go);
     item.querySelector('.friend-meta')?.addEventListener('click', (e) => {
       if (!(e.target instanceof Element) || e.target.closest('.friend-actions')) return;
       go();
     });
 
-    item.querySelector('[data-action="cancel"]').addEventListener('click', async () => {
-      try {
-        await callFriendsApi('cancelRequest', { targetUserId: f.user_id });
-        await refreshState();
-        showToast('info', `Cancelled request to ${f.username}`);
-      } catch (err) {
-        showToast('error', err.message || 'Failed to cancel');
-      }
-    });
+    const cancelBtn = item.querySelector('[data-action="cancel"]') as HTMLElement | null;
+    if (cancelBtn) {
+      cancelBtn.addEventListener('click', async () => {
+        try {
+          await callFriendsApi('cancelRequest', { targetUserId: f.user_id });
+          await refreshState();
+          showToast('info', `Cancelled request to ${f.username}`);
+        } catch (err) {
+          showToast('error', ((err as any)?.message || 'Failed to cancel'));
+        }
+      });
+    }
 
     frag.appendChild(item);
   });
@@ -404,15 +415,15 @@ function renderSearchResults(results: SearchResult[] = []): void {
       go();
     });
 
-    const actions = item.querySelector('.friend-actions');
+    const actions = item.querySelector('.friend-actions') as HTMLElement | null;
     if (rel === 'friend') {
-      actions.innerHTML = '<span class="friend-pill">Friends</span>';
+      if (actions) actions.innerHTML = '<span class="friend-pill">Friends</span>';
     } else if (rel === 'outgoing') {
       const btn = document.createElement('button');
       btn.className = 'friend-secondary';
       btn.textContent = 'Pending';
-      btn.disabled = true;
-      actions.appendChild(btn);
+      (btn as HTMLButtonElement).disabled = true;
+      if (actions) actions.appendChild(btn);
     } else if (rel === 'incoming') {
       const accept = document.createElement('button');
       accept.className = 'friend-primary';
@@ -423,7 +434,7 @@ function renderSearchResults(results: SearchResult[] = []): void {
           await refreshState();
           showToast('success', `Accepted ${r.username}`);
         } catch (err) {
-          showToast('error', err.message || 'Failed');
+          showToast('error', ((err as any)?.message || 'Failed'));
         }
       });
       const decline = document.createElement('button');
@@ -435,11 +446,13 @@ function renderSearchResults(results: SearchResult[] = []): void {
           await refreshState();
           showToast('info', `Declined ${r.username}`);
         } catch (err) {
-          showToast('error', err.message || 'Failed');
+          showToast('error', ((err as any)?.message || 'Failed'));
         }
       });
-      actions.appendChild(accept);
-      actions.appendChild(decline);
+      if (actions) {
+        actions.appendChild(accept);
+        actions.appendChild(decline);
+      }
     } else {
       const addBtn = document.createElement('button');
       addBtn.className = 'friend-primary';
@@ -447,7 +460,7 @@ function renderSearchResults(results: SearchResult[] = []): void {
       addBtn.addEventListener('click', async () => {
         await requestFriend(r.user_id, r.username);
       });
-      actions.appendChild(addBtn);
+      if (actions) actions.appendChild(addBtn);
     }
 
     frag.appendChild(item);
@@ -463,13 +476,13 @@ function renderBadges(): void {
 
   const friendBadge = document.getElementById('friends-count-badge');
   if (friendBadge) {
-    friendBadge.textContent = Math.min(friendCount, 99);
+    friendBadge.textContent = String(Math.min(friendCount, 99));
     friendBadge.style.display = friendCount > 0 ? 'flex' : 'none';
   }
 
   const notifBadge = document.getElementById('notifications-count');
   if (notifBadge) {
-    notifBadge.textContent = Math.min(pendingCount, 99);
+    notifBadge.textContent = String(Math.min(pendingCount, 99));
     notifBadge.style.display = pendingCount > 0 ? 'flex' : 'none';
   }
 }
@@ -486,12 +499,12 @@ function renderNotificationsPopover(): void {
 
   const frag = document.createDocumentFragment();
   friendState.incoming.slice(0, 5).forEach((f) => {
-    const profile = profileCache.get(f.user_id) || {};
+    const profile = (profileCache.get(f.user_id) || {}) as any;
     const item = document.createElement('div');
     item.className = 'notification-item';
     item.innerHTML = `
       <div class="friend-meta">
-        <img src="${profile.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(f.username)}`}" alt="${f.username}" class="friend-avatar">
+        <img src="${profile.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(f.username || '')}`}" alt="${f.username}" class="friend-avatar">
         <div>
           <div class="friend-name">${f.username}</div>
           <div class="friend-sub">Friend request</div>
@@ -503,25 +516,31 @@ function renderNotificationsPopover(): void {
       </div>
     `;
 
-    item.querySelector('[data-action="accept"]').addEventListener('click', async () => {
-      try {
-        await callFriendsApi('acceptRequest', { fromUserId: f.user_id });
-        await refreshState();
-        showToast('success', `Accepted ${f.username}`);
-      } catch (err) {
-        showToast('error', err.message || 'Failed');
-      }
-    });
+    const acceptBtn = item.querySelector('[data-action="accept"]') as HTMLElement | null;
+    if (acceptBtn) {
+      acceptBtn.addEventListener('click', async () => {
+        try {
+          await callFriendsApi('acceptRequest', { fromUserId: f.user_id });
+          await refreshState();
+          showToast('success', `Accepted ${f.username}`);
+        } catch (err) {
+          showToast('error', ((err as any)?.message || 'Failed'));
+        }
+      });
+    }
 
-    item.querySelector('[data-action="reject"]').addEventListener('click', async () => {
-      try {
-        await callFriendsApi('rejectRequest', { fromUserId: f.user_id });
-        await refreshState();
-        showToast('info', `Declined ${f.username}`);
-      } catch (err) {
-        showToast('error', err.message || 'Failed');
-      }
-    });
+    const rejectBtn = item.querySelector('[data-action="reject"]') as HTMLElement | null;
+    if (rejectBtn) {
+      rejectBtn.addEventListener('click', async () => {
+        try {
+          await callFriendsApi('rejectRequest', { fromUserId: f.user_id });
+          await refreshState();
+          showToast('info', `Declined ${f.username}`);
+        } catch (err) {
+          showToast('error', ((err as any)?.message || 'Failed'));
+        }
+      });
+    }
 
     frag.appendChild(item);
   });
@@ -530,9 +549,10 @@ function renderNotificationsPopover(): void {
 }
 
 function updatePublicProfileCta(): void {
-  const btn = document.getElementById('public-profile-add-friend');
+  const btn = document.getElementById('public-profile-add-friend') as HTMLButtonElement | null;
   if (!btn) return;
-  if (!publicProfileTarget || !publicProfileTarget.user_id) {
+  const userTarget = publicProfileTarget as any;
+  if (!publicProfileTarget || !userTarget?.user_id) {
     btn.style.display = 'none';
     return;
   }
@@ -545,18 +565,19 @@ function updatePublicProfileCta(): void {
     return;
   }
 
-  const rel = relationTo(publicProfileTarget.user_id);
+  const rel = relationTo(userTarget.user_id);
   btn.disabled = false;
 
   if (rel === 'friend') {
     btn.textContent = 'Remove friend';
     btn.onclick = async () => {
       try {
-        await callFriendsApi('removeFriend', { targetUserId: publicProfileTarget.user_id });
+        const userTarget = publicProfileTarget as any;
+        await callFriendsApi('removeFriend', { targetUserId: userTarget?.user_id });
         await refreshState();
-        showToast('info', `Removed ${publicProfileTarget.username}`);
+        showToast('info', `Removed ${publicProfileTarget?.username}`);
       } catch (err) {
-        showToast('error', err.message || 'Failed to remove');
+        showToast('error', ((err as any)?.message || 'Failed to remove'));
       }
     };
   } else if (rel === 'outgoing') {
@@ -566,17 +587,19 @@ function updatePublicProfileCta(): void {
     btn.textContent = 'Accept request';
     btn.onclick = async () => {
       try {
-        await callFriendsApi('acceptRequest', { fromUserId: publicProfileTarget.user_id });
+        const userTarget = publicProfileTarget as any;
+        await callFriendsApi('acceptRequest', { fromUserId: userTarget?.user_id });
         await refreshState();
-        showToast('success', `Accepted ${publicProfileTarget.username}`);
+        showToast('success', `Accepted ${publicProfileTarget?.username}`);
       } catch (err) {
-        showToast('error', err.message || 'Failed');
+        showToast('error', ((err as any)?.message || 'Failed'));
       }
     };
   } else {
     btn.textContent = 'Add friend';
     btn.onclick = async () => {
-      await requestFriend(publicProfileTarget.user_id, publicProfileTarget.username);
+      const userTarget = publicProfileTarget as any;
+      await requestFriend(userTarget?.user_id, publicProfileTarget?.username || '');
     };
   }
 }
@@ -590,7 +613,7 @@ async function refreshState(): Promise<void> {
     setState(data.state, data.profiles);
   } catch (err) {
     console.error('Friends refresh failed:', err);
-    showToast('error', err.message || 'Failed to load friends');
+    showToast('error', ((err as any)?.message || 'Failed to load friends'));
   }
 }
 
@@ -600,7 +623,7 @@ async function requestFriend(targetUserId: string, targetUsername: string): Prom
     await refreshState();
     showToast('success', `Request sent to ${targetUsername || 'player'}`);
   } catch (err) {
-    showToast('error', err.message || 'Failed to send request');
+    showToast('error', ((err as any)?.message || 'Failed to send request'));
   }
 }
 
@@ -609,7 +632,7 @@ async function searchUsers(query: string): Promise<void> {
     const data = await callFriendsApi('searchUsers', { query });
     renderSearchResults(data.results || []);
   } catch (err) {
-    showToast('error', err.message || 'Search failed');
+    showToast('error', ((err as any)?.message || 'Search failed'));
   }
 }
 
@@ -620,7 +643,7 @@ function switchTab(tab: string): void {
   activeTab = tab;
   const panels = document.querySelectorAll('[data-friends-section]');
   panels.forEach((p) => {
-    const isTarget = p.dataset.friendsSection === tab;
+    const isTarget = (p as HTMLElement).dataset.friendsSection === tab;
     p.classList.toggle('hidden', !isTarget);
   });
   tabButtons?.forEach((btn) => {
@@ -698,7 +721,7 @@ function bindDomOnce(): void {
 
   searchInputEl?.addEventListener('keypress', (e) => {
     if (e.key === 'Enter') {
-      const q = searchInputEl.value.trim();
+      const q = searchInputEl?.value.trim() || '';
       if (q.length >= 2) searchUsers(q);
     }
   });
@@ -720,8 +743,8 @@ function bindDomOnce(): void {
     notificationsPopoverBound = true;
     document.addEventListener('click', (e) => {
       if (!notificationsPopoverEl || notificationsPopoverEl.classList.contains('hidden')) return;
-      const isInside = notificationsPopoverEl.contains(e.target);
-      const isBtn = notificationsBtnEl && notificationsBtnEl.contains(e.target);
+      const isInside = notificationsPopoverEl.contains(e.target as Node | null);
+      const isBtn = notificationsBtnEl && notificationsBtnEl.contains(e.target as Node | null);
       if (!isInside && !isBtn) {
         notificationsPopoverEl.classList.add('hidden');
       }
@@ -734,9 +757,9 @@ function bindDomOnce(): void {
   });
 
   // Prevenir abertura acidental no resize
-  let resizeTimeout = null;
+  let resizeTimeout: NodeJS.Timeout | null = null;
   window.addEventListener('resize', () => {
-    clearTimeout(resizeTimeout);
+    if (resizeTimeout) clearTimeout(resizeTimeout);
     resizeTimeout = setTimeout(() => {
       if (!isPanelOpen && friendsPanelEl) {
         friendsPanelEl.classList.remove('active');

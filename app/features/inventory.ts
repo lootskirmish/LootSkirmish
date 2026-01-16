@@ -42,10 +42,15 @@ interface Filters {
 }
 
 interface UpgradeOffer {
+  maxed?: boolean;
+  current?: string;
+  next?: string;
   nextMax: number;
   cost: number;
   newSlots: number;
   canAfford: boolean;
+  discountApplied?: boolean;
+  upgradesDone?: number;
 }
 
 interface PlayerStats {
@@ -148,7 +153,7 @@ async function syncPlayerStats(userId: string): Promise<PlayerStats | null> {
 
     return data;
   } catch (err) {
-    console.warn('⚠️ Unexpected error syncing player_stats:', err?.message || err);
+    console.warn('⚠️ Unexpected error syncing player_stats:', ((err as any)?.message || err));
     return null;
   }
 }
@@ -266,7 +271,7 @@ export async function renderInventory(userId: string): Promise<void> {
   }
   
   try {
-    await syncPlayerStats(targetUserId);
+    await syncPlayerStats(targetUserId || '');
 
     const grid = document.getElementById('inv-grid');
     const empty = document.getElementById('inv-empty');
@@ -333,7 +338,7 @@ export async function renderInventory(userId: string): Promise<void> {
 
     // Atualizar contador TOTAL (sem filtro)
     const countElement = document.getElementById('inv-count');
-    if (countElement) countElement.textContent = totalCount ?? itemCountFiltered;
+    if (countElement) countElement.textContent = String(totalCount ?? itemCountFiltered);
     
     // Atualizar barra de capacidade com total ocupado
     updateCapacityBar(totalCount ?? itemCountFiltered);
@@ -406,7 +411,9 @@ function renderPagination(totalItems: number): void {
     
     const invSection = document.getElementById('inventory');
     const invGrid = document.getElementById('inv-grid');
-    invSection.insertBefore(paginationDiv, invGrid.nextSibling);
+    if (invSection && invGrid) {
+      invSection.insertBefore(paginationDiv, invGrid.nextSibling);
+    }
   }
   
   // Se só tem 1 página, esconder
@@ -454,7 +461,10 @@ export function goToPage(page: number): void {
   }
   
   // Scroll para o topo
-  document.getElementById('inventory').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  const inventoryEl = document.getElementById('inventory');
+  if (inventoryEl) {
+    inventoryEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
 }
 
 /**
@@ -493,7 +503,7 @@ function setMaxCapacityFromBackend(value: number): void {
 function computeUpgradeOffer(): UpgradeOffer | null {
   const current = currentMaxCapacity || INVENTORY_BASE_CAPACITY;
   if (current >= INVENTORY_MAX_CAPACITY) {
-    return { maxed: true, current, next: current, cost: 0, discountApplied: false, upgradesDone: 0 };
+    return { maxed: true, current: String(current), next: String(current), cost: 0, discountApplied: false, upgradesDone: 0, nextMax: current, newSlots: 0, canAfford: false } as UpgradeOffer;
   }
 
   const upgradesDone = Math.max(0, Math.floor((current - INVENTORY_BASE_CAPACITY) / UPGRADE_STEP));
@@ -503,15 +513,15 @@ function computeUpgradeOffer(): UpgradeOffer | null {
   const cost = discountApplied ? Math.ceil(baseCost * 0.7) : baseCost;
   const next = Math.min(current + UPGRADE_STEP, INVENTORY_MAX_CAPACITY);
 
-  return { maxed: false, current, next, cost, discountApplied, upgradesDone };
+  return { maxed: false, current: String(current), next: String(next), cost, discountApplied, upgradesDone, nextMax: next, newSlots: UPGRADE_STEP, canAfford: true } as UpgradeOffer;
 }
 
 function updateUpgradeButtonUI(): void {
-  const btn = document.getElementById('inv-upgrade-btn');
+  const btn = document.getElementById('inv-upgrade-btn') as HTMLButtonElement | null;
   if (!btn) return;
 
   const offer = computeUpgradeOffer();
-  if (offer.maxed) {
+  if (offer?.maxed) {
     btn.textContent = 'Max Capacity';
     btn.disabled = true;
     btn.classList.add('disabled');
@@ -523,7 +533,7 @@ function updateUpgradeButtonUI(): void {
   btn.classList.remove('disabled');
 }
 
-function renderUpgradeModalContent(): void {
+function renderUpgradeModalContent(): UpgradeOffer | null {
   const offer = computeUpgradeOffer();
   const currentEl = document.getElementById('upgrade-current-cap');
   const nextEl = document.getElementById('upgrade-next-cap');
@@ -532,26 +542,27 @@ function renderUpgradeModalContent(): void {
   const ctaEl = document.getElementById('upgrade-confirm-btn');
   const noteEl = document.getElementById('upgrade-note');
 
-  if (currentEl) currentEl.textContent = offer.current;
-  if (nextEl) nextEl.textContent = offer.next;
-  if (costEl) costEl.textContent = offer.cost;
+  if (currentEl) currentEl.textContent = offer?.current || '';
+  if (nextEl) nextEl.textContent = offer?.next || '';
+  if (costEl) costEl.textContent = String(offer?.cost || 0);
 
   if (badgeEl) {
-    badgeEl.style.display = offer.discountApplied ? 'inline-flex' : 'none';
+    badgeEl.style.display = offer?.discountApplied ? 'inline-flex' : 'none';
   }
 
   if (ctaEl) {
-    if (offer.maxed) {
-      ctaEl.disabled = true;
+    const ctaButton = ctaEl as HTMLButtonElement;
+    if (offer?.maxed) {
+      ctaButton.disabled = true;
       ctaEl.textContent = 'Maxed Out';
     } else {
-      ctaEl.disabled = false;
-      ctaEl.textContent = `Buy for ${offer.cost} 💎`;
+      ctaButton.disabled = false;
+      ctaEl.textContent = `Buy for ${offer?.cost || 0} 💎`;
     }
   }
 
   if (noteEl) {
-    if (offer.maxed) {
+    if (offer?.maxed) {
       noteEl.textContent = 'You already reached the maximum capacity (50).';
     } else {
       noteEl.textContent = 'Each upgrade adds 5 slots. Maximum capacity is 50.';
@@ -572,7 +583,7 @@ export function closeInventoryUpgradeModal(): void {
   const modal = document.getElementById('inventory-upgrade-modal');
   if (!modal) return;
   modal.classList.add('hidden');
-  const ctaEl = document.getElementById('upgrade-confirm-btn');
+  const ctaEl = document.getElementById('upgrade-confirm-btn') as HTMLButtonElement | null;
   if (ctaEl) ctaEl.disabled = false;
 }
 
@@ -584,10 +595,10 @@ export async function purchaseInventoryUpgrade(): Promise<void> {
   }
 
   const modal = document.getElementById('inventory-upgrade-modal');
-  const ctaEl = document.getElementById('upgrade-confirm-btn');
+  const ctaEl = document.getElementById('upgrade-confirm-btn') as HTMLButtonElement | null;
   const offer = computeUpgradeOffer();
 
-  if (offer.maxed) return;
+  if (offer?.maxed) return;
 
   try {
     const { data: { session } } = await supabase.auth.getSession();
@@ -642,7 +653,8 @@ export async function purchaseInventoryUpgrade(): Promise<void> {
   } finally {
     if (ctaEl) {
       ctaEl.disabled = false;
-      ctaEl.textContent = `Buy for ${computeUpgradeOffer().cost} 💎`;
+      const offerCost = computeUpgradeOffer();
+      ctaEl.textContent = `Buy for ${offerCost?.cost || 0} 💎`;
     }
   }
 }
@@ -674,7 +686,7 @@ export function toggleItemSelection(itemId: string): void {
  * Atualiza o botão "Vender Selecionados"
  */
 export function updateSelectedButton(): void {
-  const btn = document.getElementById('sell-selected-btn');
+  const btn = document.getElementById('sell-selected-btn') as HTMLButtonElement | null;
   if (!btn) return;
   
   const count = selectedItems.size;
@@ -708,7 +720,7 @@ export async function sellSingleItem(itemId: string): Promise<void> {
     return;
   }
   
-  await sellItem(itemId, currentUserId, () => renderInventory(currentUserId));
+  await sellItem(itemId, currentUserId || '', () => renderInventory(currentUserId || ''));
 }
 
 /**
@@ -733,7 +745,7 @@ export async function sellItem(itemId: string, userId: string, renderCallback: (
     
     // 🔥 Criar partículas verdes
     if (card) {
-      createSellParticles(card);
+      createSellParticles(card as HTMLElement);
     }
     
     await new Promise(resolve => setTimeout(resolve, 300));
@@ -795,7 +807,7 @@ export async function sellItem(itemId: string, userId: string, renderCallback: (
     isSelling = false;
     
   } catch (err) {
-    alert('❌ Error when selling: ' + err.message);
+    alert('❌ Error when selling: ' + ((err as any)?.message || String(err)));
     console.error('Error:', err);
     isSelling = false;
   }
@@ -819,7 +831,7 @@ export async function sellSelected(): Promise<void> {
     // Criar partículas para cada item selecionado
     selectedItems.forEach(itemId => {
       const card = document.querySelector(`[data-item-id="${itemId}"]`);
-      if (card) createSellParticles(card);
+      if (card) createSellParticles(card as HTMLElement);
     });
     
     await new Promise(resolve => setTimeout(resolve, 400));
@@ -899,7 +911,7 @@ export async function confirmSellAll(): Promise<void> {
   
   try {
     const checkboxes = document.querySelectorAll('.rarity-checkbox input:checked');
-    const selectedRarities = Array.from(checkboxes).map(cb => cb.value);
+    const selectedRarities = Array.from(checkboxes).map(cb => (cb as HTMLInputElement).value);
     
     if (selectedRarities.length === 0) {
       showAlert('warning', 'No Selection! ⚠️', 'Please select at least one rarity to sell.');
@@ -989,9 +1001,9 @@ export function resetFilters(): void {
     date: 'newest'
   };
   
-  const raritySelect = document.getElementById('filter-rarity');
-  const valueSelect = document.getElementById('filter-value');
-  const dateSelect = document.getElementById('filter-date');
+  const raritySelect = document.getElementById('filter-rarity') as HTMLSelectElement | null;
+  const valueSelect = document.getElementById('filter-value') as HTMLSelectElement | null;
+  const dateSelect = document.getElementById('filter-date') as HTMLSelectElement | null;
   
   if (raritySelect) raritySelect.value = 'all';
   if (valueSelect) valueSelect.value = 'none';
@@ -1014,9 +1026,9 @@ export function resetFilters(): void {
 }
 
 export function applyFilters(): void {
-  const raritySelect = document.getElementById('filter-rarity');
-  const valueSelect = document.getElementById('filter-value');
-  const dateSelect = document.getElementById('filter-date');
+  const raritySelect = document.getElementById('filter-rarity') as HTMLSelectElement | null;
+  const valueSelect = document.getElementById('filter-value') as HTMLSelectElement | null;
+  const dateSelect = document.getElementById('filter-date') as HTMLSelectElement | null;
   
   currentFilters = {
     rarity: raritySelect?.value || 'all',
@@ -1106,7 +1118,7 @@ export async function updateSellAllSummary(): Promise<void> {
     }
     
     const checkboxes = document.querySelectorAll('.rarity-checkbox input:checked');
-    const selectedRarities = Array.from(checkboxes).map(cb => cb.value);
+    const selectedRarities = Array.from(checkboxes).map(cb => (cb as HTMLInputElement).value);
     
     const itemsToSell = sellAllInventoryCache.filter(item => selectedRarities.includes(item.rarity));
     const totalValue = itemsToSell.reduce((sum, item) => sum + item.value, 0);
@@ -1114,13 +1126,13 @@ export async function updateSellAllSummary(): Promise<void> {
     const countElement = document.getElementById('sell-count');
     const totalElement = document.getElementById('sell-total');
     
-    if (countElement) countElement.textContent = itemsToSell.length;
+    if (countElement) countElement.textContent = String(itemsToSell.length);
     if (totalElement) {
       totalElement.textContent = 
         totalValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' 💰';
     }
     
-    const confirmBtn = document.querySelector('.sell-all-content .modal-create-btn');
+    const confirmBtn = document.querySelector('.sell-all-content .modal-create-btn') as HTMLButtonElement | null;
     if (confirmBtn) {
       if (itemsToSell.length === 0) {
         confirmBtn.disabled = true;
@@ -1183,10 +1195,10 @@ applyGridModeToGrid();
 
 // Listener para atualizar grid quando redimensionar de desktop para mobile ou vice-versa
 let wasMobile = isMobileDevice();
-let resizeTimeout;
+let resizeTimeout: NodeJS.Timeout | null = null;
 
 window.addEventListener('resize', () => {
-  clearTimeout(resizeTimeout);
+  if (resizeTimeout) clearTimeout(resizeTimeout);
   resizeTimeout = setTimeout(() => {
     const isNowMobile = isMobileDevice();
     
