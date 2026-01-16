@@ -872,13 +872,18 @@ async function handleGetCsrfToken(req: ApiRequest, res: ApiResponse, body: any) 
     return res.status(401).json({ error: session.error || 'Invalid session' });
   }
 
-  // Gera o token CSRF
-  const csrfToken = generateCsrfToken(userId);
+  // Gera o token CSRF e armazena no Supabase
+  const csrfToken = await generateCsrfToken(supabase, userId);
+  
+  if (!csrfToken) {
+    return res.status(500).json({ error: 'Failed to generate CSRF token' });
+  }
   
   return res.status(200).json({ 
     success: true, 
     csrfToken 
   });
+
 }
 
 /**
@@ -903,12 +908,13 @@ async function handleClearCsrfToken(req: ApiRequest, res: ApiResponse, body: any
     return res.status(401).json({ error: session.error || 'Invalid session' });
   }
 
-  // Remove o token CSRF
-  clearCsrfToken(userId);
+  // Remove o token CSRF do Supabase
+  await clearCsrfToken(supabase, userId);
   
   return res.status(200).json({ 
     success: true 
   });
+
 }
 
 // ============================================================

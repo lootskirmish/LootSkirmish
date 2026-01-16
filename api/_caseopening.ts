@@ -568,7 +568,7 @@ export async function handleOpenCases(req: ApiRequest, res: ApiResponse) {
     const stats = session.stats;
 
     // 🛡️ Validar CSRF token
-    const csrfValidation = validateCsrfMiddleware(req, userId);
+    const csrfValidation = await validateCsrfMiddleware(supabase, req, userId);
     if (!csrfValidation.valid) {
       console.warn('⚠️ CSRF validation failed:', { userId, error: csrfValidation.error });
       // CSRF validation failed - logged elsewhere
@@ -848,7 +848,7 @@ export async function handlePurchasePass(req: ApiRequest, res: ApiResponse) {
     }
 
     // 🛡️ Validar CSRF token
-    const csrfValidation = validateCsrfMiddleware(req, userId);
+    const csrfValidation = await validateCsrfMiddleware(supabase, req, userId);
     if (!csrfValidation.valid) {
       console.warn('⚠️ CSRF validation failed:', { userId, error: csrfValidation.error });
       return res.status(403).json({ error: 'Security validation failed' });

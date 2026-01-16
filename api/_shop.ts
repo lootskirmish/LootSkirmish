@@ -1102,7 +1102,7 @@ async function handleCreateOrder(req: ApiRequest, res: ApiResponse, body: any): 
     }
 
     // 🛡️ Validar CSRF token (protege contra ataques CSRF)
-    const csrfValidation = validateCsrfMiddleware(req, userId);
+    const csrfValidation = await validateCsrfMiddleware(supabase, req, userId);
     if (!csrfValidation.valid) {
       console.warn('⚠️ CSRF validation failed:', { userId, error: csrfValidation.error });
       securityMonitor.recordFraudAttempt();
