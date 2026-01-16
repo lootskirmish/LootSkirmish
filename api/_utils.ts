@@ -398,7 +398,7 @@ export function generateCsrfToken(userId: string): string {
  * 
  * @param userId - ID do usuário
  * @param token - Token CSRF enviado
- * @param autoGenerate - Se true, gera novo token automaticamente se não existir (default: true)
+ * @param autoGenerate - Se true, aceita tokens válidos e regenera se necessário (default: true)
  * @returns true se válido ou auto-gerado
  */
 export function validateCsrfToken(userId: string, token: string | undefined, autoGenerate: boolean = true): boolean {
@@ -410,32 +410,43 @@ export function validateCsrfToken(userId: string, token: string | undefined, aut
   
   if (!token || typeof token !== 'string') {
     console.error(`[CSRF] ❌ Token ausente ou inválido para user ${maskUserId(userId)}`);
-    
-    // Auto-gerar token se não existir (serverless restart recovery)
-    if (autoGenerate) {
-      console.warn(`[CSRF] 🔄 Auto-gerando novo token para user ${maskUserId(userId)}`);
-      generateCsrfToken(userId);
-      return true; // Permitir na primeira vez
-    }
     return false;
   }
   
-  // Validação de tamanho mínimo do token
+  // Validação de tamanho mínimo do token (tokens base64url de 32 bytes = ~43 chars)
   if (token.length < 32) {
     console.error(`[CSRF] ❌ Token muito curto (${token.length} chars) para user ${maskUserId(userId)}`);
     return false;
   }
   
+  // Validação de formato do token (base64url: A-Za-z0-9_-)
+  if (!/^[A-Za-z0-9_-]+$/.test(token)) {
+    console.error(`[CSRF] ❌ Token com formato inválido para user ${maskUserId(userId)}`);
+    return false;
+  }
+  
   // Busca o token armazenado
   const entry = csrfTokens.get(userId);
+  
   if (!entry) {
-    console.error(`[CSRF] ❌ Token não encontrado no servidor para user ${maskUserId(userId)}`);
+    console.warn(`[CSRF] ⚠️ Token não encontrado no servidor para user ${maskUserId(userId)}`);
     
-    // Auto-gerar token se não existir (serverless restart recovery)
+    // Auto-aceitar tokens válidos após restart (recovery mode)
     if (autoGenerate) {
-      console.warn(`[CSRF] 🔄 Token perdido (restart?), auto-gerando para user ${maskUserId(userId)}`);
-      generateCsrfToken(userId);
-      return true; // Permitir após restart
+      // Token tem formato válido e tamanho correto
+      // Assumir que é um token legítimo do cliente (salvo antes do restart)
+      console.warn(`[CSRF] 🔄 Aceitando token do cliente e salvando (recovery após restart)`);
+      
+      // Salvar o token do cliente na memória do servidor
+      const now = Date.now();
+      const expiresAt = now + (24 * 60 * 60 * 1000); // 24 horas
+      csrfTokens.set(userId, {
+        token,
+        createdAt: now,
+        expiresAt
+      });
+      
+      return true;
     }
     return false;
   }
@@ -444,12 +455,6 @@ export function validateCsrfToken(userId: string, token: string | undefined, aut
   if (Date.now() > entry.expiresAt) {
     console.warn(`[CSRF] ⏰ Token expirado para user ${maskUserId(userId)}`);
     csrfTokens.delete(userId);
-    
-    // Gerar novo token automaticamente
-    if (autoGenerate) {
-      generateCsrfToken(userId);
-      return true;
-    }
     return false;
   }
   
