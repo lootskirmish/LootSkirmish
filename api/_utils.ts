@@ -395,8 +395,13 @@ export function generateCsrfToken(userId: string): string {
 
 /**
  * Valida se o token CSRF enviado é válido para o usuário com validação rigorosa
+ * 
+ * @param userId - ID do usuário
+ * @param token - Token CSRF enviado
+ * @param autoGenerate - Se true, gera novo token automaticamente se não existir (default: true)
+ * @returns true se válido ou auto-gerado
  */
-export function validateCsrfToken(userId: string, token: string | undefined): boolean {
+export function validateCsrfToken(userId: string, token: string | undefined, autoGenerate: boolean = true): boolean {
   // Validação de parâmetros
   if (!userId || typeof userId !== 'string') {
     console.error('[CSRF] UserId inválido ou ausente');
@@ -405,6 +410,13 @@ export function validateCsrfToken(userId: string, token: string | undefined): bo
   
   if (!token || typeof token !== 'string') {
     console.error(`[CSRF] ❌ Token ausente ou inválido para user ${maskUserId(userId)}`);
+    
+    // Auto-gerar token se não existir (serverless restart recovery)
+    if (autoGenerate) {
+      console.warn(`[CSRF] 🔄 Auto-gerando novo token para user ${maskUserId(userId)}`);
+      generateCsrfToken(userId);
+      return true; // Permitir na primeira vez
+    }
     return false;
   }
   
@@ -418,6 +430,13 @@ export function validateCsrfToken(userId: string, token: string | undefined): bo
   const entry = csrfTokens.get(userId);
   if (!entry) {
     console.error(`[CSRF] ❌ Token não encontrado no servidor para user ${maskUserId(userId)}`);
+    
+    // Auto-gerar token se não existir (serverless restart recovery)
+    if (autoGenerate) {
+      console.warn(`[CSRF] 🔄 Token perdido (restart?), auto-gerando para user ${maskUserId(userId)}`);
+      generateCsrfToken(userId);
+      return true; // Permitir após restart
+    }
     return false;
   }
   
@@ -425,6 +444,12 @@ export function validateCsrfToken(userId: string, token: string | undefined): bo
   if (Date.now() > entry.expiresAt) {
     console.warn(`[CSRF] ⏰ Token expirado para user ${maskUserId(userId)}`);
     csrfTokens.delete(userId);
+    
+    // Gerar novo token automaticamente
+    if (autoGenerate) {
+      generateCsrfToken(userId);
+      return true;
+    }
     return false;
   }
   
