@@ -990,28 +990,44 @@ async function handleSetup2FA(req: ApiRequest, res: ApiResponse, body: any) {
   }
 
   try {
-    // Get user email from Supabase auth
-    let user;
+    // Prefer email from player_stats to avoid admin API dependency
+    let email: string | null = null;
     try {
-      const { data: { user: authUser }, error: authError } = await supabase.auth.admin.getUserById(userId);
-      if (authError) {
-        console.error('Failed to get user from auth:', authError.message);
-        return res.status(400).json({ error: 'Could not retrieve user credentials - Auth API error' });
+      const { data: statsRow } = await supabase
+        .from('player_stats')
+        .select('email, two_factor_enabled')
+        .eq('user_id', userId)
+        .maybeSingle();
+      if (statsRow?.email) email = String(statsRow.email);
+      // If already enabled, short-circuit
+      if (statsRow?.two_factor_enabled === true) {
+        return res.status(200).json({ success: true, alreadyEnabled: true });
       }
-      user = authUser;
-    } catch (authErr: any) {
-      console.error('Auth admin API exception:', authErr?.message || authErr);
-      return res.status(500).json({ error: 'Server error accessing auth system' });
+    } catch (_) {}
+
+    // Fallback to Supabase Auth admin API
+    if (!email) {
+      try {
+        const { data: { user: authUser }, error: authError } = await supabase.auth.admin.getUserById(userId);
+        if (authError) {
+          console.error('Failed to get user from auth:', authError.message);
+          return res.status(500).json({ error: 'Could not retrieve user credentials' });
+        }
+        email = authUser?.email || null;
+      } catch (authErr: any) {
+        console.error('Auth admin API exception:', authErr?.message || authErr);
+        return res.status(500).json({ error: 'Server error accessing auth system' });
+      }
     }
 
-    if (!user?.email) {
+    if (!email) {
       console.error(`2FA setup failed: User ${userId} has no email`);
       return res.status(400).json({ error: 'User email not found - please add an email to your account' });
     }
 
     // Generate 2FA secret with QR code
     try {
-      const { secret, qrCode } = generateTwoFactorSecret(user.email);
+      const { secret, qrCode } = generateTwoFactorSecret(email);
       
       // Don't save to database yet - user must verify the code first
       return res.status(200).json({
