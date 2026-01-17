@@ -164,9 +164,10 @@ export async function toggle2FA(): Promise<void> {
 
         // Inform the user about the secret; encourage scanning via authenticator (supports otpauth URL)
         try {
-          // Try opening the otpauth URL in a new window for apps that register handlers
+          // Open a QR code image in a new tab (no external libs needed)
           if (setup.qrCode) {
-            try { window.open(setup.qrCode, '_blank'); } catch (_) {}
+            const qrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=' + encodeURIComponent(setup.qrCode);
+            try { window.open(qrUrl, '_blank'); } catch (_) {}
           }
         } catch (_) {}
 

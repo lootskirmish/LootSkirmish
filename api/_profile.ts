@@ -1089,7 +1089,7 @@ async function updateTwoFactorRow(userId: string, updates: Record<string, any>):
  * Criptografa secret 2FA usando AES-256-GCM
  */
 function encryptTwoFactorSecret(secret: string): { encrypted: string; iv: string } {
-  const algorithm = 'aes-256-gcm';
+  const algorithm = 'aes-256-cbc';
   const key = crypto.scryptSync(process.env.CSRF_TOKEN_SECRET || 'default-key', 'salt', 32);
   const iv = crypto.randomBytes(16);
   
@@ -1108,7 +1108,7 @@ function encryptTwoFactorSecret(secret: string): { encrypted: string; iv: string
  */
 function decryptTwoFactorSecret(encryptedSecret: string, iv: string): string | null {
   try {
-    const algorithm = 'aes-256-gcm';
+    const algorithm = 'aes-256-cbc';
     const key = crypto.scryptSync(process.env.CSRF_TOKEN_SECRET || 'default-key', 'salt', 32);
     
     const decipher = crypto.createDecipheriv(algorithm, key, Buffer.from(iv, 'hex'));
