@@ -21,7 +21,26 @@ class Logger {
   constructor(context: string = 'App') {
     this.context = context;
     this.isDev = typeof window !== 'undefined';
-    this.minLevel = this.isDev ? 'debug' : 'warn';
+
+    // Default to quieter logs in browser; allow override via LOG_LEVEL (window, localStorage or env)
+    const levelOverride = (() => {
+      if (typeof window !== 'undefined') {
+        const fromWindow = (window as any).LOG_LEVEL;
+        const fromStorage = (() => {
+          try {
+            return window.localStorage.getItem('LOG_LEVEL');
+          } catch (_) {
+            return null;
+          }
+        })();
+        return fromWindow || fromStorage;
+      }
+      // server-side env fallback
+      return process.env.LOG_LEVEL;
+    })();
+
+    const validLevel = (level: any): level is LogLevel => ['debug', 'info', 'warn', 'error'].includes(level);
+    this.minLevel = validLevel(levelOverride) ? levelOverride : 'warn';
     this.sensitivePatterns = [
       /token/i,
       /password/i,

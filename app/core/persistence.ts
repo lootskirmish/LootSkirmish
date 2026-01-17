@@ -1565,7 +1565,7 @@ export function setupPersistenceMiddleware(reduxStore: typeof store): void {
       });
 
     } catch (error) {
-      logger.warn('[Persistence] Aguardando inicialização...');
+      logger.debug('[Persistence] Aguardando inicialização...');
       setTimeout(setupSubscribe, 100);
     }
   };
