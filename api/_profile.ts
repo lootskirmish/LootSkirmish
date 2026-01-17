@@ -1472,10 +1472,24 @@ async function handleViewFullEmail(req: ApiRequest, res: ApiResponse, body: any)
         });
       }
 
-      // Verify password via Supabase Auth
+      // Get user's email from Supabase Auth (the source of truth)
+      let authUserEmail: string | null = null;
+      try {
+        const { data: { user }, error: authErr } = await supabase.auth.admin.getUserById(userId);
+        if (authErr || !user?.email) {
+          console.error('Failed to get user email from auth:', authErr?.message || 'No email found');
+          return res.status(500).json({ error: 'Failed to verify identity' });
+        }
+        authUserEmail = user.email;
+      } catch (authErr: any) {
+        console.error('Auth getUserById error:', authErr?.message || authErr);
+        return res.status(500).json({ error: 'Authentication service unavailable' });
+      }
+
+      // Verify password via Supabase Auth using correct email
       try {
         const { data: authData, error: signInError } = await supabase.auth.signInWithPassword({
-          email: profile?.email || '',
+          email: authUserEmail,
           password: password
         });
 

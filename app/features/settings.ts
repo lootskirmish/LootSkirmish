@@ -1191,23 +1191,23 @@ export async function changePassword(): Promise<void> {
         
         // Validate current password by attempting sign in
         const user = getActiveUser({ sync: true, allowStored: true });
-        if (!user?.email) {
+        if (!user?.id) {
           errorDiv.textContent = 'Session error. Please log in again.';
           errorDiv.style.display = 'block';
           return;
         }
         
-        // Verify current password
-        // Get fresh user data to ensure we have correct email
-        const freshUser = getActiveUser({ sync: true, allowStored: false });
-        if (!freshUser?.email) {
+        // Get the current user's email directly from Supabase Auth (source of truth)
+        const { data: { user: authUser }, error: authErr } = await supabase.auth.admin.getUserById(user.id);
+        
+        if (authErr || !authUser?.email) {
           errorDiv.textContent = 'Session expired. Please log in again.';
           errorDiv.style.display = 'block';
           return;
         }
         
         const { error: signInError } = await supabase.auth.signInWithPassword({
-          email: freshUser.email,
+          email: authUser.email,
           password: currentPassword
         });
         
@@ -1405,7 +1405,16 @@ export async function openChangePasswordModal(): Promise<void> {
         const user = getActiveUser({ sync: true, allowStored: true });
         const { data: { session } } = await supabase.auth.getSession();
         
-        if (!user?.email || !session?.access_token) {
+        if (!user?.id || !session?.access_token) {
+          errorEl.textContent = 'Session expired - please log in again';
+          errorEl.style.display = 'block';
+          return;
+        }
+        
+        // Get the current user's email directly from Supabase Auth (source of truth)
+        const { data: { user: authUser }, error: authErr } = await supabase.auth.admin.getUserById(user.id);
+        
+        if (authErr || !authUser?.email) {
           errorEl.textContent = 'Session expired - please log in again';
           errorEl.style.display = 'block';
           return;
@@ -1413,7 +1422,7 @@ export async function openChangePasswordModal(): Promise<void> {
         
         // Primeiro: validar senha atual (fazer login)
         const { error: signInError } = await supabase.auth.signInWithPassword({
-          email: user.email,
+          email: authUser.email,
           password: currentPwdInput.value
         });
         
