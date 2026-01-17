@@ -47,15 +47,23 @@ async function check2FAStatus(): Promise<boolean> {
   try {
     const user = getActiveUser({ sync: true, allowStored: true });
     if (!user?.id) return false;
-    
-    const { data: profile, error } = await supabase
-      .from('player_profiles')
-      .select('two_factor_enabled')
-      .eq('user_id', user.id)
-      .single();
-    
-    if (error || !profile) return false;
-    return profile.two_factor_enabled === true;
+
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.access_token) return false;
+
+    const response = await fetch('/api/_profile', {
+      method: 'POST',
+      headers: await addCsrfHeader({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({
+        action: 'get2FAStatus',
+        userId: user.id,
+        authToken: session.access_token
+      })
+    });
+
+    if (!response.ok) return false;
+    const result = await response.json().catch(() => ({}));
+    return result?.enabled === true;
   } catch (err) {
     ErrorHandler.handleDatabaseError('Error checking 2FA status', err);
     return false;
@@ -141,8 +149,14 @@ export async function toggle2FA(): Promise<void> {
       }
       
       // Chamar a função de setup do auth
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) {
+        showAlert('error', 'Not authenticated', 'Please log in again.');
+        return;
+      }
+
       if ((window as any).requestSetup2FA) {
-        await (window as any).requestSetup2FA(user.id);
+        await (window as any).requestSetup2FA(user.id, session.access_token);
         setTimeout(() => updateTwoFactorUI(), 1000);
       }
     }

@@ -25,6 +25,7 @@ import {
   sanitizeText,
   maskUserId,
   sanitizeSqlInput,
+  escapeSqlLikePattern,
   type RateLimitEntry
 } from './_utils.js';
 
@@ -147,6 +148,9 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     }
     if (action === 'validate2FA') {
       return await handleValidate2FA(req, res, body);
+    }
+    if (action === 'get2FAStatus') {
+      return await handleGet2FAStatus(req, res, body);
     }
     
     // Profile actions
@@ -355,16 +359,16 @@ async function handleCheckPublicProfile(req: ApiRequest, res: ApiResponse): Prom
     // 🛡️ Sanitizar username antes de buscar
     const sanitized = sanitizeUsername(username);
 
-    if (sanitized.length > 256) {
+    if (!sanitized || sanitized.length > 256) {
       console.warn(`[CHECK_PUBLIC_PROFILE] Username too long from ${identifier}:`, sanitized.length);
       return res.status(400).json({ error: 'Invalid username' });
     }
 
     console.log(`[CHECK_PUBLIC_PROFILE] Checking profile request from ${identifier}`);
 
-    // Sanitizar para prevenir SQL injection
-    const safeSanitized = sanitizeSqlInput(sanitized, 256);
-    if (!safeSanitized) {
+    // Sanitizar para prevenir SQL injection (apenas para ILIKE)
+    const safeLike = escapeSqlLikePattern(sanitized);
+    if (!safeLike) {
       return res.status(400).json({ error: 'Invalid username format' });
     }
 
@@ -376,7 +380,7 @@ async function handleCheckPublicProfile(req: ApiRequest, res: ApiResponse): Prom
     const exactResult = await supabase
       .from('player_stats')
       .select('user_id, username, public')
-      .eq('username', safeSanitized);
+      .eq('username', sanitized);
     
     if (exactResult.error) {
       console.error(`[CHECK_PUBLIC_PROFILE] Exact match query error:`, exactResult.error.code, exactResult.error.message);
@@ -394,7 +398,7 @@ async function handleCheckPublicProfile(req: ApiRequest, res: ApiResponse): Prom
       const ilikeResult = await supabase
         .from('player_stats')
         .select('user_id, username, public')
-        .ilike('username', safeSanitized);
+        .ilike('username', safeLike);
       
       if (ilikeResult.error) {
         console.error(`[CHECK_PUBLIC_PROFILE] Case-insensitive query error:`, ilikeResult.error.code, ilikeResult.error.message);
@@ -1067,6 +1071,63 @@ function decryptTwoFactorSecret(encryptedSecret: string, iv: string): string | n
   }
 }
 
+function isMissingRelationError(error: any): boolean {
+  if (!error) return false;
+  const code = (error?.code || '').toString();
+  const status = (error?.status || '').toString();
+  const message = `${error?.message || ''} ${error?.details || ''}`.toLowerCase();
+  return code === '42P01'
+    || code === 'PGRST116'
+    || status === '404'
+    || (message.includes('relation') && message.includes('does not exist'));
+}
+
+async function fetchTwoFactorRow(userId: string, columns: string): Promise<{ data: any; error: any; table: 'player_profiles' | 'player_stats' }> {
+  const primary = await supabase
+    .from('player_profiles')
+    .select(columns)
+    .eq('user_id', userId)
+    .single();
+
+  if (!primary.error) {
+    return { data: primary.data, error: null, table: 'player_profiles' };
+  }
+
+  if (!isMissingRelationError(primary.error)) {
+    return { data: null, error: primary.error, table: 'player_profiles' };
+  }
+
+  const fallback = await supabase
+    .from('player_stats')
+    .select(columns)
+    .eq('user_id', userId)
+    .single();
+
+  return { data: fallback.data, error: fallback.error, table: 'player_stats' };
+}
+
+async function updateTwoFactorRow(userId: string, update: Record<string, any>): Promise<{ error: any; table: 'player_profiles' | 'player_stats' }> {
+  const primary = await supabase
+    .from('player_profiles')
+    .update(update)
+    .eq('user_id', userId);
+
+  if (!primary.error) {
+    return { error: null, table: 'player_profiles' };
+  }
+
+  if (!isMissingRelationError(primary.error)) {
+    return { error: primary.error, table: 'player_profiles' };
+  }
+
+  const fallback = await supabase
+    .from('player_stats')
+    .update(update)
+    .eq('user_id', userId);
+
+  return { error: fallback.error, table: 'player_stats' };
+}
+
 /**
  * Gera 8 códigos de backup (recovery codes) para 2FA
  * Usuário pode usá-los se perder acesso ao autenticador
@@ -1130,16 +1191,13 @@ async function handleVerify2FA(req: ApiRequest, res: ApiResponse, body: any) {
     const hashedRecoveryCodes = recoveryCodes.map(code => hashRecoveryCode(code));
     
     // Save encrypted 2FA secret and recovery codes to user profile
-    const { error: updateError } = await supabase
-      .from('player_profiles')
-      .update({
-        two_factor_secret: encrypted,
-        two_factor_iv: iv, // IV necessário para descriptografia
-        two_factor_enabled: true,
-        two_factor_recovery_codes: JSON.stringify(hashedRecoveryCodes), // Armazenar hasheados
-        updated_at: new Date().toISOString()
-      })
-      .eq('user_id', userId);
+    const { error: updateError } = await updateTwoFactorRow(userId, {
+      two_factor_secret: encrypted,
+      two_factor_iv: iv, // IV necessário para descriptografia
+      two_factor_enabled: true,
+      two_factor_recovery_codes: JSON.stringify(hashedRecoveryCodes), // Armazenar hasheados
+      updated_at: new Date().toISOString()
+    });
 
     if (updateError) {
       console.error('Failed to enable 2FA:', updateError);
@@ -1185,18 +1243,25 @@ async function handleDisable2FA(req: ApiRequest, res: ApiResponse, body: any) {
 
   try {
     // Get user's 2FA secret
-    const { data: profile, error: fetchError } = await supabase
-      .from('player_profiles')
-      .select('two_factor_secret')
-      .eq('user_id', userId)
-      .single();
+    const { data: profile, error: fetchError } = await fetchTwoFactorRow(
+      userId,
+      'two_factor_secret, two_factor_iv, two_factor_enabled'
+    );
 
     if (fetchError || !profile?.two_factor_secret) {
       return res.status(400).json({ error: '2FA is not enabled for this account' });
     }
 
     // Verify the code before disabling
-    const isValid = verifyTwoFactorCode(profile.two_factor_secret, code, 1);
+    const decryptedSecret = profile?.two_factor_iv
+      ? decryptTwoFactorSecret(profile.two_factor_secret, profile.two_factor_iv)
+      : profile?.two_factor_secret;
+
+    if (!decryptedSecret) {
+      return res.status(500).json({ error: 'Failed to decrypt 2FA secret' });
+    }
+
+    const isValid = verifyTwoFactorCode(decryptedSecret, code, 1);
     
     if (!isValid) {
       logAudit(supabase, userId, '2FA_DISABLE_FAILED', { attempt: 'invalid_code' }, req as any).catch(() => {});
@@ -1204,14 +1269,13 @@ async function handleDisable2FA(req: ApiRequest, res: ApiResponse, body: any) {
     }
 
     // Disable 2FA
-    const { error: updateError } = await supabase
-      .from('player_profiles')
-      .update({
-        two_factor_secret: null,
-        two_factor_enabled: false,
-        updated_at: new Date().toISOString()
-      })
-      .eq('user_id', userId);
+    const { error: updateError } = await updateTwoFactorRow(userId, {
+      two_factor_secret: null,
+      two_factor_iv: null,
+      two_factor_enabled: false,
+      two_factor_recovery_codes: null,
+      updated_at: new Date().toISOString()
+    });
 
     if (updateError) {
       console.error('Failed to disable 2FA:', updateError);
@@ -1254,18 +1318,19 @@ async function handleViewRecoveryCodes(req: ApiRequest, res: ApiResponse, body: 
 
   try {
     // Get user's 2FA secret and recovery codes
-    const { data: profile, error: fetchError } = await supabase
-      .from('player_profiles')
-      .select('two_factor_secret, two_factor_iv, two_factor_recovery_codes, two_factor_enabled')
-      .eq('user_id', userId)
-      .single();
+    const { data: profile, error: fetchError } = await fetchTwoFactorRow(
+      userId,
+      'two_factor_secret, two_factor_iv, two_factor_recovery_codes, two_factor_enabled'
+    );
 
     if (fetchError || !profile?.two_factor_enabled) {
       return res.status(400).json({ error: '2FA is not enabled for this account' });
     }
 
     // Decrypt and verify the code
-    const decryptedSecret = decryptTwoFactorSecret(profile.two_factor_secret, profile.two_factor_iv);
+    const decryptedSecret = profile?.two_factor_iv
+      ? decryptTwoFactorSecret(profile.two_factor_secret, profile.two_factor_iv)
+      : profile?.two_factor_secret;
     if (!decryptedSecret) {
       return res.status(500).json({ error: 'Failed to decrypt 2FA secret' });
     }
@@ -1318,18 +1383,19 @@ async function handleViewFullEmail(req: ApiRequest, res: ApiResponse, body: any)
 
   try {
     // Get user's 2FA secret
-    const { data: profile, error: fetchError } = await supabase
-      .from('player_profiles')
-      .select('two_factor_secret, two_factor_iv, two_factor_enabled')
-      .eq('user_id', userId)
-      .single();
+    const { data: profile, error: fetchError } = await fetchTwoFactorRow(
+      userId,
+      'two_factor_secret, two_factor_iv, two_factor_enabled'
+    );
 
     if (fetchError || !profile?.two_factor_enabled) {
       return res.status(400).json({ error: '2FA is not enabled for this account' });
     }
 
     // Decrypt and verify the code
-    const decryptedSecret = decryptTwoFactorSecret(profile.two_factor_secret, profile.two_factor_iv);
+    const decryptedSecret = profile?.two_factor_iv
+      ? decryptTwoFactorSecret(profile.two_factor_secret, profile.two_factor_iv)
+      : profile?.two_factor_secret;
     if (!decryptedSecret) {
       return res.status(500).json({ error: 'Failed to decrypt 2FA secret' });
     }
@@ -1384,18 +1450,19 @@ async function handleValidate2FA(req: ApiRequest, res: ApiResponse, body: any) {
 
   try {
     // Get user's 2FA secret
-    const { data: profile, error: fetchError } = await supabase
-      .from('player_profiles')
-      .select('two_factor_secret, two_factor_iv, two_factor_enabled')
-      .eq('user_id', userId)
-      .single();
+    const { data: profile, error: fetchError } = await fetchTwoFactorRow(
+      userId,
+      'two_factor_secret, two_factor_iv, two_factor_enabled'
+    );
 
     if (fetchError || !profile?.two_factor_enabled) {
       return res.status(400).json({ error: '2FA is not enabled for this account' });
     }
 
     // Decrypt and verify the code
-    const decryptedSecret = decryptTwoFactorSecret(profile.two_factor_secret, profile.two_factor_iv);
+    const decryptedSecret = profile?.two_factor_iv
+      ? decryptTwoFactorSecret(profile.two_factor_secret, profile.two_factor_iv)
+      : profile?.two_factor_secret;
     if (!decryptedSecret) {
       return res.status(500).json({ error: 'Failed to decrypt 2FA secret' });
     }
@@ -1417,4 +1484,36 @@ async function handleValidate2FA(req: ApiRequest, res: ApiResponse, body: any) {
     console.error('2FA validation error:', err);
     return res.status(500).json({ error: 'Failed to validate 2FA code' });
   }
+}
+
+/**
+ * Get 2FA status (enabled/disabled)
+ */
+async function handleGet2FAStatus(req: ApiRequest, res: ApiResponse, body: any) {
+  const { userId, authToken } = body;
+
+  if (!userId || !authToken) {
+    return res.status(400).json({ error: 'Missing required fields' });
+  }
+
+  const session = await validateSessionAndFetchPlayerStats(
+    supabase,
+    authToken,
+    userId,
+    { select: 'user_id' }
+  );
+
+  if (!session.valid) {
+    return res.status(401).json({ error: session.error || 'Invalid session' });
+  }
+
+  const { data, error } = await fetchTwoFactorRow(userId, 'two_factor_enabled');
+  if (error) {
+    console.error('Failed to fetch 2FA status:', error);
+    return res.status(500).json({ error: 'Failed to fetch 2FA status' });
+  }
+
+  const enabled = data?.two_factor_enabled === true || data?.two_factor_enabled === 'true' || data?.two_factor_enabled === 1;
+
+  return res.status(200).json({ success: true, enabled });
 }
