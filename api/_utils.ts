@@ -2050,26 +2050,31 @@ interface TwoFactorSecret {
  */
 export function generateTwoFactorSecret(email: string): TwoFactorSecret {
   try {
-    // Gerar secret aleatório (32 bytes = 256 bits)
-    const secret = crypto
-      .randomBytes(32)
-      .toString('base64')
-      .replace(/[^A-Z0-9]/g, '')
-      .substring(0, 32);
+    // Gerar bytes aleatórios e codificar em Base32 (alfabeto RFC4648 A-Z 2-7)
+    const random = crypto.randomBytes(20); // 160 bits é comum para TOTP
+    const base32Chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+    let bits = 0;
+    let value = 0;
+    let secret = '';
+    for (let i = 0; i < random.length; i++) {
+      value = (value << 8) | random[i];
+      bits += 8;
+      while (bits >= 5) {
+        bits -= 5;
+        secret += base32Chars[(value >>> bits) & 31];
+      }
+    }
+    if (bits > 0) {
+      secret += base32Chars[(value << (5 - bits)) & 31];
+    }
 
     // Criar URL otpauth para QR code
-    // Formato: otpauth://totp/issuer:email?secret=...&issuer=issuer
-    const otpauthUrl = `otpauth://totp/LootSkirmish:${encodeURIComponent(
-      email
-    )}?secret=${secret}&issuer=LootSkirmish`;
+    // Formato: otpauth://totp/issuer:email?secret=...&issuer=issuer&algorithm=SHA1&digits=6&period=30
+    const otpauthUrl = `otpauth://totp/LootSkirmish:${encodeURIComponent(email)}?secret=${secret}&issuer=LootSkirmish&algorithm=SHA1&digits=6&period=30`;
 
-    // Para gerar QR code, retornar a URL
-    // Frontend vai usar biblioteca como qrcode.js
-    // Aqui retornamos apenas a URL
-    // Na prática, você usaria algo como: require('qrcode').toDataURL(otpauthUrl)
     return {
       secret,
-      qrCode: otpauthUrl // Frontend vai converter para QR
+      qrCode: otpauthUrl
     };
 
   } catch (err) {

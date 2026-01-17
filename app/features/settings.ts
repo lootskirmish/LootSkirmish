@@ -138,7 +138,7 @@ export async function toggle2FA(): Promise<void> {
       await updateTwoFactorUI();
     } else {
       // Habilitar 2FA
-      showAlert('info', '🔐 Setup 2FA', 'Redirecting to 2FA setup...');
+      showAlert('info', '🔐 Setup 2FA', 'We will generate your 2FA secret. Then enter the 6-digit code from your authenticator.');
       
       // Abrir modal/página de setup (pode ser um modal novo ou redirecionar)
       // Por enquanto, vamos usar um prompt simplificado
@@ -156,8 +156,30 @@ export async function toggle2FA(): Promise<void> {
       }
 
       if ((window as any).requestSetup2FA) {
-        await (window as any).requestSetup2FA(user.id, session.access_token);
-        setTimeout(() => updateTwoFactorUI(), 1000);
+        const setup = await (window as any).requestSetup2FA(user.id, session.access_token);
+        if (!setup || !setup.secret) {
+          showAlert('error', '❌ Setup failed', 'Could not generate your 2FA secret.');
+          return;
+        }
+
+        // Inform the user about the secret; encourage scanning via authenticator (supports otpauth URL)
+        try {
+          // Try opening the otpauth URL in a new window for apps that register handlers
+          if (setup.qrCode) {
+            try { window.open(setup.qrCode, '_blank'); } catch (_) {}
+          }
+        } catch (_) {}
+
+        showAlert('info', '🔐 Enter 2FA Code', `Add the account in your authenticator app. If needed, use this secret manually: ${setup.secret}`);
+        const code = prompt('Enter the 6-digit code from your authenticator:');
+        if (!code) return;
+
+        if ((window as any).verifyAndEnable2FA) {
+          const ok = await (window as any).verifyAndEnable2FA(user.id, session.access_token, setup.secret, code);
+          if (ok) {
+            await updateTwoFactorUI();
+          }
+        }
       }
     }
   } catch (err) {
