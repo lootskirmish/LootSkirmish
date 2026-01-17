@@ -845,80 +845,177 @@ export function cancelUsernameEdit(): void {
 export async function changePassword(): Promise<void> {
   try {
     const is2FAEnabled = await check2FAStatus();
-    let twoFactorCode = '';
     
-    // Se 2FA está ativado, pedir código antes
-    if (is2FAEnabled) {
-      twoFactorCode = prompt('🔏 Enter your 2FA code to change password:') || '';
-      if (!twoFactorCode) {
-        showAlert('warning', 'Cancelled', 'Password change cancelled.');
-        return;
-      }
-    }
+    // Create modal HTML
+    const modalHTML = `
+      <div class="password-change-modal">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h2>🔐 Change Password</h2>
+            <button class="modal-close" data-action="close">&times;</button>
+          </div>
+          
+          <form id="changePasswordForm">
+            <div class="form-group">
+              <label for="currentPassword">Current Password</label>
+              <input type="password" id="currentPassword" placeholder="Enter current password" required />
+              <small>Required for security verification</small>
+            </div>
+            
+            <div class="form-group">
+              <label for="newPassword">New Password</label>
+              <input type="password" id="newPassword" placeholder="Enter new password (minimum 6 characters)" required />
+              <small>Must contain uppercase, lowercase, numbers, and special characters</small>
+            </div>
+            
+            <div class="form-group">
+              <label for="confirmPassword">Confirm Password</label>
+              <input type="password" id="confirmPassword" placeholder="Confirm new password" required />
+              <small>Passwords must match</small>
+            </div>
+            
+            ${is2FAEnabled ? `
+            <div class="form-group">
+              <label for="twoFactorCode">2FA Code (6 digits)</label>
+              <input type="text" id="twoFactorCode" placeholder="000000" maxlength="6" pattern="[0-9]{6}" required />
+              <small>Enter your authenticator code</small>
+            </div>
+            ` : ''}
+            
+            <div id="changePasswordError" class="error-message" style="display: none;"></div>
+            
+            <div class="modal-actions">
+              <button type="button" class="btn-cancel" data-action="close">Cancel</button>
+              <button type="submit" class="btn-save">Change Password</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    `;
     
-    const newPassword = prompt('🔐 Enter your new password (minimum 6 characters):');
+    // Create overlay
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay';
+    overlay.innerHTML = modalHTML;
+    document.body.appendChild(overlay);
     
-    if (!newPassword) return;
+    const modal = overlay.querySelector('.password-change-modal') as HTMLElement;
+    const form = overlay.querySelector('#changePasswordForm') as HTMLFormElement;
+    const errorDiv = overlay.querySelector('#changePasswordError') as HTMLElement;
+    const closeButtons = overlay.querySelectorAll('[data-action="close"]');
     
-    // Validar usando sistema robusto
-    const passwordValidation = validatePassword(newPassword);
-    if (!passwordValidation.isValid) {
-      showAlert('error', 'Weak password', passwordValidation.error || 'Password validation failed!');
-      return;
-    }
+    // Close handlers
+    const closeModal = () => {
+      overlay.remove();
+    };
     
-    // Se 2FA está ativado, validar código primeiro
-    if (is2FAEnabled && twoFactorCode) {
-      const user = getActiveUser({ sync: true, allowStored: true });
-      const { data: { session } } = await supabase.auth.getSession();
-      
-      if (!user?.id || !session?.access_token) {
-        showAlert('error', 'Not authenticated', 'Please log in again.');
-        return;
-      }
-      
-      // Validar 2FA code via backend
-      const validateResponse = await fetch('/api/_profile', {
-        method: 'POST',
-        headers: await addCsrfHeader({ 'Content-Type': 'application/json' }),
-        body: JSON.stringify({
-          action: 'validate2FA',
-          userId: user.id,
-          authToken: session.access_token,
-          code: twoFactorCode
-        })
-      });
-      
-      if (!validateResponse.ok) {
-        showAlert('error', '❌ Invalid 2FA Code', 'The 2FA code you entered is invalid.');
-        return;
-      }
-    }
-    
-    const { error } = await supabase.auth.updateUser({
-      password: newPassword
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) closeModal();
     });
     
-    if (error) {
-      showAlert('error', '❌ Error', 'Error changing password: ' + error.message);
-      return;
-    }
+    closeButtons.forEach(btn => {
+      btn.addEventListener('click', closeModal);
+    });
     
-    showAlert('success', '✅ Success', 'Password changed successfully!');
+    // Form submission
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      
+      try {
+        const currentPassword = (form.querySelector('#currentPassword') as HTMLInputElement).value;
+        const newPassword = (form.querySelector('#newPassword') as HTMLInputElement).value;
+        const confirmPassword = (form.querySelector('#confirmPassword') as HTMLInputElement).value;
+        const twoFactorCode = (form.querySelector('#twoFactorCode') as HTMLInputElement)?.value || '';
+        
+        // Validate passwords match
+        if (newPassword !== confirmPassword) {
+          errorDiv.textContent = 'Passwords do not match';
+          errorDiv.style.display = 'block';
+          return;
+        }
+        
+        // Validate password strength
+        const passwordValidation = validatePassword(newPassword);
+        if (!passwordValidation.isValid) {
+          errorDiv.textContent = passwordValidation.error || 'Password does not meet requirements';
+          errorDiv.style.display = 'block';
+          return;
+        }
+        
+        // Validate current password by attempting sign in
+        const user = getActiveUser({ sync: true, allowStored: true });
+        if (!user?.email) {
+          errorDiv.textContent = 'Session error. Please log in again.';
+          errorDiv.style.display = 'block';
+          return;
+        }
+        
+        // Verify current password
+        const { error: signInError } = await supabase.auth.signInWithPassword({
+          email: user.email,
+          password: currentPassword
+        });
+        
+        if (signInError) {
+          errorDiv.textContent = 'Current password is incorrect';
+          errorDiv.style.display = 'block';
+          return;
+        }
+        
+        // Validate 2FA if enabled
+        if (is2FAEnabled && twoFactorCode) {
+          const validateResponse = await fetch('/api/_profile', {
+            method: 'POST',
+            headers: await addCsrfHeader({ 'Content-Type': 'application/json' }),
+            body: JSON.stringify({
+              action: 'validate2FA',
+              userId: user.id,
+              authToken: (await supabase.auth.getSession()).data.session?.access_token,
+              code: twoFactorCode
+            })
+          });
+          
+          if (!validateResponse.ok) {
+            errorDiv.textContent = 'Invalid 2FA code';
+            errorDiv.style.display = 'block';
+            return;
+          }
+        }
+        
+        // Update password
+        const { error: updateError } = await supabase.auth.updateUser({
+          password: newPassword
+        });
+        
+        if (updateError) {
+          errorDiv.textContent = 'Error updating password: ' + updateError.message;
+          errorDiv.style.display = 'block';
+          return;
+        }
+        
+        // Success
+        showToast('success', 'Password changed successfully!');
+        closeModal();
+        
+      } catch (err: any) {
+        errorDiv.textContent = err?.message || 'Error changing password';
+        errorDiv.style.display = 'block';
+      }
+    });
     
   } catch (err) {
-    ErrorHandler.handleError('Error changing password', {
+    ErrorHandler.handleError('Error opening password modal', {
       category: ErrorCategory.AUTH,
       severity: ErrorSeverity.ERROR,
       details: err,
       showToUser: false
     });
-    showAlert('error', '❌ Error', 'Unexpected error: ' + ((err as any)?.message || String(err)));
+    showAlert('error', '❌ Error', 'Could not open password change modal');
   }
 }
 
 // ============================================================
-// PASSWORD MANAGEMENT - CHANGE PASSWORD MODAL
+// PASSWORD MANAGEMENT - DUPLICATE (REMOVED)
 // ============================================================
 
 /**

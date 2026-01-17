@@ -79,6 +79,8 @@ import {
   initRouter
 } from './core/router';
 
+import { stateManager } from './core/state-manager';
+
 // ============================================================
 // GLOBAL STATE VARIABLES
 // ============================================================
@@ -194,6 +196,27 @@ let playerMoney: CurrencyValue = moneyProxy;
 let playerDiamonds: CurrencyValue = diamondProxy;
 (window as any).playerMoney = playerMoney;
 (window as any).playerDiamonds = playerDiamonds;
+
+// ============================================================
+// SYNC STATE MANAGER WITH PROXY SYSTEM
+// ============================================================
+
+/**
+ * Conectar StateManager com proxy system
+ * Quando StateManager muda, atualizar proxies automaticamente
+ */
+stateManager.subscribe((state) => {
+  if (state.money !== _internalMoney) {
+    playerMoney.value = state.money;
+  }
+  if (state.diamonds !== _internalDiamonds) {
+    playerDiamonds.value = state.diamonds;
+  }
+});
+
+// ============================================================
+// MONEY & DIAMONDS DISPLAY
+// ============================================================
 
 function updateMoneyDisplay(): void {
   moneyEl ||= document.getElementById('money');

@@ -368,26 +368,57 @@ async function handleCheckPublicProfile(req: ApiRequest, res: ApiResponse): Prom
       return res.status(400).json({ error: 'Invalid username format' });
     }
 
-    // Fetch profile without authentication - but only public field
-    const { data: profile, error } = await supabase
+    // Fetch profile without authentication - try with exact match first, then case-insensitive
+    let profile;
+    let error;
+    
+    // Try exact match first
+    const exactResult = await supabase
       .from('player_stats')
       .select('user_id, username, public')
-      .ilike('username', safeSanitized)
-      .single();
-
-    if (error) {
-      console.error(`[CHECK_PUBLIC_PROFILE] Database error:`, error.code, error.message);
-      // Don't expose whether profile exists or not
+      .eq('username', safeSanitized);
+    
+    if (exactResult.error) {
+      console.error(`[CHECK_PUBLIC_PROFILE] Exact match query error:`, exactResult.error.code, exactResult.error.message);
       return res.status(404).json({ error: 'Profile not found' });
+    }
+    
+    if (exactResult.data && exactResult.data.length === 1) {
+      profile = exactResult.data[0];
+    } else if (exactResult.data && exactResult.data.length > 1) {
+      console.warn(`[CHECK_PUBLIC_PROFILE] Multiple profiles found for ${safeSanitized}`);
+      // Take first one (shouldn't happen with unique usernames)
+      profile = exactResult.data[0];
+    } else {
+      // No exact match, try case-insensitive
+      const ilikeResult = await supabase
+        .from('player_stats')
+        .select('user_id, username, public')
+        .ilike('username', safeSanitized);
+      
+      if (ilikeResult.error) {
+        console.error(`[CHECK_PUBLIC_PROFILE] Case-insensitive query error:`, ilikeResult.error.code, ilikeResult.error.message);
+        return res.status(404).json({ error: 'Profile not found' });
+      }
+      
+      if (ilikeResult.data && ilikeResult.data.length === 1) {
+        profile = ilikeResult.data[0];
+      } else if (ilikeResult.data && ilikeResult.data.length === 0) {
+        console.warn(`[CHECK_PUBLIC_PROFILE] Profile not found from ${identifier}`);
+        return res.status(404).json({ error: 'Profile not found' });
+      } else {
+        console.warn(`[CHECK_PUBLIC_PROFILE] Multiple profiles found for ${safeSanitized}`);
+        profile = ilikeResult.data[0];
+      }
     }
 
     if (!profile) {
-      console.warn(`[CHECK_PUBLIC_PROFILE] Profile not found from ${identifier}`);
+      console.warn(`[CHECK_PUBLIC_PROFILE] Profile is null from ${identifier}`);
       return res.status(404).json({ error: 'Profile not found' });
     }
 
-    // Strict check: profile must be explicitly true
-    const isPublic = profile.public === true || profile.public === 'true';
+    // Strict check: profile must be explicitly true (check if column exists first)
+    const isPublic = profile.public === true || profile.public === 'true' || profile.public === 1;
 
     console.log(`[CHECK_PUBLIC_PROFILE] Profile (${maskUserId(profile.user_id)}): public=${profile.public} (isPublic=${isPublic}) from ${identifier}`);
 
@@ -404,6 +435,7 @@ async function handleCheckPublicProfile(req: ApiRequest, res: ApiResponse): Prom
       userId: profile.user_id,
       debug: {
         publicField: profile.public,
+        publicType: typeof profile.public,
         checked: new Date().toISOString()
       }
     });
@@ -955,24 +987,42 @@ async function handleSetup2FA(req: ApiRequest, res: ApiResponse, body: any) {
 
   try {
     // Get user email from Supabase auth
-    const { data: { user } } = await supabase.auth.admin.getUserById(userId);
+    let user;
+    try {
+      const { data: { user: authUser }, error: authError } = await supabase.auth.admin.getUserById(userId);
+      if (authError) {
+        console.error('Failed to get user from auth:', authError.message);
+        return res.status(400).json({ error: 'Could not retrieve user credentials - Auth API error' });
+      }
+      user = authUser;
+    } catch (authErr: any) {
+      console.error('Auth admin API exception:', authErr?.message || authErr);
+      return res.status(500).json({ error: 'Server error accessing auth system' });
+    }
+
     if (!user?.email) {
-      return res.status(400).json({ error: 'User email not found' });
+      console.error(`2FA setup failed: User ${userId} has no email`);
+      return res.status(400).json({ error: 'User email not found - please add an email to your account' });
     }
 
     // Generate 2FA secret with QR code
-    const { secret, qrCode } = generateTwoFactorSecret(user.email);
-    
-    // Don't save to database yet - user must verify the code first
-    return res.status(200).json({
-      success: true,
-      secret,
-      qrCode,
-      message: 'Please scan the QR code with your authenticator app and verify the 6-digit code'
-    });
+    try {
+      const { secret, qrCode } = generateTwoFactorSecret(user.email);
+      
+      // Don't save to database yet - user must verify the code first
+      return res.status(200).json({
+        success: true,
+        secret,
+        qrCode,
+        message: 'Please scan the QR code with your authenticator app and verify the 6-digit code'
+      });
+    } catch (genErr: any) {
+      console.error('Failed to generate 2FA secret:', genErr?.message || genErr);
+      return res.status(500).json({ error: 'Could not generate 2FA secret - please try again' });
+    }
   } catch (err) {
     console.error('2FA setup error:', err);
-    return res.status(500).json({ error: 'Failed to generate 2FA secret' });
+    return res.status(500).json({ error: 'Failed to setup 2FA - please try again later' });
   }
 }
 
