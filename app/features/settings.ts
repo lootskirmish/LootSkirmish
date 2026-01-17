@@ -8,7 +8,7 @@ import { getActiveUser } from '../core/session';
 import { playSound, setMasterVolume, setSoundEnabled, setSoundPreference, setAllSoundPreferences } from '../shared/sfx';
 import { showToast, showAlert } from '../shared/effects';
 import { ErrorHandler, ErrorCategory, ErrorSeverity } from '../shared/error-handler';
-import { validateUsername, validatePassword } from '../shared/validation';
+import { validateUsername } from '../shared/validation';
 
 // ============================================================
 // TYPE DEFINITIONS
