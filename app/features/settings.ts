@@ -1163,12 +1163,21 @@ export async function changePassword(): Promise<void> {
         }
         
         // Verify current password
+        // Get fresh user data to ensure we have correct email
+        const freshUser = getActiveUser({ sync: true, allowStored: false });
+        if (!freshUser?.email) {
+          errorDiv.textContent = 'Session expired. Please log in again.';
+          errorDiv.style.display = 'block';
+          return;
+        }
+        
         const { error: signInError } = await supabase.auth.signInWithPassword({
-          email: user.email,
+          email: freshUser.email,
           password: currentPassword
         });
         
         if (signInError) {
+          console.error('Password verification failed:', signInError.message);
           errorDiv.textContent = 'Current password is incorrect';
           errorDiv.style.display = 'block';
           return;

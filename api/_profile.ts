@@ -1427,24 +1427,33 @@ async function handleViewFullEmail(req: ApiRequest, res: ApiResponse, body: any)
       return res.status(400).json({ error: 'Invalid authentication code' });
     }
 
-    // Get user's email from Supabase Auth (fallback to player_stats email)
+    // Get user's email from Supabase Auth (primary source)
     let email: string | null = null;
+    let authUser: any = null;
     try {
       const { data: { user }, error: userError } = await supabase.auth.admin.getUserById(userId);
       if (userError) {
         console.error('Auth admin getUserById failed:', userError.message || userError);
+        // Fallback to player_stats only on error
+        if (profile?.email) {
+          email = profile.email;
+        }
+      } else if (user?.email) {
+        email = user.email;
+        authUser = user;
+      } else if (profile?.email) {
+        email = profile.email;
       }
-      email = user?.email || null;
     } catch (authErr: any) {
-      console.error('Auth admin exception getUserById:', authErr?.message || authErr);
-    }
-
-    if (!email && profile?.email) {
-      email = profile.email;
+      console.error('Auth admin exception:', authErr?.message || authErr);
+      if (profile?.email) {
+        email = profile.email;
+      }
     }
     
     if (!email) {
-      return res.status(400).json({ error: 'User email not found (profile has no email)' });
+      console.error('Email not found for user', userId, '- auth user email:', authUser?.email, ', player_stats email:', profile?.email);
+      return res.status(400).json({ error: 'User email not found - please add an email to your account' });
     }
 
     logAudit(supabase, userId, '2FA_EMAIL_VIEWED', {}, req as any).catch(() => {});
