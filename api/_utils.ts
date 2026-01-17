@@ -2104,17 +2104,18 @@ export function verifyTwoFactorCode(
     // Usar algoritmo HMAC-SHA1 com período de 30 segundos
     const PERIOD = 30;
     const now = Math.floor(Date.now() / 1000);
+    const currentCounter = Math.floor(now / PERIOD); // Contador de períodos desde epoch
 
     // Testar código no time atual e janela de tolerância
     for (let i = -window; i <= window; i++) {
-      const time = now + i * PERIOD;
+      const counter = currentCounter + i;
       const timeHex = Buffer.alloc(8);
-      let timeCounter = time;
-
-      // Converter timestamp para big-endian bytes
+      
+      // Converter contador para big-endian bytes
+      let tempCounter = counter;
       for (let j = 7; j >= 0; j--) {
-        timeHex[j] = timeCounter & 0xff;
-        timeCounter = timeCounter >> 8;
+        timeHex[j] = tempCounter & 0xff;
+        tempCounter = Math.floor(tempCounter / 256);
       }
 
       // Calcular HMAC-SHA1
