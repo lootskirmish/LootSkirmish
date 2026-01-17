@@ -390,7 +390,7 @@ async function handleCheckPublicProfile(req: ApiRequest, res: ApiResponse): Prom
     if (exactResult.data && exactResult.data.length === 1) {
       profile = exactResult.data[0];
     } else if (exactResult.data && exactResult.data.length > 1) {
-      console.warn(`[CHECK_PUBLIC_PROFILE] Multiple profiles found for ${safeSanitized}`);
+      console.warn(`[CHECK_PUBLIC_PROFILE] Multiple profiles found for ${sanitized}`);
       // Take first one (shouldn't happen with unique usernames)
       profile = exactResult.data[0];
     } else {
@@ -411,7 +411,7 @@ async function handleCheckPublicProfile(req: ApiRequest, res: ApiResponse): Prom
         console.warn(`[CHECK_PUBLIC_PROFILE] Profile not found from ${identifier}`);
         return res.status(404).json({ error: 'Profile not found' });
       } else {
-        console.warn(`[CHECK_PUBLIC_PROFILE] Multiple profiles found for ${safeSanitized}`);
+        console.warn(`[CHECK_PUBLIC_PROFILE] Multiple profiles found for ${sanitized}`);
         profile = ilikeResult.data[0];
       }
     }
