@@ -1181,7 +1181,8 @@ async function handleVerify2FA(req: ApiRequest, res: ApiResponse, body: any) {
 
   try {
     // Verify the provided code
-    const isValid = verifyTwoFactorCode(secret, code, 1); // Allow 1 period window (±30s)
+    const sanitizedCode = String(code || '').replace(/\s+/g, '');
+    const isValid = verifyTwoFactorCode(secret, sanitizedCode, 2); // Allow ±60s window
     
     if (!isValid) {
       logAudit(supabase, userId, '2FA_VERIFY_FAILED', { attempt: 'invalid_code' }, req as any).catch(() => {});
@@ -1266,7 +1267,8 @@ async function handleDisable2FA(req: ApiRequest, res: ApiResponse, body: any) {
       return res.status(500).json({ error: 'Failed to decrypt 2FA secret' });
     }
 
-    const isValid = verifyTwoFactorCode(decryptedSecret, code, 1);
+    const sanitizedCode = String(code || '').replace(/\s+/g, '');
+    const isValid = verifyTwoFactorCode(decryptedSecret, sanitizedCode, 2);
     
     if (!isValid) {
       logAudit(supabase, userId, '2FA_DISABLE_FAILED', { attempt: 'invalid_code' }, req as any).catch(() => {});
@@ -1340,7 +1342,8 @@ async function handleViewRecoveryCodes(req: ApiRequest, res: ApiResponse, body: 
       return res.status(500).json({ error: 'Failed to decrypt 2FA secret' });
     }
 
-    const isValid = verifyTwoFactorCode(decryptedSecret, code, 1);
+    const sanitizedCode = String(code || '').replace(/\s+/g, '');
+    const isValid = verifyTwoFactorCode(decryptedSecret, sanitizedCode, 2);
     
     if (!isValid) {
       logAudit(supabase, userId, '2FA_VERIFY_FAILED', { attempt: 'view_recovery_codes_invalid_code' }, req as any).catch(() => {});
@@ -1472,7 +1475,8 @@ async function handleValidate2FA(req: ApiRequest, res: ApiResponse, body: any) {
       return res.status(500).json({ error: 'Failed to decrypt 2FA secret' });
     }
 
-    const isValid = verifyTwoFactorCode(decryptedSecret, code, 1);
+    const sanitizedCode = String(code || '').replace(/\s+/g, '');
+    const isValid = verifyTwoFactorCode(decryptedSecret, sanitizedCode, 2);
     
     if (!isValid) {
       logAudit(supabase, userId, '2FA_VERIFY_FAILED', { attempt: 'generic_validation' }, req as any).catch(() => {});

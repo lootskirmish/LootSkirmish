@@ -1442,7 +1442,8 @@ export async function requestSetup2FA(userId: string, authToken: string): Promis
  */
 export async function verifyAndEnable2FA(userId: string, authToken: string, secret: string, code: string): Promise<boolean> {
   try {
-    // Validar formato do código
+    // Sanitizar e validar o código (remover espaços)
+    code = (code || '').replace(/\s+/g, '');
     if (!/^\d{6}$/.test(code)) {
       showAlert('warning', '⚠️ Invalid Code', 'Please enter a valid 6-digit code');
       return false;

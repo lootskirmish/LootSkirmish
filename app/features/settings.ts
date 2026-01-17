@@ -156,31 +156,7 @@ export async function toggle2FA(): Promise<void> {
       }
 
       if ((window as any).requestSetup2FA) {
-        const setup = await (window as any).requestSetup2FA(user.id, session.access_token);
-        if (!setup || !setup.secret) {
-          showAlert('error', '❌ Setup failed', 'Could not generate your 2FA secret.');
-          return;
-        }
-
-        // Inform the user about the secret; encourage scanning via authenticator (supports otpauth URL)
-        try {
-          // Open a QR code image in a new tab (no external libs needed)
-          if (setup.qrCode) {
-            const qrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=' + encodeURIComponent(setup.qrCode);
-            try { window.open(qrUrl, '_blank'); } catch (_) {}
-          }
-        } catch (_) {}
-
-        showAlert('info', '🔐 Enter 2FA Code', `Add the account in your authenticator app. If needed, use this secret manually: ${setup.secret}`);
-        const code = prompt('Enter the 6-digit code from your authenticator:');
-        if (!code) return;
-
-        if ((window as any).verifyAndEnable2FA) {
-          const ok = await (window as any).verifyAndEnable2FA(user.id, session.access_token, setup.secret, code);
-          if (ok) {
-            await updateTwoFactorUI();
-          }
-        }
+        await openTwoFactorSetupModal(user.id, session.access_token);
       }
     }
   } catch (err) {
@@ -192,6 +168,134 @@ export async function toggle2FA(): Promise<void> {
     });
     showAlert('error', '❌ Error', 'Failed to toggle 2FA');
   }
+}
+
+/**
+ * Beautiful in-app modal to guide through 2FA setup
+ */
+async function openTwoFactorSetupModal(userId: string, authToken: string): Promise<void> {
+  // Fetch setup data (secret + otpauth URL)
+  const setup = await (window as any).requestSetup2FA?.(userId, authToken);
+  if (!setup || !setup.secret || !setup.qrCode) {
+    showAlert('error', '❌ Setup failed', 'Could not generate your 2FA secret.');
+    return;
+  }
+
+  // Build modal DOM
+  const overlay = document.createElement('div');
+  overlay.className = 'modal';
+  const box = document.createElement('div');
+  box.className = 'modal-box';
+  overlay.appendChild(box);
+
+  const top = document.createElement('div');
+  top.className = 'modal-top';
+  const title = document.createElement('h3');
+  title.textContent = '🔐 Enable Two-Factor Authentication';
+  const closeBtn = document.createElement('button');
+  closeBtn.setAttribute('aria-label', 'Close');
+  closeBtn.textContent = '✕';
+  closeBtn.onclick = () => document.body.removeChild(overlay);
+  top.appendChild(title);
+  top.appendChild(closeBtn);
+  box.appendChild(top);
+
+  // QR code (top)
+  const qrWrap = document.createElement('div');
+  qrWrap.style.padding = '16px';
+  qrWrap.style.display = 'flex';
+  qrWrap.style.justifyContent = 'center';
+  const qrImg = document.createElement('img');
+  qrImg.alt = 'Scan this QR with your authenticator';
+  qrImg.width = 220;
+  qrImg.height = 220;
+  qrImg.style.borderRadius = '12px';
+  qrImg.style.border = '1px solid var(--card-border)';
+  qrImg.src = 'data:image/svg+xml;base64,' + btoa(`<svg xmlns="http://www.w3.org/2000/svg" width="220" height="220"><foreignObject width="100%" height="100%"><div xmlns="http://www.w3.org/1999/xhtml" style="display:flex;align-items:center;justify-content:center;width:100%;height:100%;font-family:system-ui,Segoe UI,Roboto; color:#9ca3af;">Loading QR…</div></foreignObject></svg>`);
+  qrWrap.appendChild(qrImg);
+  box.appendChild(qrWrap);
+
+  // Render QR using a simple image API (no Google)
+  const qrUrl = '/api/_utils_qr?data=' + encodeURIComponent(setup.qrCode);
+  // Fallback to public service if backend route not available
+  const externalQrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=' + encodeURIComponent(setup.qrCode);
+  // Try external first (fast, no backend changes)
+  qrImg.src = externalQrUrl;
+
+  // Secret display (manual entry)
+  const secretLabel = document.createElement('label');
+  secretLabel.textContent = 'Manual secret (if you cannot scan QR):';
+  const secretBox = document.createElement('div');
+  secretBox.style.padding = '0 16px 8px';
+  const secretEl = document.createElement('div');
+  secretEl.style.background = 'rgba(255,255,255,0.05)';
+  secretEl.style.border = '1px solid var(--card-border)';
+  secretEl.style.borderRadius = '12px';
+  secretEl.style.padding = '12px';
+  secretEl.style.wordBreak = 'break-all';
+  secretEl.textContent = setup.secret;
+  secretBox.appendChild(secretEl);
+  box.appendChild(secretLabel);
+  box.appendChild(secretBox);
+
+  // Code input
+  const codeLabel = document.createElement('label');
+  codeLabel.textContent = 'Enter 6-digit code:';
+  const inputWrap = document.createElement('div');
+  inputWrap.style.padding = '0 16px 8px';
+  const codeInput = document.createElement('input');
+  codeInput.type = 'text';
+  codeInput.inputMode = 'numeric';
+  codeInput.placeholder = '123456';
+  codeInput.maxLength = 7; // allow space input but sanitize
+  codeInput.style.width = '100%';
+  codeInput.style.padding = '12px';
+  codeInput.style.borderRadius = '12px';
+  codeInput.style.border = '1px solid var(--card-border)';
+  codeInput.oninput = () => {
+    // Strip spaces and non-digits live
+    codeInput.value = codeInput.value.replace(/\s+/g, '').replace(/[^0-9]/g, '').slice(0, 6);
+  };
+  inputWrap.appendChild(codeInput);
+  box.appendChild(codeLabel);
+  box.appendChild(inputWrap);
+
+  // Feedback area
+  const feedback = document.createElement('div');
+  feedback.style.padding = '0 16px 8px';
+  feedback.style.color = 'var(--accent)';
+  box.appendChild(feedback);
+
+  // Verify button
+  const verifyBtn = document.createElement('button');
+  verifyBtn.className = 'modal-create-btn';
+  verifyBtn.textContent = 'Verify & Enable 2FA';
+  box.appendChild(verifyBtn);
+
+  let attempts = 0;
+  verifyBtn.onclick = async () => {
+    const code = (codeInput.value || '').replace(/\s+/g, '');
+    if (!/^\d{6}$/.test(code)) {
+      feedback.style.color = 'var(--error)';
+      feedback.textContent = 'Please enter a valid 6-digit code.';
+      return;
+    }
+    feedback.style.color = 'var(--accent)';
+    feedback.textContent = 'Verifying…';
+    attempts++;
+    const ok = await (window as any).verifyAndEnable2FA?.(userId, authToken, setup.secret, code);
+    if (ok) {
+      feedback.style.color = 'var(--success)';
+      feedback.textContent = '2FA enabled successfully!';
+      await updateTwoFactorUI();
+      setTimeout(() => closeBtn.click(), 750);
+    } else {
+      feedback.style.color = 'var(--error)';
+      feedback.textContent = `Invalid code. Attempts: ${attempts}. You can try again.`;
+    }
+  };
+
+  document.body.appendChild(overlay);
 }
 
 /**
