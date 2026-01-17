@@ -1031,8 +1031,70 @@ async function handleSetup2FA(req: ApiRequest, res: ApiResponse, body: any) {
 }
 
 // ============================================================
-// 🛡️ 2FA HELPER FUNCTIONS - Encryption & Recovery Codes
+// 🛡️ 2FA HELPER FUNCTIONS - Database & Encryption & Recovery Codes
 // ============================================================
+
+/**
+ * Fetch 2FA data from player_profiles with fallback to player_stats
+ */
+async function fetchTwoFactorRow(userId: string, selectFields: string): Promise<{ data: any; error: any }> {
+  try {
+    // Try player_profiles first
+    const { data, error } = await supabase
+      .from('player_profiles')
+      .select(selectFields)
+      .eq('user_id', userId)
+      .single();
+    
+    if (!error && data) {
+      return { data, error: null };
+    }
+    
+    // Fallback to player_stats if column exists
+    if (error?.code === '42703') {
+      const { data: statsData, error: statsError } = await supabase
+        .from('player_stats')
+        .select(selectFields)
+        .eq('user_id', userId)
+        .single();
+      
+      return { data: statsData, error: statsError };
+    }
+    
+    return { data, error };
+  } catch (err) {
+    console.error('Failed to fetch 2FA row:', err);
+    return { data: null, error: err };
+  }
+}
+
+/**
+ * Update 2FA data in player_profiles with fallback to player_stats
+ */
+async function updateTwoFactorRow(userId: string, updates: Record<string, any>): Promise<{ error: any }> {
+  try {
+    // Try player_profiles first
+    const { error } = await supabase
+      .from('player_profiles')
+      .update(updates)
+      .eq('user_id', userId);
+    
+    if (!error || error?.code !== '42703') {
+      return { error };
+    }
+    
+    // Fallback to player_stats if column doesn't exist in profiles
+    const { error: statsError } = await supabase
+      .from('player_stats')
+      .update(updates)
+      .eq('user_id', userId);
+    
+    return { error: statsError };
+  } catch (err) {
+    console.error('Failed to update 2FA row:', err);
+    return { error: err };
+  }
+}
 
 /**
  * Criptografa secret 2FA usando AES-256-GCM
