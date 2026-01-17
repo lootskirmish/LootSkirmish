@@ -1251,7 +1251,7 @@ async function handleDisable2FA(req: ApiRequest, res: ApiResponse, body: any) {
     // Get user's 2FA secret
     const { data: profile, error: fetchError } = await fetchTwoFactorRow(
       userId,
-      'two_factor_secret, two_factor_iv, two_factor_enabled'
+      'two_factor_secret, two_factor_iv, two_factor_enabled, email'
     );
 
     if (fetchError || !profile?.two_factor_secret) {
@@ -1427,10 +1427,23 @@ async function handleViewFullEmail(req: ApiRequest, res: ApiResponse, body: any)
       return res.status(400).json({ error: 'Invalid authentication code' });
     }
 
-    // Get user's email from Supabase Auth
-    const { data: { user }, error: userError } = await supabase.auth.admin.getUserById(userId);
+    // Get user's email from Supabase Auth (fallback to player_stats email)
+    let email: string | null = null;
+    try {
+      const { data: { user }, error: userError } = await supabase.auth.admin.getUserById(userId);
+      if (userError) {
+        console.error('Auth admin getUserById failed:', userError.message || userError);
+      }
+      email = user?.email || null;
+    } catch (authErr: any) {
+      console.error('Auth admin exception getUserById:', authErr?.message || authErr);
+    }
+
+    if (!email && profile?.email) {
+      email = profile.email;
+    }
     
-    if (userError || !user?.email) {
+    if (!email) {
       return res.status(500).json({ error: 'Failed to retrieve email' });
     }
 
@@ -1438,7 +1451,7 @@ async function handleViewFullEmail(req: ApiRequest, res: ApiResponse, body: any)
 
     return res.status(200).json({
       success: true,
-      email: user.email
+      email
     });
   } catch (err) {
     console.error('View full email error:', err);

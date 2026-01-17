@@ -8,7 +8,7 @@ import { getActiveUser } from '../core/session';
 import { playSound, setMasterVolume, setSoundEnabled, setSoundPreference, setAllSoundPreferences } from '../shared/sfx';
 import { showToast, showAlert } from '../shared/effects';
 import { ErrorHandler, ErrorCategory, ErrorSeverity } from '../shared/error-handler';
-import { validateUsername } from '../shared/validation';
+import { validateUsername, validatePasswordStrength } from '../shared/validation';
 
 // ============================================================
 // TYPE DEFINITIONS
@@ -1132,8 +1132,8 @@ export async function changePassword(): Promise<void> {
           return;
         }
         
-        // Validate password strength
-        const passwordValidation = validatePassword(newPassword);
+        // Validate password strength and difference from current
+        const passwordValidation = validatePassword(newPassword, currentPassword);
         if (!passwordValidation.isValid) {
           errorDiv.textContent = passwordValidation.error || 'Password does not meet requirements';
           errorDiv.style.display = 'block';
@@ -1162,6 +1162,7 @@ export async function changePassword(): Promise<void> {
         
         // Validate 2FA if enabled
         if (is2FAEnabled && twoFactorCode) {
+          const sanitizedTwoFactorCode = twoFactorCode.replace(/\s+/g, '');
           const validateResponse = await fetch('/api/_profile', {
             method: 'POST',
             headers: await addCsrfHeader({ 'Content-Type': 'application/json' }),
@@ -1169,7 +1170,7 @@ export async function changePassword(): Promise<void> {
               action: 'validate2FA',
               userId: user.id,
               authToken: (await supabase.auth.getSession()).data.session?.access_token,
-              code: twoFactorCode
+              code: sanitizedTwoFactorCode
             })
           });
           
@@ -1222,6 +1223,20 @@ export async function changePassword(): Promise<void> {
 export async function openChangePasswordModal(): Promise<void> {
   try {
     const is2FAEnabled = await check2FAStatus();
+
+    const validatePassword = (password: string, currentPassword?: string): { isValid: boolean; error?: string } => {
+      if (!password || password.length < 8) {
+        return { isValid: false, error: 'Password must be at least 8 characters' };
+      }
+      if (currentPassword && password === currentPassword) {
+        return { isValid: false, error: 'New password must be different from current password' };
+      }
+      const strength = validatePasswordStrength(password);
+      if (strength.score < 3 || !strength.hasUppercase || !strength.hasLowercase || !strength.hasNumber) {
+        return { isValid: false, error: 'Use uppercase, lowercase, numbers and minimum 8 characters' };
+      }
+      return { isValid: true };
+    };
     
     const modalHTML = `
       <div class="password-change-modal">
