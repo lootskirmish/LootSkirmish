@@ -1408,7 +1408,8 @@ async function handleViewFullEmail(req: ApiRequest, res: ApiResponse, body: any)
       return res.status(500).json({ error: 'Failed to decrypt 2FA secret' });
     }
 
-    const isValid = verifyTwoFactorCode(decryptedSecret, code, 1);
+    const sanitizedCode = String(code || '').replace(/\s+/g, '');
+    const isValid = verifyTwoFactorCode(decryptedSecret, sanitizedCode, 2); // Allow ±60s window
     
     if (!isValid) {
       logAudit(supabase, userId, '2FA_VERIFY_FAILED', { attempt: 'view_email_invalid_code' }, req as any).catch(() => {});

@@ -329,8 +329,68 @@ export async function viewRecoveryCodes(): Promise<void> {
       return;
     }
     
-    const codesText = result.recoveryCodes?.join('\n') || 'No codes found';
-    showAlert('success', '🗐️ Recovery Codes', `Here are your recovery codes:\n\n${codesText}\n\nKeep these safe!`, { duration: 0 } as any);
+    // Show recovery codes in a persistent modal
+    const overlay = document.createElement('div');
+    overlay.className = 'modal';
+    const box = document.createElement('div');
+    box.className = 'modal-box';
+    overlay.appendChild(box);
+
+    const top = document.createElement('div');
+    top.className = 'modal-top';
+    const title = document.createElement('h3');
+    title.textContent = '🗐️ Recovery Codes - KEEP THESE SAFE';
+    const closeBtn = document.createElement('button');
+    closeBtn.setAttribute('aria-label', 'Close');
+    closeBtn.textContent = '✕';
+    closeBtn.onclick = () => document.body.removeChild(overlay);
+    top.appendChild(title);
+    top.appendChild(closeBtn);
+    box.appendChild(top);
+
+    const codesContainer = document.createElement('div');
+    codesContainer.style.padding = '16px';
+    codesContainer.style.maxHeight = '400px';
+    codesContainer.style.overflowY = 'auto';
+    
+    const warningText = document.createElement('p');
+    warningText.style.color = 'var(--error)';
+    warningText.style.marginBottom = '12px';
+    warningText.style.fontWeight = 'bold';
+    warningText.textContent = '⚠️ Each code can only be used ONCE. Store these in a secure location!';
+    codesContainer.appendChild(warningText);
+
+    const codesList = document.createElement('div');
+    codesList.style.background = 'rgba(255,255,255,0.05)';
+    codesList.style.border = '1px solid var(--card-border)';
+    codesList.style.borderRadius = '12px';
+    codesList.style.padding = '12px';
+    codesList.style.fontFamily = 'monospace';
+    codesList.style.fontSize = '14px';
+    
+    const codes = result.recoveryCodes || [];
+    codes.forEach((code: string, i: number) => {
+      const codeLine = document.createElement('div');
+      codeLine.style.marginBottom = '8px';
+      codeLine.textContent = `${i + 1}. ${code}`;
+      codesList.appendChild(codeLine);
+    });
+    
+    codesContainer.appendChild(codesList);
+    box.appendChild(codesContainer);
+
+    const copyBtn = document.createElement('button');
+    copyBtn.className = 'modal-create-btn';
+    copyBtn.textContent = '📋 Copy All Codes';
+    copyBtn.onclick = () => {
+      const allCodes = codes.join('\n');
+      navigator.clipboard.writeText(allCodes).then(() => {
+        showToast('success', '✅ Copied', 'All recovery codes copied to clipboard');
+      });
+    };
+    box.appendChild(copyBtn);
+
+    document.body.appendChild(overlay);
   } catch (err) {
     ErrorHandler.handleError('Error viewing recovery codes', {
       category: ErrorCategory.AUTH,
@@ -1292,6 +1352,7 @@ export async function openChangePasswordModal(): Promise<void> {
         
         // Se 2FA ativado, validar código
         if (is2FAEnabled) {
+          const sanitizedTfaCode = (tfaInput.value || '').replace(/\s+/g, '');
           const validateResponse = await fetch('/api/_profile', {
             method: 'POST',
             headers: await addCsrfHeader({ 'Content-Type': 'application/json' }),
@@ -1299,7 +1360,7 @@ export async function openChangePasswordModal(): Promise<void> {
               action: 'validate2FA',
               userId: user.id,
               authToken: session.access_token,
-              code: tfaInput.value
+              code: sanitizedTfaCode
             })
           });
           
