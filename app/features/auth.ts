@@ -956,6 +956,18 @@ export async function handleRegister(): Promise<void> {
       return;
     }
 
+    // Sync display_name to Supabase Auth (non-blocking)
+    try {
+      await supabase.auth.admin.updateUserById(authData.user.id, {
+        user_metadata: {
+          display_name: username
+        }
+      });
+    } catch (authSyncErr) {
+      console.warn('Failed to sync display_name during registration:', (authSyncErr as any)?.message || authSyncErr);
+      // Non-blocking: continue even if sync fails
+    }
+
     // Salvar aceitação dos termos
     try {
       await supabase
@@ -1029,12 +1041,12 @@ export async function handleLogout(isInBattle: boolean = false): Promise<void> {
   }
   
   // ✅ Limpar chat ANTES de fazer signOut
-  if (window.cleanupChat) {
-    window.cleanupChat();
+  if ((window as any).cleanupChat) {
+    (window as any).cleanupChat();
   }
 
-  if (window.cleanupFriends) {
-    window.cleanupFriends();
+  if ((window as any).cleanupFriends) {
+    (window as any).cleanupFriends();
   }
   
   // 🛡️ Limpar token CSRF do servidor e localstorage
@@ -1057,16 +1069,16 @@ export async function handleLogout(isInBattle: boolean = false): Promise<void> {
   clearActiveUser();
 
   // Zera sem exibir popups
-  window.__suppressCurrencyPopups = true;
+  (window as any).__suppressCurrencyPopups = true;
   try {
-    if (window.playerMoney) window.playerMoney.value = 0;
-    if (window.playerDiamonds) window.playerDiamonds.value = 0;
+    if ((window as any).playerMoney) (window as any).playerMoney.value = 0;
+    if ((window as any).playerDiamonds) (window as any).playerDiamonds.value = 0;
   } finally {
-    window.__suppressCurrencyPopups = false;
+    (window as any).__suppressCurrencyPopups = false;
   }
 
-  if (window.invalidateAdminRoleCache) {
-    window.invalidateAdminRoleCache();
+  if ((window as any).invalidateAdminRoleCache) {
+    (window as any).invalidateAdminRoleCache();
   }
   
   // Limpar localStorage
@@ -1303,8 +1315,8 @@ export function setupAuthStateListener(loadUserDataCallback: (user: User) => voi
 
     if (event === 'SIGNED_OUT') {
       // ✅ LIMPAR CHAT PRIMEIRO
-      if (window.cleanupChat) {
-        window.cleanupChat();
+      if ((window as any).cleanupChat) {
+        (window as any).cleanupChat();
       }
 
       // ✅ FECHAR E RESETAR PAINEL DO CHAT
@@ -1317,26 +1329,26 @@ export function setupAuthStateListener(loadUserDataCallback: (user: User) => voi
       
       if (chatBtn) {
         chatBtn.classList.remove('active');
-        if (typeof window.setChatToggleIcon === 'function') {
-          window.setChatToggleIcon({ count: '0', icon: 'messages-square', showCount: true });
+        if (typeof (window as any).setChatToggleIcon === 'function') {
+          (window as any).setChatToggleIcon({ count: '0', icon: 'messages-square', showCount: true });
         } else {
           chatBtn.innerHTML = '<span class="header-icon" data-lucide="messages-square"></span><span class="chat-online-count" id="chat-online-count">0</span>';
-          if (typeof window.refreshLucideIcons === 'function') {
-            window.refreshLucideIcons();
+          if (typeof (window as any).refreshLucideIcons === 'function') {
+            (window as any).refreshLucideIcons();
           }
         }
       }
 
       // Limpar variáveis
       clearActiveUser();
-      window.__suppressCurrencyPopups = true;
+      (window as any).__suppressCurrencyPopups = true;
       try {
-        if (window.playerMoney) window.playerMoney.value = 0;
-        if (window.playerDiamonds) window.playerDiamonds.value = 0;
+        if ((window as any).playerMoney) (window as any).playerMoney.value = 0;
+        if ((window as any).playerDiamonds) (window as any).playerDiamonds.value = 0;
       } finally {
-        window.__suppressCurrencyPopups = false;
+        (window as any).__suppressCurrencyPopups = false;
       }
-      if (window.invalidateAdminRoleCache) window.invalidateAdminRoleCache();
+      if ((window as any).invalidateAdminRoleCache) (window as any).invalidateAdminRoleCache();
       
       // Limpar Redux/data
       store.dispatch(dataActions.clearAllData());
@@ -1785,12 +1797,12 @@ if (document.readyState === 'loading') {
 }
 
 // 🌍 Expor funções para o escopo global (HTML onclick)
-window.handleLogin = handleLogin;
-window.handleRegister = handleRegister;
-window.handlePasswordReset = handlePasswordReset;
-window.handleUpdatePassword = handleUpdatePassword;
-window.updatePasswordAfterReset = updatePasswordAfterReset;
-window.handleSendMagicLink = handleSendMagicLink;
+(window as any).handleLogin = handleLogin;
+(window as any).handleRegister = handleRegister;
+(window as any).handlePasswordReset = handlePasswordReset;
+(window as any).handleUpdatePassword = handleUpdatePassword;
+(window as any).updatePasswordAfterReset = updatePasswordAfterReset;
+(window as any).handleSendMagicLink = handleSendMagicLink;
 (window as any).requestSetup2FA = requestSetup2FA;
 (window as any).verifyAndEnable2FA = verifyAndEnable2FA;
 (window as any).disable2FA = disable2FA;

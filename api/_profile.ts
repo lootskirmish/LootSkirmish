@@ -243,6 +243,7 @@ async function handleChangeUsername(req: ApiRequest, res: ApiResponse): Promise<
 
     const newCount = changeCount + 1;
 
+    // Update player_stats with new username
     const { error: updErr, data: updData } = await supabase
       .from('player_stats')
       .update({
@@ -264,6 +265,18 @@ async function handleChangeUsername(req: ApiRequest, res: ApiResponse): Promise<
         }
       }
       return res.status(500).json({ error: 'Failed to update username' });
+    }
+
+    // Sync display_name in Supabase Auth (non-blocking)
+    try {
+      await supabase.auth.admin.updateUserById(userId, {
+        user_metadata: {
+          display_name: normalized
+        }
+      });
+    } catch (authErr: any) {
+      console.warn('Failed to sync display_name to Supabase Auth:', authErr?.message || authErr);
+      // Non-blocking: continue even if sync fails
     }
 
     // Audit (non-blocking)
@@ -1379,13 +1392,15 @@ async function handleViewRecoveryCodes(req: ApiRequest, res: ApiResponse, body: 
 }
 
 /**
- * View full email (requires 2FA code verification)
+ * View full email (requires 2FA code OR password verification)
+ * - If 2FA enabled: requires 2FA code
+ * - If 2FA disabled: requires password
  */
 async function handleViewFullEmail(req: ApiRequest, res: ApiResponse, body: any) {
-  const { userId, authToken, code } = body;
+  const { userId, authToken, code, password } = body;
   
-  if (!userId || !authToken || !code) {
-    return res.status(400).json({ error: 'Missing required fields' });
+  if (!userId || !authToken) {
+    return res.status(400).json({ error: 'Missing required fields: userId, authToken' });
   }
 
   // Validate session
@@ -1401,40 +1416,98 @@ async function handleViewFullEmail(req: ApiRequest, res: ApiResponse, body: any)
   }
 
   try {
-    // Get user's 2FA secret
+    // Get user's 2FA status
     const { data: profile, error: fetchError } = await fetchTwoFactorRow(
       userId,
-      'two_factor_secret, two_factor_iv, two_factor_enabled'
+      'two_factor_secret, two_factor_iv, two_factor_enabled, email'
     );
 
-    if (fetchError || !profile?.two_factor_enabled) {
-      return res.status(400).json({ error: '2FA is not enabled for this account' });
+    if (fetchError) {
+      console.error('Failed to fetch user profile:', fetchError);
+      return res.status(500).json({ error: 'Failed to fetch user profile' });
     }
 
-    // Decrypt and verify the code
-    const decryptedSecret = profile?.two_factor_iv
-      ? decryptTwoFactorSecret(profile.two_factor_secret, profile.two_factor_iv)
-      : profile?.two_factor_secret;
-    if (!decryptedSecret) {
-      return res.status(500).json({ error: 'Failed to decrypt 2FA secret' });
+    const has2FA = profile?.two_factor_enabled === true || profile?.two_factor_enabled === 'true' || profile?.two_factor_enabled === 1;
+
+    // ============================================================
+    // VERIFY BASED ON 2FA STATUS
+    // ============================================================
+
+    if (has2FA) {
+      // 2FA Enabled: Require 2FA code
+      if (!code) {
+        return res.status(400).json({ 
+          error: 'Authentication required',
+          require2FA: true,
+          message: 'Please provide your 2FA code to view email'
+        });
+      }
+
+      // Decrypt and verify the 2FA code
+      const decryptedSecret = profile?.two_factor_iv
+        ? decryptTwoFactorSecret(profile.two_factor_secret, profile.two_factor_iv)
+        : profile?.two_factor_secret;
+      
+      if (!decryptedSecret) {
+        return res.status(500).json({ error: 'Failed to decrypt 2FA secret' });
+      }
+
+      const sanitizedCode = String(code || '').replace(/\s+/g, '');
+      const isValidCode = verifyTwoFactorCode(decryptedSecret, sanitizedCode, 2); // Allow ±60s window
+      
+      if (!isValidCode) {
+        logAudit(supabase, userId, '2FA_VERIFY_FAILED', { attempt: 'view_email_invalid_code' }, req as any).catch(() => {});
+        return res.status(401).json({ error: 'Invalid 2FA code' });
+      }
+
+      logAudit(supabase, userId, 'EMAIL_REVEALED_VIA_2FA', {}, req as any).catch(() => {});
+
+    } else {
+      // 2FA Disabled: Require password verification
+      if (!password) {
+        return res.status(400).json({ 
+          error: 'Authentication required',
+          require2FA: false,
+          message: 'Please provide your password to view email'
+        });
+      }
+
+      // Verify password via Supabase Auth
+      try {
+        const { data: authData, error: signInError } = await supabase.auth.signInWithPassword({
+          email: profile?.email || '',
+          password: password
+        });
+
+        if (signInError || !authData?.user) {
+          logAudit(supabase, userId, 'PASSWORD_VERIFY_FAILED', { attempt: 'view_email' }, req as any).catch(() => {});
+          return res.status(401).json({ error: 'Invalid password' });
+        }
+
+        // Verify it's the same user
+        if (authData.user.id !== userId) {
+          return res.status(401).json({ error: 'User mismatch' });
+        }
+
+        logAudit(supabase, userId, 'EMAIL_REVEALED_VIA_PASSWORD', {}, req as any).catch(() => {});
+
+      } catch (authErr: any) {
+        console.error('Password verification error:', authErr?.message || authErr);
+        return res.status(401).json({ error: 'Failed to verify password' });
+      }
     }
 
-    const sanitizedCode = String(code || '').replace(/\s+/g, '');
-    const isValid = verifyTwoFactorCode(decryptedSecret, sanitizedCode, 2); // Allow ±60s window
-    
-    if (!isValid) {
-      logAudit(supabase, userId, '2FA_VERIFY_FAILED', { attempt: 'view_email_invalid_code' }, req as any).catch(() => {});
-      return res.status(400).json({ error: 'Invalid authentication code' });
-    }
+    // ============================================================
+    // GET FULL EMAIL
+    // ============================================================
 
-    // Get user's email from Supabase Auth (primary source)
     let email: string | null = null;
     let authUser: any = null;
+
     try {
       const { data: { user }, error: userError } = await supabase.auth.admin.getUserById(userId);
       if (userError) {
         console.error('Auth admin getUserById failed:', userError.message || userError);
-        // Fallback to player_stats only on error
         if (profile?.email) {
           email = profile.email;
         }
@@ -1452,16 +1525,16 @@ async function handleViewFullEmail(req: ApiRequest, res: ApiResponse, body: any)
     }
     
     if (!email) {
-      console.error('Email not found for user', userId, '- auth user email:', authUser?.email, ', player_stats email:', profile?.email);
+      console.error('Email not found for user', userId);
       return res.status(400).json({ error: 'User email not found - please add an email to your account' });
     }
 
-    logAudit(supabase, userId, '2FA_EMAIL_VIEWED', {}, req as any).catch(() => {});
-
     return res.status(200).json({
       success: true,
-      email
+      email,
+      verified: true
     });
+
   } catch (err) {
     console.error('View full email error:', err);
     return res.status(500).json({ error: 'Failed to retrieve email' });
