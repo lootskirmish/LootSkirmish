@@ -407,16 +407,9 @@ export async function viewRecoveryCodes(): Promise<void> {
  */
 export async function viewFullEmail(): Promise<void> {
   try {
-    const is2FAEnabled = await check2FAStatus();
-    
-    if (!is2FAEnabled) {
-      showAlert('warning', '🔐 2FA Required', 'Please enable 2FA first to view your full email.');
-      return;
-    }
-    
-    const code = prompt('🔏 Enter your 2FA code to view your full email:');
-    if (!code) return;
-    
+    const emailInput = document.getElementById('settings-email') as HTMLInputElement | null;
+    if (!emailInput) return;
+
     const user = getActiveUser({ sync: true, allowStored: true });
     const { data: { session } } = await supabase.auth.getSession();
     
@@ -424,26 +417,68 @@ export async function viewFullEmail(): Promise<void> {
       showAlert('error', 'Not authenticated', 'Please log in again.');
       return;
     }
+
+    // Check if 2FA is enabled
+    const is2FAEnabled = await check2FAStatus();
     
-    const response = await fetch('/api/_profile', {
-      method: 'POST',
-      headers: await addCsrfHeader({ 'Content-Type': 'application/json' }),
-      body: JSON.stringify({
-        action: 'viewFullEmail',
-        userId: user.id,
-        authToken: session.access_token,
-        code
-      })
-    });
-    
-    const result = await response.json();
-    
-    if (!response.ok) {
-      showAlert('error', '❌ Invalid Code', result.error || 'Could not retrieve email');
-      return;
+    if (is2FAEnabled) {
+      // 2FA Enabled: Request 2FA code
+      const code = prompt('🔏 Enter your 2FA code to reveal your email:');
+      if (!code) return;
+
+      const response = await fetch('/api/_profile', {
+        method: 'POST',
+        headers: await addCsrfHeader({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({
+          action: 'viewFullEmail',
+          userId: user.id,
+          authToken: session.access_token,
+          code
+        })
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        showAlert('error', '❌ Invalid Code', result.error || 'Could not retrieve email');
+        return;
+      }
+
+      // Reveal email in input
+      if (result.email) {
+        emailInput.value = result.email;
+        showToast('success', 'Email Revealed', 'Your email is now visible. It will be hidden on page refresh.');
+      }
+    } else {
+      // 2FA Disabled: Request password
+      const password = prompt('🔒 Enter your password to reveal your email:');
+      if (!password) return;
+
+      const response = await fetch('/api/_profile', {
+        method: 'POST',
+        headers: await addCsrfHeader({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({
+          action: 'viewFullEmail',
+          userId: user.id,
+          authToken: session.access_token,
+          password
+        })
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        showAlert('error', '❌ Invalid Password', result.error || 'Could not retrieve email');
+        return;
+      }
+
+      // Reveal email in input
+      if (result.email) {
+        emailInput.value = result.email;
+        showToast('success', 'Email Revealed', 'Your email is now visible. It will be hidden on page refresh.');
+      }
     }
-    
-    showAlert('info', '📧 Your Email', `${result.email || 'Unknown'}`);  } catch (err) {
+  } catch (err) {
     ErrorHandler.handleError('Error viewing email', {
       category: ErrorCategory.AUTH,
       severity: ErrorSeverity.ERROR,
@@ -717,8 +752,8 @@ function bindSettingsUIOnce(): void {
       // Notificar o app (app.js escuta isso pra sincronizar idioma)
       document.dispatchEvent(new Event('languageChanged'));
 
-      if (window.applyTranslations) {
-        await window.applyTranslations();
+      if ((window as any).applyTranslations) {
+        await (window as any).applyTranslations();
       }
 
       // Se o profile estiver aberto, recarregar com os argumentos esperados
@@ -924,7 +959,7 @@ export async function enableUsernameEdit(): Promise<void> {
     
     // Validar usando sistema robusto
     const usernameValidation = validateUsername(newUsername);
-    if (!usernameValidation.isValid) {
+    if (!usernameValidation.valid) {
       showAlert('error', 'Invalid username', usernameValidation.error || 'Username validation failed.');
       return;
     }
