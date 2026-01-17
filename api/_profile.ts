@@ -1444,7 +1444,7 @@ async function handleViewFullEmail(req: ApiRequest, res: ApiResponse, body: any)
     }
     
     if (!email) {
-      return res.status(500).json({ error: 'Failed to retrieve email' });
+      return res.status(400).json({ error: 'User email not found (profile has no email)' });
     }
 
     logAudit(supabase, userId, '2FA_EMAIL_VIEWED', {}, req as any).catch(() => {});

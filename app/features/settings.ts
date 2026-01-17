@@ -1043,6 +1043,20 @@ export function cancelUsernameEdit(): void {
 export async function changePassword(): Promise<void> {
   try {
     const is2FAEnabled = await check2FAStatus();
+
+    const validatePassword = (password: string, currentPassword?: string): { isValid: boolean; error?: string } => {
+      if (!password || password.length < 8) {
+        return { isValid: false, error: 'Password must be at least 8 characters' };
+      }
+      if (currentPassword && password === currentPassword) {
+        return { isValid: false, error: 'New password must be different from current password' };
+      }
+      const strength = validatePasswordStrength(password);
+      if (strength.score < 3 || !strength.hasUppercase || !strength.hasLowercase || !strength.hasNumber) {
+        return { isValid: false, error: 'Use uppercase, lowercase, numbers and minimum 8 characters' };
+      }
+      return { isValid: true };
+    };
     
     // Create modal HTML
     const modalHTML = `
