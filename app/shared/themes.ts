@@ -4,6 +4,7 @@
 
 import { supabase } from '../features/auth';
 import { hexToRgb, showToast, showAlert } from './effects';
+import { ErrorHandler, ErrorCategory, ErrorSeverity } from './error-handler';
 
 // ============================================================
 // TYPE DEFINITIONS
@@ -816,7 +817,7 @@ export async function loadInitialTheme(): Promise<void> {
           return;
         }
       } catch (err) {
-        console.error('❌ Erro ao buscar tema do banco:', err);
+        ErrorHandler.handleDatabaseError('Erro ao buscar tema do banco', err);
       }
     }
 
@@ -850,7 +851,7 @@ export async function loadUserThemes(): Promise<void> {
       .single();
     
     if (error) {
-      console.error('Error to load themes:', error);
+      ErrorHandler.handleDatabaseError('Error to load themes', error);
       showAlert('error', 'Loading Failed! 🎨', 'Unable to load themes. Please refresh the page.');
       return;
     }
@@ -862,7 +863,12 @@ export async function loadUserThemes(): Promise<void> {
     applyTheme(activeTheme);
     
   } catch (err) {
-    console.error('Erro:', err);
+    ErrorHandler.handleError('Erro ao carregar themes', {
+      category: ErrorCategory.DATABASE,
+      severity: ErrorSeverity.ERROR,
+      details: err,
+      showToUser: false
+    });
   }
 }
 
@@ -1036,7 +1042,12 @@ export async function confirmThemePurchase(): Promise<void> {
     showToast('success', 'Theme Active! 🎨', `Now using "${theme.name}" theme.`);
     
   } catch (err) {
-    console.error('Erro:', err);
+    ErrorHandler.handleError('Erro ao comprar theme', {
+      category: ErrorCategory.PAYMENT,
+      severity: ErrorSeverity.ERROR,
+      details: err,
+      showToUser: false
+    });
     showAlert('error', 'Transaction Error! 🌐', 'Unable to process purchase. Check your connection.');
   }
 }
@@ -1058,7 +1069,7 @@ export async function activateTheme(themeId: string): Promise<void> {
       .eq('user_id', (window as any).currentUser.id);
     
     if (error) {
-      console.error('Erro ao ativar theme:', error);
+      ErrorHandler.handleDatabaseError('Erro ao ativar theme', error);
       showAlert('error', 'Activation Failed! ❌', 'Unable to activate theme. Please try again.');
       return;
     }
@@ -1073,7 +1084,12 @@ export async function activateTheme(themeId: string): Promise<void> {
     loadUserThemes();
     
   } catch (err) {
-    console.error('Erro:', err);
+    ErrorHandler.handleError('Erro ao ativar theme', {
+      category: ErrorCategory.DATABASE,
+      severity: ErrorSeverity.ERROR,
+      details: err,
+      showToUser: false
+    });
   }
 }
 

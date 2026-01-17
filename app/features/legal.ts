@@ -2,6 +2,8 @@
 // LEGAL.JS - Sistema de Termos e Políticas
 // ============================================================
 
+import { ErrorHandler, ErrorCategory, ErrorSeverity } from '../shared/error-handler';
+
 // ============================================================
 // TYPE DEFINITIONS
 // ============================================================
@@ -58,7 +60,12 @@ async function loadLegalContent(): Promise<void> {
       privacyContent.innerHTML = renderSections(data.privacy.sections);
     }
   } catch (error) {
-    console.error('Error loading legal content:', error);
+    ErrorHandler.handleError('Error loading legal content', {
+      category: ErrorCategory.UNKNOWN,
+      severity: ErrorSeverity.ERROR,
+      details: error,
+      showToUser: false
+    });
   }
 }
 

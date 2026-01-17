@@ -4,6 +4,8 @@
 
 import { supabase } from './auth';
 import { addCsrfHeader } from '../core/session';
+import { ErrorHandler, ErrorCategory, ErrorSeverity } from '../shared/error-handler';
+import { stateManager } from '../core/state-manager';
 import type { RealtimeChannel } from '@supabase/supabase-js';
 
 // ============================================================
@@ -121,7 +123,12 @@ function requestAdminRefresh(): void {
     adminRefreshInFlight = (async () => {
       await renderAdminPanel();
     })()
-      .catch((err) => console.error('Admin refresh error:', err))
+      .catch((err) => ErrorHandler.handleError('Admin refresh error', {
+        category: ErrorCategory.UNKNOWN,
+        severity: ErrorSeverity.ERROR,
+        details: err,
+        showToUser: false
+      }))
       .finally(() => {
         adminRefreshInFlight = null;
         if (adminRefreshQueued) {
@@ -178,7 +185,11 @@ export async function checkIsAdmin(): Promise<AdminRoleResult> {
     
     // 3. CRÍTICO: Verificar integridade dos dados
     if (data.user_id !== (window as any).currentUser.id) {
-      console.error('⚠️ User ID mismatch detected!');
+      ErrorHandler.handleError('⚠️ User ID mismatch detected!', {
+        category: ErrorCategory.PERMISSION,
+        severity: ErrorSeverity.CRITICAL,
+        showToUser: false
+      });
       adminRoleCache = { isAdmin: false, role: null };
       adminRoleCacheTime = now;
       return adminRoleCache;
@@ -193,7 +204,7 @@ export async function checkIsAdmin(): Promise<AdminRoleResult> {
     return adminRoleCache;
     
   } catch (err) {
-    console.error('Error checking admin:', err);
+    ErrorHandler.handleDatabaseError('Error checking admin', err);
     adminRoleCache = { isAdmin: false, role: null };
     adminRoleCacheTime = Date.now();
     return adminRoleCache;
@@ -236,7 +247,11 @@ export async function renderAdminPanel(): Promise<void> {
   const { isAdmin } = await checkIsAdmin();
   
   if (!isAdmin) {
-    console.error('❌ Unauthorized access attempt to admin panel');
+    ErrorHandler.handleError('❌ Unauthorized access attempt to admin panel', {
+      category: ErrorCategory.PERMISSION,
+      severity: ErrorSeverity.WARNING,
+      showToUser: false
+    });
     alert('❌ Access denied!');
     if (window.goTo) window.goTo('home');
     return;
@@ -300,7 +315,12 @@ async function renderAdminPurchasesTab(): Promise<void> {
     await renderAdminPendingOrders();
     await renderAdminHistoryOrders();
   } catch (err) {
-    console.error('Error rendering purchases tab:', err);
+    ErrorHandler.handleError('Error rendering purchases tab', {
+      category: ErrorCategory.UNKNOWN,
+      severity: ErrorSeverity.ERROR,
+      details: err,
+      showToUser: false
+    });
   }
 }
 
@@ -361,7 +381,12 @@ async function renderAdminSupportTab(): Promise<void> {
     `;
     
   } catch (err) {
-    console.error('Error rendering support tab:', err);
+    ErrorHandler.handleError('Error rendering support tab', {
+      category: ErrorCategory.UNKNOWN,
+      severity: ErrorSeverity.ERROR,
+      details: err,
+      showToUser: false
+    });
   }
 }
 
@@ -381,7 +406,7 @@ async function fetchSupportTickets(): Promise<SupportTicket[]> {
     
     return data || [];
   } catch (err) {
-    console.error('Error fetching tickets:', err);
+    ErrorHandler.handleDatabaseError('Error fetching tickets', err);
     return [];
   }
 }
@@ -407,7 +432,7 @@ async function updateSupportTicket(ticketId: string, updates: Partial<SupportTic
     
     return data ? data[0] : null;
   } catch (err) {
-    console.error('Error updating ticket:', err);
+    ErrorHandler.handleDatabaseError('Error updating ticket', err);
     return null;
   }
 }
@@ -640,7 +665,7 @@ async function fetchAdminStats(): Promise<AdminStats> {
     };
     
   } catch (err) {
-    console.error('Error fetching admin stats:', err);
+    ErrorHandler.handleDatabaseError('Error fetching admin stats', err);
     return { 
       approvedCount: 0, 
       pendingCount: 0, 
@@ -676,13 +701,13 @@ async function fetchPendingOrders(): Promise<any[]> {
       .limit(100);
     
     if (error) {
-      console.error('Error retrieving orders:', error);
+      ErrorHandler.handleDatabaseError('Error retrieving orders', error);
       return [];
     }
     
     return data || [];
   } catch (err) {
-    console.error('Error fetching pending orders:', err);
+    ErrorHandler.handleDatabaseError('Error fetching pending orders', err);
     return [];
   }
 }
@@ -753,7 +778,12 @@ async function renderAdminPendingOrders(): Promise<void> {
     // Sem ações de aprovação/rejeição na nova integração
     
   } catch (err) {
-    console.error('❌ Error rendering requests:', err);
+    ErrorHandler.handleError('❌ Error rendering requests', {
+      category: ErrorCategory.UNKNOWN,
+      severity: ErrorSeverity.ERROR,
+      details: err,
+      showToUser: false
+    });
   } finally {
     if (wasUpdating) {
       isUpdatingAdmin = true;
@@ -888,7 +918,12 @@ async function renderAdminHistoryOrders(): Promise<void> {
     list.innerHTML = historyHTML;
     
   } catch (err) {
-    console.error('Error rendering history:', err);
+    ErrorHandler.handleError('Error rendering history', {
+      category: ErrorCategory.UNKNOWN,
+      severity: ErrorSeverity.ERROR,
+      details: err,
+      showToUser: false
+    });
   }
 }
 
@@ -969,9 +1004,7 @@ export async function handleApproveOrder(orderId: string): Promise<void> {
     if (result.success) {
       // Atualizar saldo se for o próprio usuário
       if (result.yourNewBalance !== null && result.yourNewBalance !== undefined) {
-        if (window.playerDiamonds) {
-          window.playerDiamonds.value = result.yourNewBalance;
-        }
+        stateManager.updateDiamonds(result.yourNewBalance);
       }
       
       (card as HTMLDivElement).style.transition = 'all 0.3s ease';
@@ -998,7 +1031,12 @@ export async function handleApproveOrder(orderId: string): Promise<void> {
     }
     
   } catch (err) {
-    console.error('❌ Error in handler:', err);
+    ErrorHandler.handleError('❌ Error in handler', {
+      category: ErrorCategory.UNKNOWN,
+      severity: ErrorSeverity.ERROR,
+      details: err,
+      showToUser: false
+    });
     alert('❌ Error: ' + ((err as any)?.message || String(err)));
     
     // Restaurar botões
@@ -1113,7 +1151,12 @@ export async function handleRejectOrder(orderId: string): Promise<void> {
     }
     
   } catch (err) {
-    console.error('❌ Handler error:', err);
+    ErrorHandler.handleError('❌ Handler error', {
+      category: ErrorCategory.UNKNOWN,
+      severity: ErrorSeverity.ERROR,
+      details: err,
+      showToUser: false
+    });
     alert('❌ Error: ' + ((err as any)?.message || String(err)));
     
     // Restaurar botões

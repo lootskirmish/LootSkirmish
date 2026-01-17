@@ -2608,3 +2608,218 @@ export function checkApiKeysRotation(keys: ApiKeyInfo[]): {
   
   return { needsRotation, warnings };
 }
+
+// ============================================================
+// ADVANCED AUDIT LOGGING FOR SECURITY EVENTS
+// ============================================================
+
+export interface AuditLogEntry {
+  user_id: string;
+  action: string;
+  details: string;
+  ip_address: string;
+  user_agent: string;
+  created_at: string;
+  severity?: 'info' | 'warning' | 'critical';
+  category?: 'login' | 'password' | '2fa' | 'transaction' | 'account' | 'settings';
+}
+
+export enum AuditAction {
+  // Autenticação
+  LOGIN_SUCCESS = 'login_success',
+  LOGIN_FAILED = 'login_failed',
+  LOGIN_OTP_SENT = 'login_otp_sent',
+  LOGIN_OTP_USED = 'login_otp_used',
+  LOGOUT = 'logout',
+  
+  // Senha
+  PASSWORD_CHANGED = 'password_changed',
+  PASSWORD_RESET_REQUESTED = 'password_reset_requested',
+  PASSWORD_RESET_COMPLETED = 'password_reset_completed',
+  PASSWORD_WEAK_ATTEMPT = 'password_weak_attempt',
+  
+  // 2FA
+  TWO_FACTOR_ENABLED = 'two_factor_enabled',
+  TWO_FACTOR_DISABLED = 'two_factor_disabled',
+  TWO_FACTOR_VERIFIED = 'two_factor_verified',
+  TWO_FACTOR_FAILED = 'two_factor_failed',
+  RECOVERY_CODE_VIEWED = 'recovery_code_viewed',
+  RECOVERY_CODE_USED = 'recovery_code_used',
+  
+  // Dispositivos & Sessões
+  DEVICE_LOGIN = 'device_login',
+  DEVICE_LOGOUT = 'device_logout',
+  SUSPICIOUS_LOGIN_DETECTED = 'suspicious_login_detected',
+  REMOTE_LOGOUT_EXECUTED = 'remote_logout_executed',
+  
+  // Email
+  EMAIL_CHANGED = 'email_changed',
+  EMAIL_VERIFICATION_SENT = 'email_verification_sent',
+  EMAIL_VERIFIED = 'email_verified',
+  SECONDARY_EMAIL_ADDED = 'secondary_email_added',
+  SECONDARY_EMAIL_REMOVED = 'secondary_email_removed',
+  
+  // Transações
+  PURCHASE_COMPLETED = 'purchase_completed',
+  PURCHASE_FAILED = 'purchase_failed',
+  WITHDRAWAL_REQUESTED = 'withdrawal_requested',
+  WITHDRAWAL_COMPLETED = 'withdrawal_completed',
+  
+  // Conformidade
+  DATA_EXPORT_REQUESTED = 'data_export_requested',
+  DATA_EXPORT_COMPLETED = 'data_export_completed',
+  ACCOUNT_DELETION_REQUESTED = 'account_deletion_requested',
+  ACCOUNT_DELETION_COMPLETED = 'account_deletion_completed',
+  GDPR_CONSENT_GIVEN = 'gdpr_consent_given',
+  GDPR_CONSENT_WITHDRAWN = 'gdpr_consent_withdrawn'
+}
+
+/**
+ * Log de eventos de segurança com categorização e severidade
+ */
+export async function logSecurityEvent(
+  supabase: SupabaseClient,
+  userId: string,
+  action: AuditAction,
+  details: Record<string, any>,
+  req?: ApiRequest,
+  options?: { severity?: 'info' | 'warning' | 'critical'; category?: string }
+): Promise<void> {
+  try {
+    const ipAddress = req ? getRequestIp(req) : 'unknown';
+    const userAgent = req?.headers?.['user-agent'] || 'unknown';
+    
+    // Mapear ação para categoria automaticamente
+    let category = options?.category || 'account';
+    if (action.includes('login') || action.includes('logout')) category = 'login';
+    else if (action.includes('password')) category = 'password';
+    else if (action.includes('two_factor') || action.includes('recovery_code')) category = '2fa';
+    else if (action.includes('purchase') || action.includes('withdrawal')) category = 'transaction';
+    
+    // Determinar severidade por padrão
+    let severity = options?.severity || 'info';
+    if (action.includes('suspicious') || action.includes('failed')) severity = 'warning';
+    if (action.includes('account_deletion') || action.includes('suspicious')) severity = 'critical';
+    
+    const { error } = await supabase.from('audit_log').insert({
+      user_id: userId,
+      action,
+      details: JSON.stringify(details ?? {}),
+      ip_address: ipAddress,
+      user_agent: userAgent,
+      severity,
+      category,
+      created_at: new Date().toISOString(),
+    });
+    
+    if (error) {
+      console.error('Failed to log security event:', error.message);
+    }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error('Failed to log security event:', message);
+  }
+}
+
+/**
+ * Verifica tentativas de login suspeito
+ * Retorna true se a tentativa parece suspeita
+ */
+export async function detectSuspiciousLogin(
+  supabase: SupabaseClient,
+  userId: string,
+  ipAddress: string,
+  userAgent: string
+): Promise<{ isSuspicious: boolean; reason?: string }> {
+  try {
+    // Buscar últimos 5 logins bem-sucedidos
+    const { data: recentLogins } = await supabase
+      .from('audit_log')
+      .select('ip_address, user_agent, created_at')
+      .eq('user_id', userId)
+      .eq('action', AuditAction.LOGIN_SUCCESS)
+      .order('created_at', { ascending: false })
+      .limit(5);
+    
+    if (!recentLogins || recentLogins.length === 0) {
+      // Primeiro login, não é suspeito
+      return { isSuspicious: false };
+    }
+    
+    const lastLogin = recentLogins[0];
+    
+    // Verificar se IP mudou significativamente (máxima distância geográfica possível em tempo)
+    // Detectar user-agent diferente com IP diferente
+    if (
+      lastLogin.ip_address !== ipAddress &&
+      lastLogin.user_agent !== userAgent &&
+      recentLogins.length > 1
+    ) {
+      // Dois indicadores de mudança simultânea = suspeito
+      return {
+        isSuspicious: true,
+        reason: 'New IP and device detected'
+      };
+    }
+    
+    // Verificar velocidade: login de dois IPs muito distantes em tempo curto
+    const timeSinceLastLogin = Date.now() - new Date(lastLogin.created_at).getTime();
+    if (timeSinceLastLogin < 300000 && ipAddress !== lastLogin.ip_address) {
+      // < 5 minutos com IP diferente = suspeito
+      return {
+        isSuspicious: true,
+        reason: 'Impossible travel detected'
+      };
+    }
+    
+    return { isSuspicious: false };
+  } catch (err) {
+    console.warn('Error detecting suspicious login:', err);
+    return { isSuspicious: false };
+  }
+}
+
+/**
+ * Retorna histórico de audit para um usuário
+ */
+export async function getAuditLog(
+  supabase: SupabaseClient,
+  userId: string,
+  options?: { limit?: number; offset?: number; action?: string; daysBack?: number }
+): Promise<AuditLogEntry[]> {
+  try {
+    let query = supabase
+      .from('audit_log')
+      .select('*')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false });
+    
+    // Filtrar por ação se fornecido
+    if (options?.action) {
+      query = query.eq('action', options.action);
+    }
+    
+    // Filtrar por data se fornecido
+    if (options?.daysBack) {
+      const daysAgo = new Date(Date.now() - options.daysBack * 24 * 60 * 60 * 1000).toISOString();
+      query = query.gte('created_at', daysAgo);
+    }
+    
+    // Paginação
+    const limit = options?.limit || 50;
+    const offset = options?.offset || 0;
+    query = query.range(offset, offset + limit - 1);
+    
+    const { data, error } = await query;
+    
+    if (error) {
+      console.error('Error fetching audit log:', error.message);
+      return [];
+    }
+    
+    return data || [];
+  } catch (err) {
+    console.error('Error fetching audit log:', err);
+    return [];
+  }
+}

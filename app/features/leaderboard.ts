@@ -3,6 +3,7 @@
 // ============================================================
 
 import { supabase } from './auth';
+import { ErrorHandler, ErrorCategory, ErrorSeverity } from '../shared/error-handler';
 
 // ============================================================
 // TYPE DEFINITIONS
@@ -373,7 +374,12 @@ export async function renderLeaderboard(): Promise<void> {
     await updateUserPosition(typeConfig, myToken);
     
   } catch (err) {
-    console.error('Error rendering leaderboard:', err);
+    ErrorHandler.handleError('Error rendering leaderboard', {
+      category: ErrorCategory.UNKNOWN,
+      severity: ErrorSeverity.ERROR,
+      details: err,
+      showToUser: false
+    });
     listContainer.innerHTML = `<p style="color: #ef4444;">Unexpected error</p>`;
   }
 }
@@ -691,7 +697,7 @@ async function updateUserPosition(typeConfig: LeaderboardType, token: number): P
     }
     
   } catch (err) {
-    console.error('Error getting user position:', err);
+    ErrorHandler.handleDatabaseError('Error getting user position', err);
   }
 }
 
@@ -783,7 +789,12 @@ async function renderGeneralLeaderboard(token: number): Promise<void> {
     }
     
   } catch (err) {
-    console.error('Error rendering general leaderboard:', err);
+    ErrorHandler.handleError('Error rendering general leaderboard', {
+      category: ErrorCategory.UNKNOWN,
+      severity: ErrorSeverity.ERROR,
+      details: err,
+      showToUser: false
+    });
     if (listContainer) listContainer.innerHTML = `<p style="color: #ef4444;">Unexpected error</p>`;
   }
 }

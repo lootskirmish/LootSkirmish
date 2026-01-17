@@ -7,6 +7,8 @@ import { addCsrfHeader } from '../core/session';
 import { getActiveUser } from '../core/session';
 import { playSound, setMasterVolume, setSoundEnabled, setSoundPreference, setAllSoundPreferences } from '../shared/sfx';
 import { showToast, showAlert } from '../shared/effects';
+import { ErrorHandler, ErrorCategory, ErrorSeverity } from '../shared/error-handler';
+import { validateUsername, validatePassword } from '../shared/validation';
 
 // ============================================================
 // TYPE DEFINITIONS
@@ -29,8 +31,232 @@ declare global {
 // ============================================================
 
 /**
- * Carrega os dados de configurações do usuário
+ * Formata email para exibir mascarado (a******r@gmail.com)
  */
+function maskEmail(email: string): string {
+  if (!email || !email.includes('@')) return email;
+  const [local, domain] = email.split('@');
+  if (local.length <= 2) return `${local[0]}***@${domain}`;
+  return `${local[0]}${'*'.repeat(Math.max(3, local.length - 2))}${local[local.length - 1]}@${domain}`;
+}
+
+/**
+ * Verifica se 2FA está habilitado para o usuário
+ */
+async function check2FAStatus(): Promise<boolean> {
+  try {
+    const user = getActiveUser({ sync: true, allowStored: true });
+    if (!user?.id) return false;
+    
+    const { data: profile, error } = await supabase
+      .from('player_profiles')
+      .select('two_factor_enabled')
+      .eq('user_id', user.id)
+      .single();
+    
+    if (error || !profile) return false;
+    return profile.two_factor_enabled === true;
+  } catch (err) {
+    ErrorHandler.handleDatabaseError('Error checking 2FA status', err);
+    return false;
+  }
+}
+
+/**
+ * Atualiza UI de 2FA
+ */
+async function updateTwoFactorUI(): Promise<void> {
+  try {
+    const is2FAEnabled = await check2FAStatus();
+    const twoFactorToggle = document.getElementById('twofa-toggle') as HTMLInputElement | null;
+    const recoveryCodesBtn = document.getElementById('view-recovery-codes-btn') as HTMLButtonElement | null;
+    
+    if (twoFactorToggle) {
+      twoFactorToggle.checked = is2FAEnabled;
+    }
+    
+    if (recoveryCodesBtn) {
+      recoveryCodesBtn.style.display = is2FAEnabled ? 'inline-flex' : 'none';
+    }
+  } catch (err) {
+    ErrorHandler.handleError('Error updating 2FA UI', {
+      category: ErrorCategory.UNKNOWN,
+      severity: ErrorSeverity.ERROR,
+      details: err,
+      showToUser: false
+    });
+  }
+}
+
+/**
+ * Habilita/desabilita 2FA
+ */
+export async function toggle2FA(): Promise<void> {
+  try {
+    const is2FAEnabled = await check2FAStatus();
+    
+    if (is2FAEnabled) {
+      // Desabilitar 2FA
+      const code = prompt('🔏 Enter your 2FA code to disable 2FA:');
+      if (!code) return;
+      
+      const user = getActiveUser({ sync: true, allowStored: true });
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      if (!user?.id || !session?.access_token) {
+        showAlert('error', 'Not authenticated', 'Please log in again.');
+        return;
+      }
+      
+      const response = await fetch('/api/_profile', {
+        method: 'POST',
+        headers: await addCsrfHeader({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({
+          action: 'disable2FA',
+          userId: user.id,
+          authToken: session.access_token,
+          code
+        })
+      });
+      
+      const result = await response.json();
+      
+      if (!response.ok) {
+        showAlert('error', '❌ Failed', result.error || 'Could not disable 2FA');
+        return;
+      }
+      
+      showToast('success', '✅ 2FA Disabled', '2FA has been disabled on your account.');
+      await updateTwoFactorUI();
+    } else {
+      // Habilitar 2FA
+      showAlert('info', '🔐 Setup 2FA', 'Redirecting to 2FA setup...');
+      
+      // Abrir modal/página de setup (pode ser um modal novo ou redirecionar)
+      // Por enquanto, vamos usar um prompt simplificado
+      const user = getActiveUser({ sync: true, allowStored: true });
+      if (!user?.id) {
+        showAlert('error', 'Not authenticated', 'Please log in again.');
+        return;
+      }
+      
+      // Chamar a função de setup do auth
+      if ((window as any).requestSetup2FA) {
+        await (window as any).requestSetup2FA(user.id);
+        setTimeout(() => updateTwoFactorUI(), 1000);
+      }
+    }
+  } catch (err) {
+    ErrorHandler.handleError('Error toggling 2FA', {
+      category: ErrorCategory.AUTH,
+      severity: ErrorSeverity.ERROR,
+      details: err,
+      showToUser: false
+    });
+    showAlert('error', '❌ Error', 'Failed to toggle 2FA');
+  }
+}
+
+/**
+ * Visualizar Recovery Codes (só com 2FA ativado)
+ */
+export async function viewRecoveryCodes(): Promise<void> {
+  try {
+    const code = prompt('🔏 Enter your 2FA code to view recovery codes:');
+    if (!code) return;
+    
+    const user = getActiveUser({ sync: true, allowStored: true });
+    const { data: { session } } = await supabase.auth.getSession();
+    
+    if (!user?.id || !session?.access_token) {
+      showAlert('error', 'Not authenticated', 'Please log in again.');
+      return;
+    }
+    
+    const response = await fetch('/api/_profile', {
+      method: 'POST',
+      headers: await addCsrfHeader({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({
+        action: 'viewRecoveryCodes',
+        userId: user.id,
+        authToken: session.access_token,
+        code
+      })
+    });
+    
+    const result = await response.json();
+    
+    if (!response.ok) {
+      showAlert('error', '❌ Invalid Code', result.error || 'Could not retrieve recovery codes');
+      return;
+    }
+    
+    const codesText = result.recoveryCodes?.join('\n') || 'No codes found';
+    showAlert('success', '🗐️ Recovery Codes', `Here are your recovery codes:\n\n${codesText}\n\nKeep these safe!`, { duration: 0 } as any);
+  } catch (err) {
+    ErrorHandler.handleError('Error viewing recovery codes', {
+      category: ErrorCategory.AUTH,
+      severity: ErrorSeverity.ERROR,
+      details: err,
+      showToUser: false
+    });
+    showAlert('error', '❌ Error', 'Failed to retrieve recovery codes');
+  }
+}
+
+/**
+ * Visualizar email completo (só com 2FA ativado)
+ */
+export async function viewFullEmail(): Promise<void> {
+  try {
+    const is2FAEnabled = await check2FAStatus();
+    
+    if (!is2FAEnabled) {
+      showAlert('warning', '🔐 2FA Required', 'Please enable 2FA first to view your full email.');
+      return;
+    }
+    
+    const code = prompt('🔏 Enter your 2FA code to view your full email:');
+    if (!code) return;
+    
+    const user = getActiveUser({ sync: true, allowStored: true });
+    const { data: { session } } = await supabase.auth.getSession();
+    
+    if (!user?.id || !session?.access_token) {
+      showAlert('error', 'Not authenticated', 'Please log in again.');
+      return;
+    }
+    
+    const response = await fetch('/api/_profile', {
+      method: 'POST',
+      headers: await addCsrfHeader({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({
+        action: 'viewFullEmail',
+        userId: user.id,
+        authToken: session.access_token,
+        code
+      })
+    });
+    
+    const result = await response.json();
+    
+    if (!response.ok) {
+      showAlert('error', '❌ Invalid Code', result.error || 'Could not retrieve email');
+      return;
+    }
+    
+    showAlert('info', '📧 Your Email', `${result.email || 'Unknown'}`);  } catch (err) {
+    ErrorHandler.handleError('Error viewing email', {
+      category: ErrorCategory.AUTH,
+      severity: ErrorSeverity.ERROR,
+      details: err,
+      showToUser: false
+    });
+    showAlert('error', '❌ Error', 'Failed to retrieve email');
+  }
+}
+
+
 export async function loadSettingsData(): Promise<void> {
   try {
     const user = getActiveUser({ sync: true, allowStored: true }) || window.currentUser;
@@ -43,15 +269,18 @@ export async function loadSettingsData(): Promise<void> {
       .single();
     
     if (error || !stats) {
-      console.error('Error loading settings:', error);
+      ErrorHandler.handleDatabaseError('Error loading settings', error);
       return;
     }
     
-    // Preencher dados
+    // Preencher dados - Email mascarado
     const emailInput = document.getElementById('settings-email') as HTMLInputElement | null;
     const usernameInput = document.getElementById('settings-username') as HTMLInputElement | null;
     
-    if (emailInput) emailInput.value = user.email || '';
+    if (emailInput) {
+      emailInput.value = maskEmail(user.email || '');
+      emailInput.title = 'Email is hidden for security. Enable 2FA to view full email.';
+    }
     if (usernameInput) usernameInput.value = stats.username || '';
     usernameChangeCount = Number(stats.username_change_count) || 0;
     updateUsernameUI();
@@ -65,8 +294,16 @@ export async function loadSettingsData(): Promise<void> {
     bindSettingsUIOnce();
     applySavedPreferencesToUI();
     
+    // Atualizar UI de 2FA
+    await updateTwoFactorUI();
+    
   } catch (err) {
-    console.error('Error loading settings:', err);
+    ErrorHandler.handleError('Error loading settings', {
+      category: ErrorCategory.DATABASE,
+      severity: ErrorSeverity.ERROR,
+      details: err,
+      showToUser: false
+    });
   }
 }
 
@@ -137,14 +374,22 @@ function bindSettingsUIOnce(): void {
           const session = await supabase.auth.getSession();
           
           if (!user?.id) {
-            console.error('No user found for public profile update');
+            ErrorHandler.handleError('No user found for public profile update', {
+              category: ErrorCategory.AUTH,
+              severity: ErrorSeverity.WARNING,
+              showToUser: false
+            });
             this.checked = previousState;
             showToast('error', 'Error: User not found');
             return;
           }
 
           if (!session?.data?.session?.access_token) {
-            console.error('No valid session for public profile update');
+            ErrorHandler.handleError('No valid session for public profile update', {
+              category: ErrorCategory.AUTH,
+              severity: ErrorSeverity.WARNING,
+              showToUser: false
+            });
             this.checked = previousState;
             showToast('error', 'Error: Session expired. Please refresh.');
             return;
@@ -169,7 +414,12 @@ function bindSettingsUIOnce(): void {
 
           if (!response.ok) {
             const errorData = await response.json().catch(() => ({}));
-            console.error('Failed to update public profile setting:', response.status, errorData);
+            ErrorHandler.handleError('Failed to update public profile setting', {
+              category: ErrorCategory.DATABASE,
+              severity: ErrorSeverity.ERROR,
+              details: { status: response.status, errorData },
+              showToUser: false
+            });
             
             // Revert all changes
             this.checked = previousState;
@@ -217,7 +467,12 @@ function bindSettingsUIOnce(): void {
           playSound('switch', { volume: 0.3 });
 
         } catch (err) {
-          console.error('Error updating public profile:', err);
+          ErrorHandler.handleError('Error updating public profile', {
+            category: ErrorCategory.DATABASE,
+            severity: ErrorSeverity.ERROR,
+            details: err,
+            showToUser: false
+          });
           
           // Revert all changes
           this.checked = previousState;
@@ -303,7 +558,7 @@ function updateUsernameUI(): void {
   }
 
   if (helper) {
-    helper.textContent = '3-16 chars • letters/numbers/._- • case-insensitive unique';
+    helper.textContent = '3-16 chars • letters and numbers only';
   }
 
   if (button) {
@@ -468,15 +723,11 @@ export async function enableUsernameEdit(): Promise<void> {
   } else {
     // Salvar
     const newUsername = input.value.trim();
-    const pattern = /^[a-zA-Z0-9][a-zA-Z0-9._-]{2,15}$/;
-
-    if (!newUsername) {
-      showAlert('error', 'Invalid username', 'Username cannot be empty.');
-      return;
-    }
-
-    if (!pattern.test(newUsername)) {
-      showAlert('error', 'Invalid username', 'Use 3-16 chars: letters, numbers, dot, underscore or hyphen.');
+    
+    // Validar usando sistema robusto
+    const usernameValidation = validateUsername(newUsername);
+    if (!usernameValidation.isValid) {
+      showAlert('error', 'Invalid username', usernameValidation.error || 'Username validation failed.');
       return;
     }
 
@@ -551,7 +802,12 @@ export async function enableUsernameEdit(): Promise<void> {
       updateUsernameUI();
 
     } catch (err) {
-      console.error('Username change error:', err);
+      ErrorHandler.handleError('Username change error', {
+        category: ErrorCategory.NETWORK,
+        severity: ErrorSeverity.ERROR,
+        details: err,
+        showToUser: false
+      });
       showAlert('error', 'Connection error', 'Could not reach the server. Please try again.');
       if (button) button.disabled = false;
       updateUsernameUI();
@@ -584,32 +840,385 @@ export function cancelUsernameEdit(): void {
 // ============================================================
 
 /**
- * Muda a senha do usuário
+ * Muda a senha do usuário (com verificação 2FA se ativado)
  */
 export async function changePassword(): Promise<void> {
-  const newPassword = prompt('Enter your new password (minimum 6 characters):');
-  
-  if (!newPassword) return;
-  
-  if (newPassword.length < 6) {
-    alert('❌ The password must be at least 6 characters long!');
-    return;
-  }
-  
   try {
+    const is2FAEnabled = await check2FAStatus();
+    let twoFactorCode = '';
+    
+    // Se 2FA está ativado, pedir código antes
+    if (is2FAEnabled) {
+      twoFactorCode = prompt('🔏 Enter your 2FA code to change password:') || '';
+      if (!twoFactorCode) {
+        showAlert('warning', 'Cancelled', 'Password change cancelled.');
+        return;
+      }
+    }
+    
+    const newPassword = prompt('🔐 Enter your new password (minimum 6 characters):');
+    
+    if (!newPassword) return;
+    
+    // Validar usando sistema robusto
+    const passwordValidation = validatePassword(newPassword);
+    if (!passwordValidation.isValid) {
+      showAlert('error', 'Weak password', passwordValidation.error || 'Password validation failed!');
+      return;
+    }
+    
+    // Se 2FA está ativado, validar código primeiro
+    if (is2FAEnabled && twoFactorCode) {
+      const user = getActiveUser({ sync: true, allowStored: true });
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      if (!user?.id || !session?.access_token) {
+        showAlert('error', 'Not authenticated', 'Please log in again.');
+        return;
+      }
+      
+      // Validar 2FA code via backend
+      const validateResponse = await fetch('/api/_profile', {
+        method: 'POST',
+        headers: await addCsrfHeader({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({
+          action: 'validate2FA',
+          userId: user.id,
+          authToken: session.access_token,
+          code: twoFactorCode
+        })
+      });
+      
+      if (!validateResponse.ok) {
+        showAlert('error', '❌ Invalid 2FA Code', 'The 2FA code you entered is invalid.');
+        return;
+      }
+    }
+    
     const { error } = await supabase.auth.updateUser({
       password: newPassword
     });
     
     if (error) {
-      alert('❌ Error changing password: ' + error.message);
+      showAlert('error', '❌ Error', 'Error changing password: ' + error.message);
       return;
     }
     
-    alert('✅ Password changed successfully!');
+    showAlert('success', '✅ Success', 'Password changed successfully!');
     
   } catch (err) {
-    alert('❌ Unexpected error: ' + ((err as any)?.message || String(err)));
+    ErrorHandler.handleError('Error changing password', {
+      category: ErrorCategory.AUTH,
+      severity: ErrorSeverity.ERROR,
+      details: err,
+      showToUser: false
+    });
+    showAlert('error', '❌ Error', 'Unexpected error: ' + ((err as any)?.message || String(err)));
+  }
+}
+
+// ============================================================
+// ACCOUNT RECOVERY - SECONDARY EMAIL
+// ============================================================
+
+/**
+ * Gerencia email secundário para recuperação de conta
+ */
+export async function manageSecondaryEmail(): Promise<void> {
+  try {
+    const user = getActiveUser({ sync: true, allowStored: true });
+    if (!user?.id) {
+      showAlert('error', 'Not authenticated', 'Please log in again.');
+      return;
+    }
+    
+    const { data: profile } = await supabase
+      .from('player_profiles')
+      .select('secondary_email')
+      .eq('user_id', user.id)
+      .single();
+    
+    const currentSecondaryEmail = profile?.secondary_email;
+    
+    // Modal para adicionar/alterar email secundário
+    const newEmail = prompt(
+      `Current secondary email: ${currentSecondaryEmail || 'None'}\n\nEnter new secondary email (or leave empty to remove):`,
+      currentSecondaryEmail || ''
+    );
+    
+    if (newEmail === null) return;
+    
+    // Validação simples de email
+    if (newEmail && !newEmail.includes('@')) {
+      showAlert('error', 'Invalid email', 'Please enter a valid email address');
+      return;
+    }
+    
+    // Se 2FA está ativado, pedir código
+    const { data: profileData } = await supabase
+      .from('player_profiles')
+      .select('two_factor_enabled')
+      .eq('user_id', user.id)
+      .single();
+    
+    let tfaCode: string | undefined;
+    if (profileData?.two_factor_enabled) {
+      tfaCode = prompt('🔐 2FA is enabled. Enter your 2FA code to change recovery email:');
+      if (!tfaCode) return;
+    }
+    
+    // Se está alterando, pedir confirmação digitando o email atual
+    if (newEmail && currentSecondaryEmail && newEmail !== currentSecondaryEmail) {
+      const confirmEmail = prompt(
+        `To change your recovery email, please confirm your current email: ${maskEmail(currentSecondaryEmail)}`
+      );
+      if (confirmEmail !== currentSecondaryEmail) {
+        showAlert('error', 'Confirmation failed', 'Email confirmation did not match');
+        return;
+      }
+    }
+    
+    const { data: { session } } = await supabase.auth.getSession();
+    
+    const response = await fetch('/api/_profile', {
+      method: 'POST',
+      headers: await addCsrfHeader({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({
+        action: 'updateSecondaryEmail',
+        userId: user.id,
+        authToken: session?.access_token,
+        secondaryEmail: newEmail || null,
+        tfaCode
+      })
+    });
+    
+    const result = await response.json();
+    
+    if (!response.ok) {
+      showAlert('error', '❌ Failed', result.error || 'Could not update recovery email');
+      return;
+    }
+    
+    showToast('success', '✅ Recovery Email Updated', newEmail ? `${newEmail} set as recovery email` : 'Recovery email removed');
+  } catch (err) {
+    ErrorHandler.handleError('Error managing secondary email', {
+      category: ErrorCategory.AUTH,
+      severity: ErrorSeverity.ERROR,
+      details: err,
+      showToUser: false
+    });
+  }
+}
+
+// ============================================================
+// SECURITY & SESSIONS MANAGEMENT
+// ============================================================
+
+/**
+ * Mostra painel de dispositivos ativos
+ */
+export async function manageActiveSessions(): Promise<void> {
+  try {
+    const { getActiveDevices, logoutDevice, logoutAllOtherDevices } = await import('../core/security-manager');
+    
+    const devices = await getActiveDevices();
+    
+    if (!devices || devices.length === 0) {
+      showAlert('info', 'No Active Sessions', 'No active sessions found on this account.');
+      return;
+    }
+    
+    // Criar tabela de dispositivos
+    let devicesHTML = `
+      <div class="security-panel">
+        <h3>📱 Active Sessions</h3>
+        <table class="devices-table">
+          <thead>
+            <tr>
+              <th>Device</th>
+              <th>Browser</th>
+              <th>IP Address</th>
+              <th>Last Activity</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody>
+    `;
+    
+    for (const device of devices) {
+      const lastActivity = new Date(device.last_activity).toLocaleDateString();
+      const deviceLabel = device.is_current ? '📍 This Device' : device.device_name;
+      
+      devicesHTML += `
+        <tr>
+          <td>${deviceLabel}</td>
+          <td>${device.browser}</td>
+          <td>${device.ip_address}</td>
+          <td>${lastActivity}</td>
+          <td>
+            ${!device.is_current ? `<button class="btn-small logout-device" data-device-id="${device.id}">Logout</button>` : 'Current'}
+          </td>
+        </tr>
+      `;
+    }
+    
+    devicesHTML += `
+          </tbody>
+        </table>
+        <button class="btn-danger" id="logout-all-other-devices">Logout All Other Devices</button>
+      </div>
+    `;
+    
+    showAlert('info', 'Active Sessions', devicesHTML);
+    
+    // Adicionar event listeners
+    document.querySelectorAll('.logout-device').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        const deviceId = (e.target as HTMLElement).getAttribute('data-device-id');
+        if (deviceId) {
+          await logoutDevice(deviceId);
+          // Recarregar sessões
+          setTimeout(() => manageActiveSessions(), 500);
+        }
+      });
+    });
+    
+    const logoutAllBtn = document.getElementById('logout-all-other-devices');
+    if (logoutAllBtn) {
+      logoutAllBtn.addEventListener('click', async () => {
+        if (confirm('Are you sure? This will logout all other devices.')) {
+          await logoutAllOtherDevices();
+        }
+      });
+    }
+  } catch (err) {
+    ErrorHandler.handleError('Error managing sessions', {
+      category: ErrorCategory.DATABASE,
+      severity: ErrorSeverity.ERROR,
+      details: err,
+      showToUser: false
+    });
+  }
+}
+
+/**
+ * Mostra histórico de tentativas de login
+ */
+export async function viewLoginAttempts(): Promise<void> {
+  try {
+    const { getLoginAttempts } = await import('../core/security-manager');
+    
+    const attempts = await getLoginAttempts(30);
+    
+    if (!attempts || attempts.length === 0) {
+      showAlert('info', 'No Login Attempts', 'No login attempts in the last 30 days.');
+      return;
+    }
+    
+    let html = `
+      <div class="security-panel">
+        <h3>🔐 Recent Login Attempts (Last 30 Days)</h3>
+        <table class="attempts-table" style="max-height: 400px; overflow-y: auto;">
+          <thead>
+            <tr>
+              <th>Date & Time</th>
+              <th>Status</th>
+              <th>IP Address</th>
+              <th>Browser</th>
+            </tr>
+          </thead>
+          <tbody>
+    `;
+    
+    for (const attempt of attempts) {
+      const date = new Date(attempt.created_at).toLocaleString();
+      const status = attempt.success ? '✅ Success' : '❌ Failed';
+      const browserInfo = attempt.user_agent.substring(0, 50) + '...';
+      
+      html += `
+        <tr class="${attempt.success ? 'success-row' : 'failed-row'}">
+          <td>${date}</td>
+          <td>${status}</td>
+          <td>${attempt.ip_address}</td>
+          <td title="${attempt.user_agent}">${browserInfo}</td>
+        </tr>
+      `;
+    }
+    
+    html += `
+          </tbody>
+        </table>
+      </div>
+    `;
+    
+    showAlert('info', 'Login Attempts', html);
+  } catch (err) {
+    ErrorHandler.handleError('Error viewing login attempts', {
+      category: ErrorCategory.DATABASE,
+      severity: ErrorSeverity.ERROR,
+      details: err,
+      showToUser: false
+    });
+  }
+}
+
+// ============================================================
+// COMPLIANCE & DATA MANAGEMENT (LGPD/GDPR)
+// ============================================================
+
+/**
+ * Abre painel de conformidade e gerenciamento de dados
+ */
+export async function openCompliancePanel(): Promise<void> {
+  const complianceHTML = `
+    <div class="compliance-panel">
+      <h3>🛡️ Privacy & Compliance</h3>
+      <div class="compliance-options">
+        <button class="compliance-btn" id="export-data-btn">
+          📥 Download My Data
+          <small>LGPD/GDPR Right to Data Portability</small>
+        </button>
+        
+        <button class="compliance-btn danger" id="delete-account-btn">
+          🗑️ Delete Account
+          <small>Permanently delete all data (non-recoverable)</small>
+        </button>
+        
+        <button class="compliance-btn" id="reset-cookies-btn">
+          🍪 Cookie Settings
+          <small>Manage cookie preferences</small>
+        </button>
+      </div>
+    </div>
+  `;
+  
+  showAlert('info', 'Data & Privacy', complianceHTML);
+  
+  // Event listeners
+  const exportBtn = document.getElementById('export-data-btn');
+  const deleteBtn = document.getElementById('delete-account-btn');
+  const cookiesBtn = document.getElementById('reset-cookies-btn');
+  
+  if (exportBtn) {
+    exportBtn.addEventListener('click', async () => {
+      const { downloadUserData } = await import('../core/compliance-manager');
+      await downloadUserData();
+    });
+  }
+  
+  if (deleteBtn) {
+    deleteBtn.addEventListener('click', async () => {
+      const { initiateAccountDeletion } = await import('../core/compliance-manager');
+      await initiateAccountDeletion();
+    });
+  }
+  
+  if (cookiesBtn) {
+    cookiesBtn.addEventListener('click', async () => {
+      const { resetCookieConsent, showCookieConsentBanner } = await import('../core/compliance-manager');
+      resetCookieConsent();
+      setTimeout(() => showCookieConsentBanner(), 500);
+    });
   }
 }
 
@@ -634,7 +1243,14 @@ export function goToSettings(): void {
 // ============================================================
 
 (window as any).loadSettingsData = loadSettingsData;
-  (window as any).enableUsernameEdit = enableUsernameEdit;
-  (window as any).cancelUsernameEdit = cancelUsernameEdit;
-  (window as any).changePassword = changePassword;
-  (window as any).goToSettings = goToSettings;
+(window as any).enableUsernameEdit = enableUsernameEdit;
+(window as any).cancelUsernameEdit = cancelUsernameEdit;
+(window as any).changePassword = changePassword;
+(window as any).toggle2FA = toggle2FA;
+(window as any).viewRecoveryCodes = viewRecoveryCodes;
+(window as any).viewFullEmail = viewFullEmail;
+(window as any).manageSecondaryEmail = manageSecondaryEmail;
+(window as any).manageActiveSessions = manageActiveSessions;
+(window as any).viewLoginAttempts = viewLoginAttempts;
+(window as any).openCompliancePanel = openCompliancePanel;
+(window as any).goToSettings = goToSettings;

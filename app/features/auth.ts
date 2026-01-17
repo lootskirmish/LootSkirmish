@@ -6,6 +6,10 @@ import { createClient, Session, User, AuthError } from '@supabase/supabase-js';
 import { showToast, showAlert } from '../shared/effects';
 import { store, authActions, dataActions } from '../core/persistence';
 import { clearActiveUser, setActiveUser, fetchCsrfToken, clearCsrfTokenOnServer, getActiveUser, isCsrfTokenValid } from '../core/session';
+import { Validation } from '../shared/validation';
+import { ErrorHandler, ErrorCategory, ErrorSeverity, tryCatch } from '../shared/error-handler';
+import { initPasswordStrengthIndicators } from '../shared/password-strength-ui';
+import { stateManager } from '../core/state-manager';
 
 // ============ TYPE DEFINITIONS ============
 interface PendingReferral {
@@ -89,7 +93,12 @@ async function ensureCsrfForSession(session: Session | null): Promise<void> {
   try {
     await fetchCsrfToken(session.user.id, session.access_token);
   } catch (err) {
-    console.error('[CSRF] Failed to refresh token for session:', err);
+    ErrorHandler.handleError('Failed to refresh CSRF token', {
+      category: ErrorCategory.AUTH,
+      severity: ErrorSeverity.WARNING,
+      details: err,
+      showToUser: false
+    });
   }
 }
 
@@ -168,30 +177,72 @@ export async function handlePasswordReset(): Promise<void> {
   const emailEl = document.getElementById('login-email') as HTMLInputElement | null;
   const errorEl = document.getElementById('login-error');
   
-  if (!emailEl?.value) {
-    showAlert('warning', 'Enter Email ⚠️', 'Please enter your email address to reset your password.');
+  if (!emailEl?.value?.trim()) {
+    ErrorHandler.handleValidationError(
+      'Empty email in password reset',
+      {},
+      'Please enter your email address to reset your password.'
+    );
     return;
   }
 
-  const email = emailEl.value;
+  const email = emailEl.value.trim();
+  
+  // ✅ Validar formato de email
+  if (!Validation.email.isValid(email)) {
+    ErrorHandler.handleValidationError(
+      'Invalid email format in password reset',
+      { email },
+      'Please enter a valid email address.'
+    );
+    return;
+  }
+  
   const captchaToken = CAPTCHA_REQUIRED ? loginCaptchaToken : null;
   
   if (CAPTCHA_REQUIRED && !captchaToken) {
     if (errorEl) errorEl.textContent = 'Complete the captcha before sending reset link.';
-    showAlert('warning', 'Captcha Required', 'Please complete the captcha to continue.');
+    ErrorHandler.handleValidationError(
+      'Missing captcha in password reset',
+      {},
+      'Please complete the captcha to continue.'
+    );
     return;
   }
 
   try {
+    // URLs de redirect permitidas - hardcoded para evitar phishing
+    const allowedRedirectDomains = [
+      'https://lootskirmish.vercel.app',
+      'https://www.lootskirmish.com',
+      'http://localhost:5173' // desenvolvimento
+    ];
+    const currentOrigin = window.location.origin;
+    
+    // Validar se o domínio atual está na lista permitida
+    if (!allowedRedirectDomains.includes(currentOrigin)) {
+      ErrorHandler.handleError('Potential phishing attack detected', {
+        category: ErrorCategory.PERMISSION,
+        severity: ErrorSeverity.CRITICAL,
+        details: { currentOrigin },
+        userMessage: 'Invalid redirect domain. Contact support.',
+        showToUser: true
+      });
+      return;
+    }
+    
     const result = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${window.location.origin}/auth?reset=true`,
+      redirectTo: `${currentOrigin}/auth?reset=true`,
       captchaToken: captchaToken || undefined
     });
     const { error, data } = result;
     
     if (error) {
-      console.error('🔑 Reset error:', error);
-      showAlert('error', 'Reset Failed ❌', error.message || 'Unable to send reset email.');
+      ErrorHandler.handleAuthError(
+        'Password reset failed',
+        { error: error.message, email },
+        error.message || 'Unable to send reset email.'
+      );
       resetCaptcha('login');
       return;
     }
@@ -203,21 +254,45 @@ export async function handlePasswordReset(): Promise<void> {
     }
     resetCaptcha('login');
   } catch (err) {
-    console.error('Password reset error:', err);
-    showAlert('error', 'Error ❌', 'Something went wrong. Please try again.');
+    ErrorHandler.handleError('Password reset unexpected error', {
+      category: ErrorCategory.AUTH,
+      severity: ErrorSeverity.ERROR,
+      details: err,
+      userMessage: 'Something went wrong. Please try again.',
+      showToUser: true
+    });
   }
 }
 
 export async function updatePasswordAfterReset(newPassword: string): Promise<boolean> {
-  if (!newPassword || newPassword.length < 6) {
-    showAlert('error', 'Weak Password ❌', 'Password must be at least 6 characters.');
+  if (!newPassword?.trim()) {
+    ErrorHandler.handleValidationError(
+      'Empty password in password update',
+      {},
+      'Please enter a new password.'
+    );
+    return false;
+  }
+  
+  // ✅ Validar força da senha
+  const strength = Validation.password.checkStrength(newPassword);
+  if (strength.score < 2) {
+    ErrorHandler.handleValidationError(
+      'Weak password in password update',
+      { score: strength.score, feedback: strength.feedback },
+      `Password is too weak. ${strength.feedback[0] || 'Use a stronger password.'}`
+    );
     return false;
   }
   
   const { error } = await supabase.auth.updateUser({ password: newPassword });
   
   if (error) {
-    showAlert('error', 'Update Failed ❌', error.message || 'Unable to update password.');
+    ErrorHandler.handleAuthError(
+      'Password update failed',
+      { error: error.message },
+      error.message || 'Unable to update password.'
+    );
     return false;
   }
   
@@ -238,26 +313,40 @@ export function handleUpdatePassword(): void {
   
   if (!newPasswordEl || !confirmPasswordEl || !errorEl) return;
   
-  const newPassword = (newPasswordEl as HTMLInputElement).value;
-  const confirmPassword = (confirmPasswordEl as HTMLInputElement).value;
+  const newPassword = (newPasswordEl as HTMLInputElement).value.trim();
+  const confirmPassword = (confirmPasswordEl as HTMLInputElement).value.trim();
   
   errorEl.textContent = '';
   
   if (!newPassword || !confirmPassword) {
     errorEl.textContent = 'Please fill in both fields';
-    showAlert('warning', 'Missing Fields ⚠️', 'Enter your new password twice.');
+    ErrorHandler.handleValidationError(
+      'Missing password fields',
+      {},
+      'Enter your new password twice.'
+    );
     return;
   }
   
   if (newPassword !== confirmPassword) {
     errorEl.textContent = 'Passwords do not match';
-    showAlert('warning', 'Passwords Mismatch ⚠️', 'Make sure both passwords are the same.');
+    ErrorHandler.handleValidationError(
+      'Passwords mismatch',
+      {},
+      'Make sure both passwords are the same.'
+    );
     return;
   }
   
-  if (newPassword.length < 6) {
-    errorEl.textContent = 'Password must be at least 6 characters';
-    showAlert('warning', 'Weak Password ⚠️', 'Choose a stronger password (6+ characters).');
+  // ✅ Validar força da senha
+  const strength = Validation.password.checkStrength(newPassword);
+  if (strength.score < 2) {
+    errorEl.textContent = `Password too weak: ${strength.label}`;
+    ErrorHandler.handleValidationError(
+      'Weak password',
+      { score: strength.score, feedback: strength.feedback },
+      `Password is too weak (${strength.label}). ${strength.feedback[0] || 'Use a stronger password.'}`
+    );
     return;
   }
   
@@ -295,8 +384,77 @@ function detectPasswordReset(): void {
 }
 
 /**
- * Verifica se o email foi confirmado e exibe um aviso visual apropriado
+ * Reenvia email de confirmação com rate limiting (máx 3x a cada 60s)
  */
+export async function resendConfirmationEmail(email: string): Promise<boolean> {
+  try {
+    // Rate limiting - armazenar em sessionStorage
+    const rateLimitKey = `resend_email_${email}`;
+    const lastAttempt = sessionStorage.getItem(rateLimitKey);
+    const now = Date.now();
+    
+    if (lastAttempt) {
+      const timeSinceLastAttempt = now - parseInt(lastAttempt);
+      const retryAfter = 60000; // 60 segundos
+      
+      if (timeSinceLastAttempt < retryAfter) {
+        const secondsLeft = Math.ceil((retryAfter - timeSinceLastAttempt) / 1000);
+        showAlert('warning', '⏱️ Please Wait', `Try again in ${secondsLeft} seconds`);
+        return false;
+      }
+    }
+    
+    // Atualizar timestamp
+    sessionStorage.setItem(rateLimitKey, now.toString());
+    
+    // URLs de redirect permitidas - hardcoded
+    const allowedRedirectDomains = [
+      'https://lootskirmish.vercel.app',
+      'https://www.lootskirmish.com',
+      'http://localhost:5173'
+    ];
+    
+    const currentOrigin = window.location.origin;
+    if (!allowedRedirectDomains.includes(currentOrigin)) {
+      ErrorHandler.handleError('Potential phishing attack detected', {
+        category: ErrorCategory.PERMISSION,
+        severity: ErrorSeverity.CRITICAL,
+        details: { currentOrigin },
+        userMessage: 'Invalid redirect domain.',
+        showToUser: true
+      });
+      return false;
+    }
+    
+    const { error } = await supabase.auth.resend({
+      type: 'signup',
+      email,
+      options: {
+        emailRedirectTo: `${currentOrigin}/auth?confirmed=true`
+      }
+    });
+    
+    if (error) {
+      ErrorHandler.handleAuthError(
+        'Resend email failed',
+        { error: error.message },
+        error.message || 'Unable to resend confirmation email'
+      );
+      return false;
+    }
+    
+    showToast('success', '📧 Sent!', 'Confirmation email sent. Check your inbox (including spam).');
+    return true;
+  } catch (error) {
+    ErrorHandler.handleNetworkError(
+      'Error resending email',
+      { error }
+    );
+    return false;
+  }
+}
+
+
 async function checkEmailVerification(): Promise<void> {
   const { data: { session } } = await supabase.auth.getSession();
   if (!session?.user) return;
@@ -304,11 +462,29 @@ async function checkEmailVerification(): Promise<void> {
   const isEmailConfirmed = session.user.email_confirmed_at !== null && session.user.email_confirmed_at !== undefined;
   
   if (!isEmailConfirmed) {
-    // Email não confirmado - mostrar modal grande e visível
+    // Email não confirmado - mostrar modal grande e visível COM opção de reenvio
+    const userEmail = session.user.email || 'your email';
     showAlert('warning', '📧 Email Not Verified!', 
-      'Please check your email and click the confirmation link to activate your account. You may need to check your spam folder.', 
+      `Please check your email and click the confirmation link to activate your account. You may need to check your spam folder.\n\n📬 Didn't receive it?`,
       { duration: 0 } as any
     );
+    
+    // Adicionar botão de reenvio após um breve delay
+    setTimeout(() => {
+      const alertButtons = document.querySelectorAll('.alert-action-btn');
+      const resendBtn = document.createElement('button');
+      resendBtn.className = 'alert-action-btn resend-btn';
+      resendBtn.textContent = 'Resend Email';
+      resendBtn.style.marginTop = '10px';
+      resendBtn.onclick = async () => {
+        await resendConfirmationEmail(userEmail);
+      };
+      
+      const alertBox = document.querySelector('.alert-box');
+      if (alertBox) {
+        alertBox.appendChild(resendBtn);
+      }
+    }, 500);
   }
 }
 
@@ -465,7 +641,7 @@ export async function handleLogin(): Promise<void> {
   const loginBtn = document.querySelector('#login-form button') as HTMLButtonElement | null;
   if (!emailEl || !passwordEl || !errorEl) return;
 
-  const email = (emailEl as HTMLInputElement).value;
+  const email = (emailEl as HTMLInputElement).value.trim();
   const password = (passwordEl as HTMLInputElement).value;
   const termsAccepted = !!(termsEl as HTMLInputElement)?.checked;
   const captchaToken = CAPTCHA_REQUIRED ? loginCaptchaToken : null;
@@ -473,23 +649,54 @@ export async function handleLogin(): Promise<void> {
   errorEl.textContent = '';
   setButtonLoading(loginBtn as HTMLButtonElement | null, true);
   
+  // ✅ Validação básica
   if (!email || !password) {
     errorEl.textContent = 'Complete all the fields';
-    showAlert('warning', 'Missing Fields! ⚠️', 'Please fill in your email and password.');
+    ErrorHandler.handleValidationError('Missing login fields', null, 'Please fill in your email and password.');
+    setButtonLoading(loginBtn, false);
+    return;
+  }
+
+  // ✅ Validação de formato de email
+  if (!Validation.email.isValid(email)) {
+    errorEl.textContent = 'Invalid email format';
+    ErrorHandler.handleValidationError('Invalid email format', { email }, 'Please enter a valid email address.');
+    setButtonLoading(loginBtn, false);
+    return;
+  }
+
+  // ✅ Validação de senha mínima
+  if (!Validation.password.isValid(password, 6)) {
+    errorEl.textContent = 'Password must be at least 6 characters';
+    ErrorHandler.handleValidationError('Password too short', null, 'Password must be at least 6 characters long.');
     setButtonLoading(loginBtn, false);
     return;
   }
 
   if (!termsAccepted) {
     errorEl.textContent = 'You must agree to the Terms and Privacy Policy';
-    showAlert('warning', 'Terms Required! ⚠️', 'Please accept the Terms of Use and Privacy Policy to continue.');
+    ErrorHandler.handleValidationError('Terms not accepted', null, 'Please accept the Terms of Use and Privacy Policy to continue.');
+    setButtonLoading(loginBtn, false);
+    return;
+  }
+
+  // ✅ Rate limiting
+  const rateLimit = Validation.rateLimit.check('login', 5, 60000); // 5 tentativas por minuto
+  if (!rateLimit.allowed) {
+    const waitTime = Math.ceil(rateLimit.resetIn / 1000);
+    errorEl.textContent = `Too many login attempts. Wait ${waitTime}s`;
+    ErrorHandler.handleValidationError(
+      'Login rate limit exceeded',
+      { remainingAttempts: rateLimit.remainingAttempts },
+      `Too many login attempts. Please wait ${waitTime} seconds before trying again.`
+    );
     setButtonLoading(loginBtn, false);
     return;
   }
 
   if (CAPTCHA_REQUIRED && !captchaToken) {
     errorEl.textContent = 'Complete the captcha before logging in.';
-    showAlert('warning', 'Captcha Required', 'Please complete the captcha to continue.');
+    ErrorHandler.handleValidationError('Captcha required', null, 'Please complete the captcha to continue.');
     setButtonLoading(loginBtn, false);
     return;
   }
@@ -509,18 +716,26 @@ export async function handleLogin(): Promise<void> {
     
     if (isEmailNotVerified) {
       errorEl.textContent = 'Please verify your email before logging in.';
-      showAlert('warning', '⚠️ Email Not Verified', 
-        'You must confirm your email before logging in. Check your email (including spam folder) for the confirmation link.',
-        { duration: 0 } as any
+      ErrorHandler.handleAuthError(
+        'Login failed - email not verified',
+        { error: error.message },
+        'You must confirm your email before logging in. Check your email (including spam folder) for the confirmation link.'
       );
     } else {
       errorEl.textContent = error.message;
-      showAlert('error', 'Login Failed! ❌', error.message || 'Invalid email or password.');
+      ErrorHandler.handleAuthError(
+        'Login failed',
+        { error: error.message, email },
+        error.message || 'Invalid email or password.'
+      );
     }
     resetCaptcha('login');
     setButtonLoading(loginBtn, false);
     return;
   }
+  
+  // ✅ Sucesso - resetar rate limit
+  Validation.rateLimit.reset('login');
   
   // Salvar aceitação dos termos e atualizar email
   if (data?.user) {
@@ -551,7 +766,12 @@ export async function handleLogin(): Promise<void> {
         }
       }
     } catch (err) {
-      console.error('Error saving terms acceptance:', err);
+      ErrorHandler.handleError('Failed to save terms acceptance', {
+        category: ErrorCategory.DATABASE,
+        severity: ErrorSeverity.WARNING,
+        details: err,
+        showToUser: false
+      });
     }
   }
   
@@ -565,7 +785,12 @@ export async function handleLogin(): Promise<void> {
     try {
       await fetchCsrfToken(data.user.id, data.session.access_token);
     } catch (err) {
-      console.error('Failed to fetch CSRF token:', err);
+      ErrorHandler.handleError('Failed to fetch CSRF token after login', {
+        category: ErrorCategory.AUTH,
+        severity: ErrorSeverity.WARNING,
+        details: err,
+        showToUser: false
+      });
       // Não bloqueia o login se falhar, apenas registra o erro
     }
   }
@@ -587,8 +812,8 @@ export async function handleRegister(): Promise<void> {
   const registerBtn = document.querySelector('#register-form button') as HTMLButtonElement | null;
   if (!usernameEl || !emailEl || !passwordEl || !confirmEl || !errorEl) return;
 
-  const username = (usernameEl as HTMLInputElement).value;
-  const email = (emailEl as HTMLInputElement).value;
+  const username = (usernameEl as HTMLInputElement).value.trim();
+  const email = (emailEl as HTMLInputElement).value.trim();
   const password = (passwordEl as HTMLInputElement).value;
   const confirm = (confirmEl as HTMLInputElement).value;
   const referralCode = (referralEl as HTMLInputElement)?.value?.trim() || '';
@@ -597,37 +822,76 @@ export async function handleRegister(): Promise<void> {
   errorEl.textContent = '';
   setButtonLoading(registerBtn as HTMLButtonElement | null, true);
   
+  // ✅ Validação básica
   if (!username || !email || !password || !confirm) {
     errorEl.textContent = 'Complete all the fields';
-    showAlert('warning', 'Missing Fields! ⚠️', 'Please fill in all registration fields.');
+    ErrorHandler.handleValidationError('Missing registration fields', null, 'Please fill in all registration fields.');
     setButtonLoading(registerBtn, false);
     return;
   }
 
   if (!(termsEl as HTMLInputElement)?.checked) {
     errorEl.textContent = 'You must accept the Terms of Use and Privacy Policy to continue.';
-    showAlert('warning', 'Terms Required! 📜', 'Please accept the Terms of Use and Privacy Policy to create your account.');
+    ErrorHandler.handleValidationError('Terms not accepted', null, 'Please accept the Terms of Use and Privacy Policy to create your account.');
+    setButtonLoading(registerBtn, false);
+    return;
+  }
+
+  // ✅ Rate limiting para registro
+  const rateLimit = Validation.rateLimit.check('register', 3, 300000); // 3 tentativas em 5 minutos
+  if (!rateLimit.allowed) {
+    const waitTime = Math.ceil(rateLimit.resetIn / 1000);
+    errorEl.textContent = `Too many registration attempts. Wait ${waitTime}s`;
+    ErrorHandler.handleValidationError(
+      'Registration rate limit exceeded',
+      null,
+      `Too many registration attempts. Please wait ${waitTime} seconds before trying again.`
+    );
+    setButtonLoading(registerBtn, false);
+    return;
+  }
+
+  // ✅ Validação de username
+  const usernameValidation = Validation.username.validate(username);
+  if (!usernameValidation.valid) {
+    errorEl.textContent = usernameValidation.error!;
+    ErrorHandler.handleValidationError('Invalid username', { username }, usernameValidation.error!);
+    setButtonLoading(registerBtn, false);
+    return;
+  }
+
+  // ✅ Validação de email
+  if (!Validation.email.isValid(email)) {
+    errorEl.textContent = 'Invalid email format';
+    ErrorHandler.handleValidationError('Invalid email format', { email }, 'Please enter a valid email address.');
     setButtonLoading(registerBtn, false);
     return;
   }
 
   if (CAPTCHA_REQUIRED && !captchaToken) {
     errorEl.textContent = 'Complete the captcha before signing up.';
-    showAlert('warning', 'Captcha Required', 'Please complete the captcha to continue.');
+    ErrorHandler.handleValidationError('Captcha required', null, 'Please complete the captcha to continue.');
     setButtonLoading(registerBtn, false);
     return;
   }
   
   if (password !== confirm) {
     errorEl.textContent = 'The passwords dont match.';
-    showAlert('error', 'Password Mismatch! ❌', 'Passwords do not match. Please try again.');
+    ErrorHandler.handleValidationError('Password mismatch', null, 'Passwords do not match. Please try again.');
     setButtonLoading(registerBtn, false);
     return;
   }
   
-  if (password.length < 6) {
-    errorEl.textContent = 'The password must be at least 6 characters long.';
-    showAlert('warning', 'Weak Password! ⚠️', 'Password must be at least 6 characters long.');
+  // ✅ Validação de força de senha
+  const passwordStrength = Validation.password.checkStrength(password);
+  if (passwordStrength.score < 2) { // Pelo menos "Fair"
+    const feedback = passwordStrength.feedback.join('. ');
+    errorEl.textContent = `Weak password: ${feedback}`;
+    ErrorHandler.handleValidationError(
+      'Password too weak',
+      { score: passwordStrength.score, label: passwordStrength.label },
+      `Password is too weak (${passwordStrength.label}). ${feedback}`
+    );
     setButtonLoading(registerBtn, false);
     return;
   }
@@ -644,14 +908,22 @@ export async function handleRegister(): Promise<void> {
     
     if (authError) {
       errorEl.textContent = authError.message;
-      showAlert('error', 'Registration Failed! ❌', authError.message || 'Unable to create account.');
+      ErrorHandler.handleAuthError(
+        'Registration failed',
+        { error: authError.message, email, username },
+        authError.message || 'Unable to create account.'
+      );
       setButtonLoading(registerBtn, false);
       return;
     }
     
     if (!authData.user) {
       errorEl.textContent = 'Error creating account';
-      showAlert('error', 'Registration Failed! ❌', 'Unable to create account. Please try again.');
+      ErrorHandler.handleAuthError(
+        'Registration failed - no user returned',
+        { email, username },
+        'Unable to create account. Please try again.'
+      );
       setButtonLoading(registerBtn, false);
       return;
     }
@@ -674,9 +946,12 @@ export async function handleRegister(): Promise<void> {
       });
     
     if (dbError) {
-      console.error('Error creating profile:', dbError);
       errorEl.textContent = 'Error creating profile: ' + dbError.message;
-      showAlert('error', 'Profile Error! ❌', 'Account created but profile setup failed. Contact support.');
+      ErrorHandler.handleDatabaseError(
+        'Failed to create player profile',
+        { error: dbError.message, userId: authData.user.id }
+      );
+      showAlert('error', 'Profile Error! ❌', 'Account created but profile setup failed. Please contact support.');
       setButtonLoading(registerBtn, false);
       return;
     }
@@ -694,7 +969,12 @@ export async function handleRegister(): Promise<void> {
           onConflict: 'user_id'
         });
     } catch (termsError) {
-      console.error('Error saving terms acceptance:', termsError);
+      ErrorHandler.handleError('Failed to save terms acceptance', {
+        category: ErrorCategory.DATABASE,
+        severity: ErrorSeverity.WARNING,
+        details: termsError,
+        showToUser: false
+      });
     }
 
     if (referralCode) {
@@ -703,6 +983,9 @@ export async function handleRegister(): Promise<void> {
         await attemptReferralLink(referralCode, authData.user.id, authData.session.access_token);
       }
     }
+    
+    // ✅ Sucesso - resetar rate limit
+    Validation.rateLimit.reset('register');
     
     errorEl.className = 'auth-success';
     errorEl.textContent = '✅ Registration complete! Check your email to activate your account.';
@@ -722,9 +1005,14 @@ export async function handleRegister(): Promise<void> {
     setButtonLoading(registerBtn, false);
     
   } catch (err) {
-    console.error('Error in registration:', err);
+    ErrorHandler.handleError('Unexpected error in registration', {
+      category: ErrorCategory.AUTH,
+      severity: ErrorSeverity.ERROR,
+      details: err,
+      userMessage: 'Something went wrong. Please try again later.',
+      showToUser: true
+    });
     errorEl.textContent = 'Unexpected error while creating account.';
-    showAlert('error', 'Unexpected Error! 🌐', 'Something went wrong. Please try again later.');
     resetCaptcha('register');
     setButtonLoading(registerBtn, false);
   }
@@ -756,7 +1044,12 @@ export async function handleLogout(isInBattle: boolean = false): Promise<void> {
       await clearCsrfTokenOnServer(session.user.id, session.access_token);
     }
   } catch (err) {
-    console.error('Failed to clear CSRF token:', err);
+    ErrorHandler.handleError('Failed to clear CSRF token on logout', {
+      category: ErrorCategory.AUTH,
+      severity: ErrorSeverity.WARNING,
+      details: err,
+      showToUser: false
+    });
     // Não bloqueia o logout se falhar
   }
   
@@ -786,7 +1079,13 @@ export async function handleLogout(isInBattle: boolean = false): Promise<void> {
   try {
     await supabase.auth.signOut();
   } catch (err) {
-    console.error('Error signing out:', err);
+    ErrorHandler.handleError('Error signing out', {
+      category: ErrorCategory.AUTH,
+      severity: ErrorSeverity.ERROR,
+      details: err,
+      userMessage: '⚠️ Logout failed. Please try again.',
+      showToUser: true
+    });
   }
   
   // Redirecionar para tela de auth com URL
@@ -823,8 +1122,9 @@ export async function loadUserData(
   applyTranslations?: () => void,
   goTo?: (screen: string) => void
 ): Promise<void> {
-  // Fonte única: sincroniza window + Redux
+  // 🔥 State Manager - Sincronização central
   setActiveUser(user as any, { persist: false });
+  
   try {
     await syncPendingReferral(user);
   } catch (err) {
@@ -838,23 +1138,35 @@ export async function loadUserData(
     .single();
   
   if (error || !data) {
-    console.error('Error loading data:', error);
+    ErrorHandler.handleDatabaseError('Failed to load user data', { error, userId: user.id });
     return;
   }
   
-  // ✅ DETECTAR SE JÁ É PROXY OU NÚMERO SIMPLES (sem popups)
-  window.__suppressCurrencyPopups = true;
+  // 🔥 Usar State Manager para sincronizar tudo automaticamente
   try {
-    if (window.playerMoney) window.playerMoney.value = data.money || 0;
-    if (window.playerDiamonds) window.playerDiamonds.value = data.diamonds || 0;
+    stateManager.setUser({
+      id: user.id,
+      email: user.email || '',
+      username: data.username,
+      level: data.level,
+      xp: data.xp
+    });
+    
+    stateManager.setMoney(data.money || 0);
+    stateManager.setDiamonds(data.diamonds || 0);
+    
     // Cache local para rotas evitarem refetch de passes
     window.cachedUnlockedPasses = Array.isArray(data.unlocked_passes)
       ? data.unlocked_passes
       : [];
-    window.cachedDiamonds = data.diamonds || 0;
     window.cachedCaseDiscountLevel = Math.max(0, Number(data.case_discount_level) || 0);
-  } finally {
-    window.__suppressCurrencyPopups = false;
+  } catch (err) {
+    ErrorHandler.handleError('Failed to sync user state', {
+      category: ErrorCategory.UNKNOWN,
+      severity: ErrorSeverity.WARNING,
+      details: err,
+      showToUser: false
+    });
   }
   
   // Atualizar UI imediatamente
@@ -923,18 +1235,28 @@ export async function loadUserData(
     }
   }
 
-  // Operações que podem ser lentas - executar em paralelo sem await
+  // ⚡ Operações secundárias em paralelo (não bloqueia UI)
+  // Separar operações síncronas das assíncronas para melhor performance
+  if (loadSavedColors) loadSavedColors();
+  if (applyTranslations) applyTranslations();
+  
+  // Apenas operações assíncronas realmente independentes em Promise.all
   Promise.all([
-    loadSavedColors ? Promise.resolve(loadSavedColors()) : Promise.resolve(),
     checkAndShowAdminButton ? checkAndShowAdminButton() : Promise.resolve(),
-    applyTranslations ? Promise.resolve(applyTranslations()) : Promise.resolve(),
     (async () => {
       const { data: sessionData } = await supabase.auth.getSession();
       if (sessionData?.session?.access_token) {
         await fetchCsrfToken(user.id, sessionData.session.access_token);
       }
-    })().catch(err => console.error('Error fetching CSRF token:', err))
-  ]).catch(err => console.error('Error loading secondary data:', err));
+    })()
+  ]).catch(err => {
+    ErrorHandler.handleError('Error loading secondary data', {
+      category: ErrorCategory.UNKNOWN,
+      severity: ErrorSeverity.WARNING,
+      details: err,
+      showToUser: false
+    });
+  });
 }
 
 /**
@@ -951,6 +1273,18 @@ export function setupAuthStateListener(loadUserDataCallback: (user: User) => voi
     }
     authStateSubscription = null;
   }
+
+  // 🛡️ Cleanup global em beforeunload para evitar memory leaks
+  window.addEventListener('beforeunload', () => {
+    if (authStateSubscription) {
+      try {
+        authStateSubscription.unsubscribe();
+      } catch {
+        // ignore
+      }
+      authStateSubscription = null;
+    }
+  }, { once: true });
 
   const { data } = supabase.auth.onAuthStateChange((event, session) => {
     if (event === 'TOKEN_REFRESHED') {
@@ -1071,8 +1405,13 @@ export async function requestSetup2FA(userId: string, authToken: string): Promis
     });
 
     if (!response.ok) {
-      console.error('Failed to setup 2FA:', response.status);
-      showAlert('error', '❌ 2FA Setup Failed', 'Could not generate 2FA secret');
+      ErrorHandler.handleError('Failed to setup 2FA', {
+        category: ErrorCategory.AUTH,
+        severity: ErrorSeverity.ERROR,
+        details: { status: response.status },
+        userMessage: 'Could not generate 2FA secret',
+        showToUser: true
+      });
       return null;
     }
 
@@ -1083,8 +1422,13 @@ export async function requestSetup2FA(userId: string, authToken: string): Promis
 
     return null;
   } catch (error) {
-    console.error('Error requesting 2FA setup:', error);
-    showAlert('error', '❌ Error', 'Failed to setup 2FA');
+    ErrorHandler.handleError('Error requesting 2FA setup', {
+      category: ErrorCategory.AUTH,
+      severity: ErrorSeverity.ERROR,
+      details: error,
+      userMessage: 'Failed to setup 2FA',
+      showToUser: true
+    });
     return null;
   }
 }
@@ -1120,9 +1464,14 @@ export async function verifyAndEnable2FA(userId: string, authToken: string, secr
     });
 
     if (!response.ok) {
-      console.error('Failed to verify 2FA:', response.status);
       const errorData = await response.json();
-      showAlert('error', '❌ Verification Failed', errorData.error || 'Invalid code');
+      ErrorHandler.handleError('Failed to verify 2FA', {
+        category: ErrorCategory.AUTH,
+        severity: ErrorSeverity.ERROR,
+        details: { status: response.status, error: errorData },
+        userMessage: errorData.error || 'Invalid code',
+        showToUser: true
+      });
       return false;
     }
 
@@ -1134,8 +1483,13 @@ export async function verifyAndEnable2FA(userId: string, authToken: string, secr
 
     return false;
   } catch (error) {
-    console.error('Error verifying 2FA:', error);
-    showAlert('error', '❌ Error', 'Failed to verify 2FA code');
+    ErrorHandler.handleError('Error verifying 2FA', {
+      category: ErrorCategory.AUTH,
+      severity: ErrorSeverity.ERROR,
+      details: error,
+      userMessage: 'Failed to verify 2FA code',
+      showToUser: true
+    });
     return false;
   }
 }
@@ -1169,9 +1523,14 @@ export async function disable2FA(userId: string, authToken: string, code: string
     });
 
     if (!response.ok) {
-      console.error('Failed to disable 2FA:', response.status);
       const errorData = await response.json();
-      showAlert('error', '❌ Failed', errorData.error || 'Invalid code');
+      ErrorHandler.handleError('Failed to disable 2FA', {
+        category: ErrorCategory.AUTH,
+        severity: ErrorSeverity.ERROR,
+        details: { status: response.status, error: errorData },
+        userMessage: errorData.error || 'Invalid code',
+        showToUser: true
+      });
       return false;
     }
 
@@ -1183,8 +1542,13 @@ export async function disable2FA(userId: string, authToken: string, code: string
 
     return false;
   } catch (error) {
-    console.error('Error disabling 2FA:', error);
-    showAlert('error', '❌ Error', 'Failed to disable 2FA');
+    ErrorHandler.handleError('Error disabling 2FA', {
+      category: ErrorCategory.AUTH,
+      severity: ErrorSeverity.ERROR,
+      details: error,
+      userMessage: 'Failed to disable 2FA',
+      showToUser: true
+    });
     return false;
   }
 }
@@ -1254,6 +1618,140 @@ export function prompt2FACode(): Promise<string | null> {
 }
 
 /**
+ * ============================================================
+ * MAGIC LINKS (PASSWORDLESS LOGIN) - OTP via Supabase
+ * ============================================================
+ */
+
+let otpSendCaptchaToken: string | null = null;
+
+/**
+ * Envia um link de login mágico (OTP) para o email do usuário
+ */
+export async function handleSendMagicLink(): Promise<void> {
+  const emailEl = document.getElementById('login-email') as HTMLInputElement | null;
+  const errorEl = document.getElementById('login-error');
+  const magicLinkBtn = document.getElementById('send-magic-link-btn') as HTMLButtonElement | null;
+  
+  if (!emailEl || !errorEl) return;
+  
+  const email = emailEl.value.trim();
+  errorEl.textContent = '';
+  
+  // ✅ Validação de email
+  if (!email) {
+    errorEl.textContent = 'Please enter your email address';
+    return;
+  }
+  
+  if (!Validation.email.isValid(email)) {
+    errorEl.textContent = 'Invalid email format';
+    return;
+  }
+  
+  setButtonLoading(magicLinkBtn, true);
+  
+  try {
+    const captchaToken = CAPTCHA_REQUIRED ? otpSendCaptchaToken : null;
+    
+    if (CAPTCHA_REQUIRED && !captchaToken) {
+      errorEl.textContent = 'Complete the captcha first';
+      setButtonLoading(magicLinkBtn, false);
+      return;
+    }
+    
+    const allowedRedirectDomains = [
+      'https://lootskirmish.vercel.app',
+      'https://www.lootskirmish.com',
+      'http://localhost:5173'
+    ];
+    const currentOrigin = window.location.origin;
+    
+    if (!allowedRedirectDomains.includes(currentOrigin)) {
+      ErrorHandler.handleError('Potential phishing attack detected', {
+        category: ErrorCategory.PERMISSION,
+        severity: ErrorSeverity.CRITICAL,
+        details: { currentOrigin },
+        userMessage: 'Invalid redirect domain.',
+        showToUser: true
+      });
+      setButtonLoading(magicLinkBtn, false);
+      return;
+    }
+    
+    const { error } = await supabase.auth.signInWithOtp({
+      email,
+      options: {
+        emailRedirectTo: `${currentOrigin}/auth?otp=true`,
+        captchaToken: captchaToken || undefined
+      }
+    });
+    
+    if (error) {
+      errorEl.textContent = error.message || 'Failed to send magic link';
+      ErrorHandler.handleAuthError(
+        'Magic link send failed',
+        { error: error.message, email },
+        error.message || 'Unable to send magic link'
+      );
+      setButtonLoading(magicLinkBtn, false);
+      return;
+    }
+    
+    showAlert('success', '✨ Magic Link Sent!', `Check your email at ${email} for the login link. It will expire in 24 hours.`);
+    errorEl.textContent = 'Magic link sent! Check your email.';
+    errorEl.className = 'auth-success';
+    setButtonLoading(magicLinkBtn, false);
+    
+  } catch (err) {
+    ErrorHandler.handleError('Magic link unexpected error', {
+      category: ErrorCategory.AUTH,
+      severity: ErrorSeverity.ERROR,
+      details: err,
+      userMessage: 'Something went wrong. Please try again.',
+      showToUser: true
+    });
+    setButtonLoading(magicLinkBtn, false);
+  }
+}
+
+/**
+ * Detecta se há OTP na URL e tenta autenticar automaticamente
+ */
+function detectOTPLogin(): void {
+  const urlParams = new URLSearchParams(window.location.search);
+  const isOTPLogin = urlParams.get('otp') === 'true';
+  const hasError = urlParams.get('error');
+  const errorCode = urlParams.get('error_code');
+  
+  if (!isOTPLogin) return;
+  
+  if (hasError) {
+    if (errorCode === 'otp_expired') {
+      showAlert('error', '⏱️ Link Expired', 'This OTP link has expired. Please request a new one.');
+    } else {
+      showAlert('error', '❌ Authentication Failed', hasError || 'Invalid OTP link');
+    }
+    window.history.replaceState({}, '', '/auth');
+    return;
+  }
+  
+  // O Supabase já processou o OTP na URL e atualizou a sessão
+  // Aguardar um pouco para que o estado de autenticação seja processado
+  setTimeout(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session?.user) {
+        showToast('success', 'Welcome! 🎉', 'Logged in with Magic Link');
+        // O onAuthStateChange irá redirecionar automaticamente
+      } else {
+        showAlert('error', '❌ Authentication Failed', 'Could not authenticate with this link');
+        window.history.replaceState({}, '', '/auth');
+      }
+    });
+  }, 500);
+}
+
+/**
  * Limpa dados antigos do localStorage que não são mais usados
  * (Remember me e CSRF token antigos)
  */
@@ -1272,7 +1770,11 @@ function initializeAuthUI(): void {
   cleanupOldLocalStorageData();
   prefillReferralFromUrl();
   detectPasswordReset();
+  detectOTPLogin();
   renderHCaptcha();
+  
+  // 🔐 Inicializar indicadores de força de senha
+  initPasswordStrengthIndicators();
 }
 
 if (document.readyState === 'loading') {
@@ -1287,6 +1789,7 @@ window.handleRegister = handleRegister;
 window.handlePasswordReset = handlePasswordReset;
 window.handleUpdatePassword = handleUpdatePassword;
 window.updatePasswordAfterReset = updatePasswordAfterReset;
+window.handleSendMagicLink = handleSendMagicLink;
 (window as any).requestSetup2FA = requestSetup2FA;
 (window as any).verifyAndEnable2FA = verifyAndEnable2FA;
 (window as any).disable2FA = disable2FA;

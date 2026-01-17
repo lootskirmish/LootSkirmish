@@ -3,6 +3,7 @@
 // ============================================================
 
 import { playSound } from './sfx';
+import { ErrorHandler, ErrorCategory, ErrorSeverity } from './error-handler';
 
 // ============ TYPE DEFINITIONS ============
 
@@ -572,7 +573,12 @@ export async function copyToClipboard(text: string): Promise<boolean> {
     await navigator.clipboard.writeText(text);
     return true;
   } catch (err) {
-    console.error('Erro ao copiar:', err);
+    ErrorHandler.handleError('Erro ao copiar', {
+      category: ErrorCategory.UNKNOWN,
+      severity: ErrorSeverity.WARNING,
+      details: err,
+      showToUser: false
+    });
     return false;
   }
 }

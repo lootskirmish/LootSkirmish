@@ -6,6 +6,7 @@ import { store, authActions } from './persistence';
 import { createLogger } from './logger';
 import { WindowManager, User, isValidUser, isValidUsername } from './core-utils';
 import { SECURITY, STORAGE, ERRORS } from '../shared/constants';
+import { ErrorHandler, ErrorCategory, ErrorSeverity } from '../shared/error-handler';
 
 const logger = createLogger('Session');
 
@@ -577,7 +578,12 @@ export async function generateRequestSignature(
     
     return { timestamp, nonce, signature: signatureHex, bodyHash };
   } catch (error) {
-    console.error('Failed to generate request signature:', error);
+    ErrorHandler.handleError('Failed to generate request signature', {
+      category: ErrorCategory.UNKNOWN,
+      severity: ErrorSeverity.ERROR,
+      details: error,
+      showToUser: false
+    });
     return null;
   }
 }

@@ -1140,6 +1140,26 @@ class PersistenceManager {
 // ============================================================
 // STORAGE ADAPTERS
 // ============================================================
+// ⚡ PERFORMANCE GUIDE:
+// 
+// localStorage (uso atual):
+// - Síncrono, bloqueia UI
+// - Limite: 5-10MB
+// - Melhor para: tokens, preferências pequenas (< 1KB)
+// - Usar para: CSRF tokens, language, soundPrefs, theme
+//
+// IndexedDB (implementado, disponível):
+// - Assíncrono, não bloqueia UI
+// - Limite: ~50MB+ (depende do navegador)
+// - Melhor para: histórico, cache, dados grandes (> 10KB)
+// - Usar para: case history, inventory cache, translations cache
+//
+// sessionStorage:
+// - Síncrono, bloqueia UI
+// - Limite: 5-10MB
+// - Perdido ao fechar aba
+// - Melhor para: rate limiting, temporary state
+// ============================================================
 
 interface StorageAdapter {
   get(key: string): Promise<string | null>;

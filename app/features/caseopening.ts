@@ -9,6 +9,8 @@ import type { Case, CaseItem, Rarity, PassConfig } from '../shared/constants';
 import { playSound, startLoop } from '../shared/sfx';
 import type { LoopHandle } from '../shared/sfx';
 import { showToast, showAlert } from '../shared/effects';
+import { ErrorHandler, ErrorCategory, ErrorSeverity } from '../shared/error-handler';
+import { stateManager } from '../core/state-manager';
 
 // ============================================================
 // TYPE DEFINITIONS
@@ -330,7 +332,12 @@ async function openCaseView(caseId: string): Promise<void> {
   const caseData = getCaseById(caseId);
   
   if (!caseData) {
-    console.error('Case not found:', caseId);
+    ErrorHandler.handleError('Case not found', {
+      category: ErrorCategory.UNKNOWN,
+      severity: ErrorSeverity.ERROR,
+      details: { caseId },
+      showToUser: false
+    });
     return;
   }
   
@@ -411,7 +418,12 @@ async function generatePreview(): Promise<void> {
         if (requestToken !== previewToken || myToken !== previewToken) continue;
 
         if (!response.ok) {
-          console.error('❌ Preview generation failed:', result.error);
+          ErrorHandler.handleError('Preview generation failed', {
+            category: ErrorCategory.UNKNOWN,
+            severity: ErrorSeverity.WARNING,
+            details: { error: result.error, caseId, quantity },
+            showToUser: false
+          });
           previewItems = [];
           setupReel();
           continue;
@@ -421,7 +433,12 @@ async function generatePreview(): Promise<void> {
         setupReel();
       } catch (error) {
         if (requestToken !== previewToken || myToken !== previewToken) continue;
-        console.error('💥 Preview error:', error);
+        ErrorHandler.handleError('Preview generation error', {
+          category: ErrorCategory.UNKNOWN,
+          severity: ErrorSeverity.WARNING,
+          details: error,
+          showToUser: false
+        });
         previewItems = [];
         setupReel();
       }
@@ -758,9 +775,7 @@ async function purchasePass(passId: string): Promise<void> {
 
     // Atualizar caches globais para persistir estado nas próximas rotas/refresh
     window.cachedUnlockedPasses = updatedPasses;
-    if (window.playerDiamonds) {
-      window.playerDiamonds.value = updatedDiamonds;
-    }
+    stateManager.updateDiamonds(updatedDiamonds);
     window.cachedDiamonds = updatedDiamonds;
     const diamondDisplay = document.getElementById('diamonds');
     if (diamondDisplay) diamondDisplay.textContent = updatedDiamonds;
@@ -775,8 +790,13 @@ async function purchasePass(passId: string): Promise<void> {
     showToast('success', 'Pass Unlocked! ✨', `${config.name} has been unlocked!`);
     
   } catch (error) {
-    console.error('Purchase pass error:', error);
-    showAlert('error', 'Connection Error! 🌐', 'Unable to connect to server. Please check your internet connection.');
+    ErrorHandler.handleError('Purchase pass error', {
+      category: ErrorCategory.PAYMENT,
+      severity: ErrorSeverity.ERROR,
+      details: error,
+      userMessage: 'Unable to connect to server. Please check your internet connection.',
+      showToUser: true
+    });
     hidePassModal();
   }
 }
@@ -865,9 +885,7 @@ async function upgradeCaseDiscount(): Promise<void> {
       : currentBalance - nextCost;
 
     playerMoney = newBalance;
-    if (window.playerMoney) {
-      window.playerMoney.value = newBalance;
-    }
+    stateManager.updateMoney(newBalance);
 
     updateDiscountUI();
     if (currentCaseId) {
@@ -887,8 +905,13 @@ async function upgradeCaseDiscount(): Promise<void> {
         : `Now ${appliedPercent}% off. Max level reached.`
     );
   } catch (error) {
-    console.error('Upgrade discount error:', error);
-    showAlert('error', 'Connection Error! 🌐', 'Unable to connect to server. Please try again.');
+    ErrorHandler.handleError('Upgrade discount error', {
+      category: ErrorCategory.PAYMENT,
+      severity: ErrorSeverity.ERROR,
+      details: error,
+      userMessage: 'Unable to connect to server. Please try again.',
+      showToUser: true
+    });
   } finally {
     isUpgradingDiscount = false;
     updateDiscountUI();
@@ -1132,9 +1155,7 @@ async function openCase(): Promise<void> {
     
     // Update balance
     playerMoney = result.newBalance;
-    if (window.playerMoney) {
-      window.playerMoney.value = result.newBalance;
-    }
+    stateManager.updateMoney(result.newBalance);
     updateDiscountUI();
     updateTotalCost();
 
@@ -1157,9 +1178,14 @@ async function openCase(): Promise<void> {
     // Show result modal
     showResultModal(result.winners, result.totalValue);
     
-    } catch (error) {
-    console.error('💥 Error opening case:', error);
-    showAlert('error', 'Connection Error! 🌐', 'Unable to connect to server. Please check your internet connection.');
+  } catch (error) {
+    ErrorHandler.handleError('Error opening case', {
+      category: ErrorCategory.UNKNOWN,
+      severity: ErrorSeverity.ERROR,
+      details: error,
+      userMessage: 'Unable to connect to server. Please check your internet connection.',
+      showToUser: true
+    });
   } finally {
     isOpening = false;
     if (openCaseBtn) (openCaseBtn as HTMLButtonElement).disabled = false;
@@ -1201,7 +1227,12 @@ async function animateHorizontalReel(slotIndex: number, slotData: SlotData, dura
     const track = document.getElementById(`reel-track-${slotIndex}`);
     
     if (!track) {
-      console.error('❌ Track not found:', slotIndex);
+      ErrorHandler.handleError('Horizontal reel track not found', {
+        category: ErrorCategory.UNKNOWN,
+        severity: ErrorSeverity.WARNING,
+        details: { slotIndex },
+        showToUser: false
+      });
       resolve();
       return;
     }
@@ -1255,7 +1286,12 @@ async function animateVerticalReel(slotIndex: number, slotData: SlotData, durati
     const track = document.getElementById(`reel-track-${slotIndex}`);
     
     if (!track) {
-      console.error('❌ Track not found:', slotIndex);
+      ErrorHandler.handleError('Vertical reel track not found', {
+        category: ErrorCategory.UNKNOWN,
+        severity: ErrorSeverity.WARNING,
+        details: { slotIndex },
+        showToUser: false
+      });
       resolve();
       return;
     }
@@ -1308,7 +1344,12 @@ function showWinner(slotIndex: number, item: PreviewItem, isHorizontal: boolean)
   const container = document.getElementById(`reel-container-${slotIndex}`);
   
   if (!container) {
-    console.error('❌ Container not found:', slotIndex);
+    ErrorHandler.handleError('Winner container not found', {
+      category: ErrorCategory.UNKNOWN,
+      severity: ErrorSeverity.WARNING,
+      details: { slotIndex },
+      showToUser: false
+    });
     return;
   }
   

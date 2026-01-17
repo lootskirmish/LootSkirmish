@@ -4,6 +4,7 @@
 
 import { supabase } from './auth';
 import { addCsrfHeader } from '../core/session';
+import { ErrorHandler, ErrorCategory, ErrorSeverity } from '../shared/error-handler';
 import { 
   showUploadNotification, 
   showDiamondPopup, 
@@ -70,7 +71,12 @@ const _elCache: Map<string, HTMLElement | null> = new Map();
  * Helper to show contextual error messages
  */
 function showProfileError(context: string, message: string, details: Record<string, any> = {}): void {
-  console.error(`[PROFILE_ERROR] ${context}:`, { message, details });
+  ErrorHandler.handleError(`Profile error: ${context}`, {
+    category: ErrorCategory.UNKNOWN,
+    severity: ErrorSeverity.WARNING,
+    details: { message, ...details },
+    showToUser: false
+  });
   // Don't show popup immediately - let toast show first
   setTimeout(() => {
     showToast('error', message);
@@ -156,7 +162,7 @@ export async function loadProfileData(user: User, calculateLevel?: (xp: number) 
       .single();
     
     if (error || !stats) {
-      console.error('Error loading profile:', error);
+      ErrorHandler.handleDatabaseError('Failed to load profile', error);
       showAlert('error', 'Loading Failed! 💤', 'Unable to load profile data. Please refresh the page.');
       return;
     }
@@ -228,14 +234,24 @@ export async function loadProfileData(user: User, calculateLevel?: (xp: number) 
     setProfileViewMode(false);
     
   } catch (err) {
-    console.error('Error loading profile:', err);
+    ErrorHandler.handleError('Error loading own profile', {
+      category: ErrorCategory.UNKNOWN,
+      severity: ErrorSeverity.ERROR,
+      details: err,
+      showToUser: false
+    });
   }
 }
 
 export async function loadPublicProfile(username: string, calculateLevel?: (xp: number) => LevelInfo, applyTranslations?: () => void): Promise<void> {
   try {
     if (!username || typeof username !== 'string') {
-      console.error('Invalid username provided');
+      ErrorHandler.handleError('Invalid username provided', {
+        category: ErrorCategory.UNKNOWN,
+        severity: ErrorSeverity.WARNING,
+        details: { username },
+        showToUser: false
+      });
       showToast('error', 'Invalid profile URL.');
       // Return to safe state via router
       window.history.replaceState({}, '', '/');
@@ -256,9 +272,13 @@ export async function loadPublicProfile(username: string, calculateLevel?: (xp: 
       });
 
       if (!profileCheckResponse.ok) {
-        console.error(`[LOAD_PUBLIC_PROFILE] Check failed - Status: ${profileCheckResponse.status}, Username: "${username}"`);
         const errorData = await profileCheckResponse.json().catch(() => ({}));
-        console.error(`[LOAD_PUBLIC_PROFILE] Error response:`, errorData);
+        ErrorHandler.handleError('Profile check failed', {
+          category: ErrorCategory.UNKNOWN,
+          severity: ErrorSeverity.WARNING,
+          details: { status: profileCheckResponse.status, username, errorData },
+          showToUser: false
+        });
         showToast('error', 'Profile could not be accessed.');
         // Return to safe state via router
         window.history.replaceState({}, '', '/');
@@ -277,7 +297,12 @@ export async function loadPublicProfile(username: string, calculateLevel?: (xp: 
         return;
       }
     } catch (err) {
-      console.error(`[LOAD_PUBLIC_PROFILE] Fetch error for "${username}":`, ((err as any)?.message || err));
+      ErrorHandler.handleError('Fetch error for public profile', {
+        category: ErrorCategory.NETWORK,
+        severity: ErrorSeverity.ERROR,
+        details: { username, error: err },
+        showToUser: false
+      });
       showToast('error', 'Could not access profile. Please try again.');
       // Return to safe state via router
       window.history.replaceState({}, '', '/');
@@ -293,7 +318,7 @@ export async function loadPublicProfile(username: string, calculateLevel?: (xp: 
       .single();
 
     if (error || !stats) {
-      console.error(`[LOAD_PUBLIC_PROFILE] DB fetch failed for "${username}":`, error?.message || error);
+      ErrorHandler.handleDatabaseError('DB fetch failed for public profile', { error, username });
       showToast('error', 'Profile could not be loaded. Please try again.');
       // Return to safe state via router
       window.history.replaceState({}, '', '/');
@@ -379,7 +404,12 @@ export async function loadPublicProfile(username: string, calculateLevel?: (xp: 
       await applyTranslations();
     }
   } catch (err) {
-    console.error('Error loading public profile:', err);
+    ErrorHandler.handleError('Error loading public profile', {
+      category: ErrorCategory.UNKNOWN,
+      severity: ErrorSeverity.ERROR,
+      details: err,
+      showToUser: false
+    });
     showToast('error', 'Could not load profile. Please try again.');
     // Return to safe state via router
     window.history.replaceState({}, '', '/');
@@ -516,7 +546,12 @@ export async function uploadToSupabase(file: File, folder: string, userId: strin
     return publicUrl;
     
   } catch (err) {
-    console.error('Upload error:', err);
+    ErrorHandler.handleError('Upload error', {
+      category: ErrorCategory.UNKNOWN,
+      severity: ErrorSeverity.ERROR,
+      details: err,
+      showToUser: false
+    });
     throw err;
   }
 }
@@ -577,7 +612,12 @@ export async function updateAvatar(file: File, userId: string): Promise<void> {
     showToast('success', 'Avatar Updated! 🎨', 'Your profile picture has been changed.');
     
   } catch (err) {
-    console.error('Error updating avatar:', err);
+    ErrorHandler.handleError('Error updating avatar', {
+      category: ErrorCategory.UNKNOWN,
+      severity: ErrorSeverity.ERROR,
+      details: err,
+      showToUser: true
+    });
     showUploadNotification('Error updating avatar!', true);
     showAlert('error', 'Upload Failed! 🌐', 'Unable to upload avatar. Check your connection and try again.');
     
@@ -638,7 +678,12 @@ export async function updateBanner(file: File, userId: string): Promise<void> {
     showToast('success', 'Banner Updated! 🎨', 'Your profile banner has been changed.');
     
   } catch (err) {
-    console.error('Error updating banner:', err);
+    ErrorHandler.handleError('Error updating banner', {
+      category: ErrorCategory.UNKNOWN,
+      severity: ErrorSeverity.ERROR,
+      details: err,
+      showToUser: true
+    });
     showUploadNotification('Error updating banner!', true);
     showAlert('error', 'Upload Failed! 🌐', 'Unable to upload banner. Check your connection and try again.');
     
@@ -662,7 +707,7 @@ export async function loadUserImages(userId: string): Promise<void> {
       .single();
     
     if (error) {
-      console.error('Error loading user images:', error);
+      ErrorHandler.handleDatabaseError('Error loading user images', error);
       return;
     }
     
@@ -687,7 +732,12 @@ export async function loadUserImages(userId: string): Promise<void> {
     }
     
   } catch (err) {
-    console.error('Error loading user images:', err);
+    ErrorHandler.handleError('Error loading user images', {
+      category: ErrorCategory.DATABASE,
+      severity: ErrorSeverity.ERROR,
+      details: err,
+      showToUser: false
+    });
   }
 }
 
@@ -704,7 +754,12 @@ export function toggleProfilePanel(panelType: string, loadDebitHistory?: () => v
   const historyPanel = document.getElementById('history-panel');
   
   if (!historyPanel) {
-    console.error('Painel de histórico não encontrado');
+    ErrorHandler.handleError('History panel not found', {
+      category: ErrorCategory.UNKNOWN,
+      severity: ErrorSeverity.WARNING,
+      details: {},
+      showToUser: false
+    });
     return;
   }
   

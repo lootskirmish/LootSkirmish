@@ -6,6 +6,8 @@ import { supabase } from './auth';
 import { addCsrfHeader, addIdempotencyHeader } from '../core/session';
 import { showAlert, showToast } from '../shared/effects';
 import { getActiveUser } from '../core/session';
+import { ErrorHandler, ErrorCategory, ErrorSeverity } from '../shared/error-handler';
+import { stateManager } from '../core/state-manager';
 
 // ============================================================
 // TIPOS E INTERFACES
@@ -294,8 +296,13 @@ export async function initShop(): Promise<void> {
     // Verificar se há retorno de pagamento na URL
     checkPaymentReturn();
   } catch (error) {
-    console.error('❌ Erro ao inicializar shop:', error);
-    showAlert('error', 'Shop Error', 'Failed to load shop. Please refresh the page.');
+    ErrorHandler.handleError('Failed to initialize shop', {
+      category: ErrorCategory.UNKNOWN,
+      severity: ErrorSeverity.ERROR,
+      details: error,
+      userMessage: 'Failed to load shop. Please refresh the page.',
+      showToUser: true
+    });
   }
 }
 
@@ -306,7 +313,12 @@ export async function initShop(): Promise<void> {
 async function loadUserData(): Promise<void> {
   try {
     if (!currentUser?.id) {
-      console.error('No currentUser.id available');
+      ErrorHandler.handleError('No currentUser.id available in shop', {
+        category: ErrorCategory.AUTH,
+        severity: ErrorSeverity.WARNING,
+        details: {},
+        showToUser: false
+      });
       return;
     }
     
@@ -331,12 +343,10 @@ async function loadUserData(): Promise<void> {
 
     // Atualizar contador de diamantes no header
     if (stats && typeof stats.diamonds === 'number') {
-      if (window.playerDiamonds) {
-        window.playerDiamonds.value = stats.diamonds;
-      }
+      stateManager.updateDiamonds(stats.diamonds);
     }
   } catch (error) {
-    console.error('❌ Erro ao carregar dados do usuário:', error);
+    ErrorHandler.handleDatabaseError('Failed to load user shop data', error);
   }
 }
 
@@ -357,7 +367,12 @@ function renderShop(): void {
   const subsGrid = document.getElementById('subscriptions-grid');
 
   if (!packagesGrid || !subsGrid) {
-    console.error('❌ Grids não encontrados!');
+    ErrorHandler.handleError('Shop grids not found in DOM', {
+      category: ErrorCategory.UNKNOWN,
+      severity: ErrorSeverity.ERROR,
+      details: { packagesGrid: !!packagesGrid, subsGrid: !!subsGrid },
+      showToUser: false
+    });
     return;
   }
 
@@ -638,7 +653,12 @@ function openPaymentModal(productId: string, type: 'package' | 'subscription'): 
   const productContainer = document.getElementById('payment-product-container');
   
   if (!modal || !productContainer) {
-    console.error('❌ Modal elements not found');
+    ErrorHandler.handleError('Shop payment modal elements not found', {
+      category: ErrorCategory.UNKNOWN,
+      severity: ErrorSeverity.ERROR,
+      details: { modal: !!modal, productContainer: !!productContainer },
+      showToUser: false
+    });
     return;
   }
 
@@ -785,7 +805,13 @@ function toggleBattlePassAddon(baseProduct: any, enabled: boolean): void {
   }
   
   if (!newProduct) {
-    console.error('❌ Produto de assinatura não encontrado');
+    ErrorHandler.handleError('Subscription product not found', {
+      category: ErrorCategory.UNKNOWN,
+      severity: ErrorSeverity.ERROR,
+      details: { enabled, baseProductId: baseProduct?.id },
+      userMessage: 'Subscription product not found',
+      showToUser: true
+    });
     return;
   }
   
@@ -906,8 +932,13 @@ window.proceedToCheckout = async function() {
     }
 
   } catch (error) {
-    console.error('❌ Erro ao processar checkout:', error);
-    showAlert('error', 'Checkout Error', ((error as any)?.message || 'Failed to process payment. Please try again.'));
+    ErrorHandler.handleError('Checkout processing failed', {
+      category: ErrorCategory.PAYMENT,
+      severity: ErrorSeverity.ERROR,
+      details: error,
+      userMessage: (error as any)?.message || 'Failed to process payment. Please try again.',
+      showToUser: true
+    });
   } finally {
     isProcessing = false;
     if (continueBtn) {

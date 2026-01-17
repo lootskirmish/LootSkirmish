@@ -3,6 +3,7 @@
 // ============================================================
 
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import crypto from 'crypto';
 import {
   applyCors,
   validateSessionAndFetchPlayerStats,
@@ -137,6 +138,15 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     }
     if (action === 'disable2FA') {
       return await handleDisable2FA(req, res, body);
+    }
+    if (action === 'viewRecoveryCodes') {
+      return await handleViewRecoveryCodes(req, res, body);
+    }
+    if (action === 'viewFullEmail') {
+      return await handleViewFullEmail(req, res, body);
+    }
+    if (action === 'validate2FA') {
+      return await handleValidate2FA(req, res, body);
     }
     
     // Profile actions
@@ -960,6 +970,71 @@ async function handleSetup2FA(req: ApiRequest, res: ApiResponse, body: any) {
   }
 }
 
+// ============================================================
+// 🛡️ 2FA HELPER FUNCTIONS - Encryption & Recovery Codes
+// ============================================================
+
+/**
+ * Criptografa secret 2FA usando AES-256-GCM
+ */
+function encryptTwoFactorSecret(secret: string): { encrypted: string; iv: string } {
+  const algorithm = 'aes-256-gcm';
+  const key = crypto.scryptSync(process.env.CSRF_TOKEN_SECRET || 'default-key', 'salt', 32);
+  const iv = crypto.randomBytes(16);
+  
+  const cipher = crypto.createCipheriv(algorithm, key, iv);
+  let encrypted = cipher.update(secret, 'utf8', 'hex');
+  encrypted += cipher.final('hex');
+  
+  return {
+    encrypted,
+    iv: iv.toString('hex')
+  };
+}
+
+/**
+ * Descriptografa secret 2FA
+ */
+function decryptTwoFactorSecret(encryptedSecret: string, iv: string): string | null {
+  try {
+    const algorithm = 'aes-256-gcm';
+    const key = crypto.scryptSync(process.env.CSRF_TOKEN_SECRET || 'default-key', 'salt', 32);
+    
+    const decipher = crypto.createDecipheriv(algorithm, key, Buffer.from(iv, 'hex'));
+    let decrypted = decipher.update(encryptedSecret, 'hex', 'utf8');
+    decrypted += decipher.final('utf8');
+    
+    return decrypted;
+  } catch (err) {
+    console.error('Failed to decrypt 2FA secret:', err);
+    return null;
+  }
+}
+
+/**
+ * Gera 8 códigos de backup (recovery codes) para 2FA
+ * Usuário pode usá-los se perder acesso ao autenticador
+ */
+function generateRecoveryCodes(): string[] {
+  const codes: string[] = [];
+  for (let i = 0; i < 8; i++) {
+    // Gerar códigos no formato XXXX-XXXX (4-4 dígitos hexadecimais)
+    const code = crypto.randomBytes(4).toString('hex').toUpperCase();
+    codes.push(`${code.slice(0, 4)}-${code.slice(4)}`);
+  }
+  return codes;
+}
+
+/**
+ * Hash de recovery code para armazenar seguro no banco
+ */
+function hashRecoveryCode(code: string): string {
+  return crypto
+    .createHash('sha256')
+    .update(code + (process.env.CSRF_TOKEN_SECRET || 'secret'))
+    .digest('hex');
+}
+
 /**
  * Verify 2FA code and enable 2FA for user
  */
@@ -991,12 +1066,21 @@ async function handleVerify2FA(req: ApiRequest, res: ApiResponse, body: any) {
       return res.status(400).json({ error: 'Invalid authentication code' });
     }
 
-    // Save 2FA secret to user profile (encrypted ideally)
+    // 🛡️ Criptografar secret antes de salvar
+    const { encrypted, iv } = encryptTwoFactorSecret(secret);
+    
+    // 🛡️ Gerar recovery codes
+    const recoveryCodes = generateRecoveryCodes();
+    const hashedRecoveryCodes = recoveryCodes.map(code => hashRecoveryCode(code));
+    
+    // Save encrypted 2FA secret and recovery codes to user profile
     const { error: updateError } = await supabase
       .from('player_profiles')
       .update({
-        two_factor_secret: secret,
+        two_factor_secret: encrypted,
+        two_factor_iv: iv, // IV necessário para descriptografia
         two_factor_enabled: true,
+        two_factor_recovery_codes: JSON.stringify(hashedRecoveryCodes), // Armazenar hasheados
         updated_at: new Date().toISOString()
       })
       .eq('user_id', userId);
@@ -1006,11 +1090,14 @@ async function handleVerify2FA(req: ApiRequest, res: ApiResponse, body: any) {
       return res.status(500).json({ error: 'Failed to enable 2FA' });
     }
 
-    logAudit(supabase, userId, '2FA_ENABLED', {}, req as any).catch(() => {});
+    logAudit(supabase, userId, '2FA_ENABLED', { recovery_codes_generated: true }, req as any).catch(() => {});
 
+    // Retornar recovery codes UMA VEZ (depois nunca mais)
     return res.status(200).json({
       success: true,
-      message: '2FA has been successfully enabled'
+      message: '2FA has been successfully enabled',
+      recoveryCodes: recoveryCodes,
+      recoveryCodeWarning: '⚠️ IMPORTANT: Save these recovery codes in a secure place. You can use them if you lose access to your authenticator app. These codes will never be shown again!'
     });
   } catch (err) {
     console.error('2FA verification error:', err);
@@ -1084,5 +1171,194 @@ async function handleDisable2FA(req: ApiRequest, res: ApiResponse, body: any) {
   } catch (err) {
     console.error('2FA disable error:', err);
     return res.status(500).json({ error: 'Failed to disable 2FA' });
+  }
+}
+
+/**
+ * View recovery codes (requires 2FA code verification)
+ */
+async function handleViewRecoveryCodes(req: ApiRequest, res: ApiResponse, body: any) {
+  const { userId, authToken, code } = body;
+  
+  if (!userId || !authToken || !code) {
+    return res.status(400).json({ error: 'Missing required fields' });
+  }
+
+  // Validate session
+  const session = await validateSessionAndFetchPlayerStats(
+    supabase,
+    authToken,
+    userId,
+    { select: 'user_id' }
+  );
+  
+  if (!session.valid) {
+    return res.status(401).json({ error: session.error || 'Invalid session' });
+  }
+
+  try {
+    // Get user's 2FA secret and recovery codes
+    const { data: profile, error: fetchError } = await supabase
+      .from('player_profiles')
+      .select('two_factor_secret, two_factor_iv, two_factor_recovery_codes, two_factor_enabled')
+      .eq('user_id', userId)
+      .single();
+
+    if (fetchError || !profile?.two_factor_enabled) {
+      return res.status(400).json({ error: '2FA is not enabled for this account' });
+    }
+
+    // Decrypt and verify the code
+    const decryptedSecret = decryptTwoFactorSecret(profile.two_factor_secret, profile.two_factor_iv);
+    if (!decryptedSecret) {
+      return res.status(500).json({ error: 'Failed to decrypt 2FA secret' });
+    }
+
+    const isValid = verifyTwoFactorCode(decryptedSecret, code, 1);
+    
+    if (!isValid) {
+      logAudit(supabase, userId, '2FA_VERIFY_FAILED', { attempt: 'view_recovery_codes_invalid_code' }, req as any).catch(() => {});
+      return res.status(400).json({ error: 'Invalid authentication code' });
+    }
+
+    // Return recovery codes (still hashed for display purposes)
+    const recoveryCodes = profile.two_factor_recovery_codes ? JSON.parse(profile.two_factor_recovery_codes) : [];
+    
+    logAudit(supabase, userId, '2FA_RECOVERY_CODES_VIEWED', {}, req as any).catch(() => {});
+
+    return res.status(200).json({
+      success: true,
+      message: 'Recovery codes retrieved',
+      recoveryCodes: recoveryCodes,
+      warning: '⚠️ These are your hashed recovery codes. Keep them safe!'
+    });
+  } catch (err) {
+    console.error('View recovery codes error:', err);
+    return res.status(500).json({ error: 'Failed to retrieve recovery codes' });
+  }
+}
+
+/**
+ * View full email (requires 2FA code verification)
+ */
+async function handleViewFullEmail(req: ApiRequest, res: ApiResponse, body: any) {
+  const { userId, authToken, code } = body;
+  
+  if (!userId || !authToken || !code) {
+    return res.status(400).json({ error: 'Missing required fields' });
+  }
+
+  // Validate session
+  const session = await validateSessionAndFetchPlayerStats(
+    supabase,
+    authToken,
+    userId,
+    { select: 'user_id' }
+  );
+  
+  if (!session.valid) {
+    return res.status(401).json({ error: session.error || 'Invalid session' });
+  }
+
+  try {
+    // Get user's 2FA secret
+    const { data: profile, error: fetchError } = await supabase
+      .from('player_profiles')
+      .select('two_factor_secret, two_factor_iv, two_factor_enabled')
+      .eq('user_id', userId)
+      .single();
+
+    if (fetchError || !profile?.two_factor_enabled) {
+      return res.status(400).json({ error: '2FA is not enabled for this account' });
+    }
+
+    // Decrypt and verify the code
+    const decryptedSecret = decryptTwoFactorSecret(profile.two_factor_secret, profile.two_factor_iv);
+    if (!decryptedSecret) {
+      return res.status(500).json({ error: 'Failed to decrypt 2FA secret' });
+    }
+
+    const isValid = verifyTwoFactorCode(decryptedSecret, code, 1);
+    
+    if (!isValid) {
+      logAudit(supabase, userId, '2FA_VERIFY_FAILED', { attempt: 'view_email_invalid_code' }, req as any).catch(() => {});
+      return res.status(400).json({ error: 'Invalid authentication code' });
+    }
+
+    // Get user's email from Supabase Auth
+    const { data: { user }, error: userError } = await supabase.auth.admin.getUserById(userId);
+    
+    if (userError || !user?.email) {
+      return res.status(500).json({ error: 'Failed to retrieve email' });
+    }
+
+    logAudit(supabase, userId, '2FA_EMAIL_VIEWED', {}, req as any).catch(() => {});
+
+    return res.status(200).json({
+      success: true,
+      email: user.email
+    });
+  } catch (err) {
+    console.error('View full email error:', err);
+    return res.status(500).json({ error: 'Failed to retrieve email' });
+  }
+}
+
+/**
+ * Validate 2FA code (generic validation for protected actions)
+ */
+async function handleValidate2FA(req: ApiRequest, res: ApiResponse, body: any) {
+  const { userId, authToken, code } = body;
+  
+  if (!userId || !authToken || !code) {
+    return res.status(400).json({ error: 'Missing required fields' });
+  }
+
+  // Validate session
+  const session = await validateSessionAndFetchPlayerStats(
+    supabase,
+    authToken,
+    userId,
+    { select: 'user_id' }
+  );
+  
+  if (!session.valid) {
+    return res.status(401).json({ error: session.error || 'Invalid session' });
+  }
+
+  try {
+    // Get user's 2FA secret
+    const { data: profile, error: fetchError } = await supabase
+      .from('player_profiles')
+      .select('two_factor_secret, two_factor_iv, two_factor_enabled')
+      .eq('user_id', userId)
+      .single();
+
+    if (fetchError || !profile?.two_factor_enabled) {
+      return res.status(400).json({ error: '2FA is not enabled for this account' });
+    }
+
+    // Decrypt and verify the code
+    const decryptedSecret = decryptTwoFactorSecret(profile.two_factor_secret, profile.two_factor_iv);
+    if (!decryptedSecret) {
+      return res.status(500).json({ error: 'Failed to decrypt 2FA secret' });
+    }
+
+    const isValid = verifyTwoFactorCode(decryptedSecret, code, 1);
+    
+    if (!isValid) {
+      logAudit(supabase, userId, '2FA_VERIFY_FAILED', { attempt: 'generic_validation' }, req as any).catch(() => {});
+      return res.status(400).json({ error: 'Invalid authentication code' });
+    }
+
+    logAudit(supabase, userId, '2FA_VALIDATED', {}, req as any).catch(() => {});
+
+    return res.status(200).json({
+      success: true,
+      message: '2FA code validated successfully'
+    });
+  } catch (err) {
+    console.error('2FA validation error:', err);
+    return res.status(500).json({ error: 'Failed to validate 2FA code' });
   }
 }

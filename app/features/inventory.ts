@@ -11,6 +11,8 @@ import {
   showToast,
   showAlert
 } from '../shared/effects';
+import { ErrorHandler, ErrorCategory, ErrorSeverity } from '../shared/error-handler';
+import { stateManager } from '../core/state-manager';
 
 // ============================================================
 // TYPE DEFINITIONS
@@ -146,8 +148,8 @@ async function syncPlayerStats(userId: string): Promise<PlayerStats | null> {
 
     if (data) {
       setMaxCapacityFromBackend(data.max_inventory);
-      if (window.playerDiamonds && data.diamonds !== undefined) {
-        window.playerDiamonds.value = data.diamonds;
+      if (data.diamonds !== undefined) {
+        stateManager.updateDiamonds(data.diamonds);
       }
     }
 
@@ -256,7 +258,12 @@ export function getCurrentUserId(): string | null {
 export async function renderInventory(userId: string): Promise<void> {
   
   if (!userId && !currentUserId) {
-    console.error('❌ No userId available!');
+    ErrorHandler.handleError('No userId available for inventory', {
+      category: ErrorCategory.AUTH,
+      severity: ErrorSeverity.ERROR,
+      details: {},
+      showToUser: false
+    });
     const grid = document.getElementById('inv-grid');
     if (grid) {
       grid.innerHTML = '<p style="color: #ef4444; text-align: center; padding: 20px;">Error: User not authenticated</p>';
@@ -305,9 +312,8 @@ export async function renderInventory(userId: string): Promise<void> {
       const { data, error } = await query;
     
       if (error) {
-        console.error('Error loading inventory:', error);
+        ErrorHandler.handleDatabaseError('Failed to load inventory', error);
         grid.innerHTML = `<p style="color: #ef4444; text-align: center; padding: 20px;">Error: ${error.message}</p>`;
-        showAlert('error', 'Loading Failed! 📦', 'Unable to load inventory. Please refresh the page.');
         return;
       }
 
@@ -324,7 +330,7 @@ export async function renderInventory(userId: string): Promise<void> {
         .eq('user_id', targetUserId);
 
       if (countError) {
-        console.error('Error counting inventory:', countError);
+        ErrorHandler.handleDatabaseError('Error counting inventory', countError);
         totalCount = Array.isArray(lastInventoryItems) ? lastInventoryItems.length : 0;
       } else {
         totalCount = count || 0;
@@ -390,8 +396,13 @@ export async function renderInventory(userId: string): Promise<void> {
     renderPagination(itemCountFiltered);
     
   } catch (err) {
-    console.error('Inventory error:', err);
-    alert('❌ Error loading inventory');
+    ErrorHandler.handleError('Inventory rendering error', {
+      category: ErrorCategory.UNKNOWN,
+      severity: ErrorSeverity.ERROR,
+      details: err,
+      userMessage: 'Error loading inventory',
+      showToUser: true
+    });
   }
 }
 
@@ -640,16 +651,21 @@ export async function purchaseInventoryUpgrade(): Promise<void> {
     const newDiamonds = result.newDiamonds ?? result.newdiamonds;
 
     if (newMax) setMaxCapacityFromBackend(newMax);
-    if (window.playerDiamonds && newDiamonds !== undefined) {
-      window.playerDiamonds.value = newDiamonds;
+    if (newDiamonds !== undefined) {
+      stateManager.updateDiamonds(newDiamonds);
     }
 
     showToast('success', 'Inventory Upgraded! 📦', `Capacity increased to ${newMax}.`);
     if (modal) modal.classList.add('hidden');
     renderUpgradeModalContent();
   } catch (err) {
-    console.error('Error upgrading inventory:', err);
-    showAlert('error', 'Connection Error', 'Unable to upgrade inventory now.');
+    ErrorHandler.handleError('Error upgrading inventory', {
+      category: ErrorCategory.PAYMENT,
+      severity: ErrorSeverity.ERROR,
+      details: err,
+      userMessage: 'Unable to upgrade inventory now.',
+      showToUser: true
+    });
   } finally {
     if (ctaEl) {
       ctaEl.disabled = false;
@@ -715,7 +731,12 @@ export function clearSelection(): void {
 export async function sellSingleItem(itemId: string): Promise<void> {
   itemId = String(itemId);
   if (!currentUserId) {
-    console.error('❌ No userId available for selling!');
+    ErrorHandler.handleError('No userId available for selling', {
+      category: ErrorCategory.AUTH,
+      severity: ErrorSeverity.ERROR,
+      details: {},
+      showToUser: false
+    });
     alert('❌ Authentication error. Please refresh the page.');
     return;
   }
@@ -733,7 +754,12 @@ export async function sellItem(itemId: string, userId: string, renderCallback: (
   }
   
   if (!userId) {
-    console.error('❌ No userId provided to sellItem!');
+    ErrorHandler.handleError('No userId provided to sellItem', {
+      category: ErrorCategory.AUTH,
+      severity: ErrorSeverity.ERROR,
+      details: {},
+      showToUser: false
+    });
     alert('❌ Authentication error. Please refresh the page.');
     return;
   }
@@ -783,9 +809,7 @@ export async function sellItem(itemId: string, userId: string, renderCallback: (
     const { soldValue, newBalance, itemName } = result;
     
     // Atualizar dinheiro local
-    if (window.playerMoney) {
-      window.playerMoney.value = newBalance;
-    }
+    stateManager.updateMoney(newBalance);
 
     // 🔥 Toast de sucesso
     showToast('success', 'Item Sold! 💰', `You received $${soldValue.toFixed(2)}`);
@@ -807,8 +831,13 @@ export async function sellItem(itemId: string, userId: string, renderCallback: (
     isSelling = false;
     
   } catch (err) {
-    alert('❌ Error when selling: ' + ((err as any)?.message || String(err)));
-    console.error('Error:', err);
+    ErrorHandler.handleError('Error selling item', {
+      category: ErrorCategory.UNKNOWN,
+      severity: ErrorSeverity.ERROR,
+      details: err,
+      userMessage: 'Error when selling: ' + ((err as any)?.message || String(err)),
+      showToUser: true
+    });
     isSelling = false;
   }
 }
@@ -820,7 +849,12 @@ export async function sellSelected(): Promise<void> {
   if (isSelling || selectedItems.size === 0) return;
   
   if (!currentUserId) {
-    console.error('❌ No userId available for selling!');
+    ErrorHandler.handleError('No userId available for selling selected', {
+      category: ErrorCategory.AUTH,
+      severity: ErrorSeverity.ERROR,
+      details: {},
+      showToUser: false
+    });
     alert('❌ Authentication error. Please refresh the page.');
     return;
   }
@@ -869,9 +903,7 @@ export async function sellSelected(): Promise<void> {
     const { soldCount, totalValue, newBalance } = result;
     
     // Atualizar dinheiro local
-    if (window.playerMoney) {
-      window.playerMoney.value = newBalance;
-    }
+    stateManager.updateMoney(newBalance);
     
     // 🔥 Toast de sucesso
     showToast('success', 'Items Sold! 💰', `${soldCount} items sold for $${totalValue.toFixed(2)}`);
@@ -891,8 +923,13 @@ export async function sellSelected(): Promise<void> {
     isSelling = false;
     
   } catch (err) {
-    showAlert('error', 'Connection Error! 🌐', 'Unable to connect to server. Check your internet.');
-    console.error('Error:', err);
+    ErrorHandler.handleError('Error selling selected items', {
+      category: ErrorCategory.UNKNOWN,
+      severity: ErrorSeverity.ERROR,
+      details: err,
+      userMessage: 'Unable to connect to server. Check your internet.',
+      showToUser: true
+    });
     isSelling = false;
   }
 }
@@ -904,7 +941,12 @@ export async function confirmSellAll(): Promise<void> {
   if (isSelling) return;
   
   if (!currentUserId) {
-    console.error('❌ No userId available for selling!');
+    ErrorHandler.handleError('No userId available for sell all', {
+      category: ErrorCategory.AUTH,
+      severity: ErrorSeverity.ERROR,
+      details: {},
+      showToUser: false
+    });
     alert('❌ Authentication error. Please refresh the page.');
     return;
   }
@@ -953,9 +995,7 @@ export async function confirmSellAll(): Promise<void> {
     const { soldCount, totalValue, newBalance } = result;
     
     // Atualizar dinheiro local
-    if (window.playerMoney) {
-      window.playerMoney.value = newBalance;
-    }
+    stateManager.updateMoney(newBalance);
     
     closeSellAllModal();
 
@@ -974,8 +1014,13 @@ export async function confirmSellAll(): Promise<void> {
     isSelling = false;
     
   } catch (err) {
-    showAlert('error', 'Connection Error! 🌐', 'Unable to process request. Check your connection.');
-    console.error('Error:', err);
+    ErrorHandler.handleError('Error in sell all', {
+      category: ErrorCategory.UNKNOWN,
+      severity: ErrorSeverity.ERROR,
+      details: err,
+      userMessage: 'Unable to process request. Check your connection.',
+      showToUser: true
+    });
     isSelling = false;
   }
 }
@@ -1109,7 +1154,7 @@ export async function updateSellAllSummary(): Promise<void> {
         .eq('user_id', currentUserId);
 
       if (error) {
-        console.error('Erro ao buscar inventário:', error);
+        ErrorHandler.handleDatabaseError('Failed to fetch inventory for sell all', error);
         return;
       }
 
@@ -1144,7 +1189,12 @@ export async function updateSellAllSummary(): Promise<void> {
     }
     
   } catch (err) {
-    console.error('Erro ao atualizar resumo:', err);
+    ErrorHandler.handleError('Error updating sell all summary', {
+      category: ErrorCategory.UNKNOWN,
+      severity: ErrorSeverity.WARNING,
+      details: err,
+      showToUser: false
+    });
   }
 }
 

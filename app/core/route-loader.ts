@@ -38,6 +38,7 @@ function toggleSkeleton(skeletonId: string, contentId: string, show: boolean): v
  * Mapa de rotas para suas funções de carregamento
  */
 const routeLoaders: RouteLoader = {
+  'menu': () => Promise.resolve(), // Menu é a tela inicial, sem dados para carregar
   'inventory': _loadInventoryRoute,
   'leaderboard': _loadLeaderboardRoute,
   'case-opening': _loadCasesRoute,

@@ -8,6 +8,7 @@ import type { RealtimeChannel } from '@supabase/supabase-js';
 import { navigateTo } from '../core/router';
 import { requestFriendFromContext } from './friends';
 import { showToast } from '../shared/effects';
+import { ErrorHandler, ErrorCategory, ErrorSeverity } from '../shared/error-handler';
 
 // ============================================================
 // 🛡️ XSS PROTECTION - FRONTEND ESCAPE
@@ -441,7 +442,7 @@ async function loadInitialMessages(): Promise<void> {
       .limit(50);
     
     if (error) {
-      console.error('❌ Error loading messages:', error);
+      ErrorHandler.handleDatabaseError('❌ Error loading messages', error);
       return;
     }
     
@@ -470,7 +471,12 @@ async function loadInitialMessages(): Promise<void> {
     if (isChatOpen) scrollToBottom();
     
   } catch (err) {
-    console.error('💥 Error loading messages:', err);
+    ErrorHandler.handleError('💥 Error loading messages', {
+      category: ErrorCategory.DATABASE,
+      severity: ErrorSeverity.ERROR,
+      details: err,
+      showToUser: false
+    });
   }
 }
 
@@ -680,7 +686,12 @@ export async function sendChatMessage(): Promise<void> {
     lastMessageTime = now;
     
   } catch (err) {
-    console.error('💥 Error sending message:', err);
+    ErrorHandler.handleError('💥 Error sending message', {
+      category: ErrorCategory.NETWORK,
+      severity: ErrorSeverity.ERROR,
+      details: err,
+      showToUser: false
+    });
     showChatError('Connection error');
   } finally {
     input.disabled = false;

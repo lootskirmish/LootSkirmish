@@ -3,6 +3,7 @@
 // ============================================================
 
 import { addCsrfHeader } from '../core/session';
+import { ErrorHandler, ErrorCategory, ErrorSeverity } from '../shared/error-handler';
 
 // ============================================================
 // TIPOS E INTERFACES
@@ -170,7 +171,12 @@ async function submitTicket(formData: SupportFormData): Promise<TicketSubmitResp
     return data;
     
   } catch (error) {
-    console.error('❌ Error submitting ticket:', error);
+    ErrorHandler.handleError('❌ Error submitting ticket', {
+      category: ErrorCategory.DATABASE,
+      severity: ErrorSeverity.ERROR,
+      details: error,
+      showToUser: false
+    });
     throw error;
   }
 }

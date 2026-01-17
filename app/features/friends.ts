@@ -6,6 +6,7 @@ import { supabase } from './auth';
 import { addCsrfHeader } from '../core/session';
 import { showToast } from '../shared/effects';
 import { navigateTo } from '../core/router';
+import { ErrorHandler, ErrorCategory, ErrorSeverity } from '../shared/error-handler';
 
 // ============================================================
 // TYPE DEFINITIONS
@@ -612,7 +613,12 @@ async function refreshState(): Promise<void> {
     const data = await callFriendsApi('fetchState');
     setState(data.state, data.profiles);
   } catch (err) {
-    console.error('Friends refresh failed:', err);
+    ErrorHandler.handleError('Friends refresh failed', {
+      category: ErrorCategory.NETWORK,
+      severity: ErrorSeverity.ERROR,
+      details: err,
+      showToUser: false
+    });
     showToast('error', ((err as any)?.message || 'Failed to load friends'));
   }
 }

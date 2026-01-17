@@ -1,6 +1,8 @@
 import { supabase } from './auth';
 import { addCsrfHeader } from '../core/session';
 import { showAlert, showToast } from '../shared/effects';
+import { ErrorHandler, ErrorCategory, ErrorSeverity } from '../shared/error-handler';
+import { stateManager } from '../core/state-manager';
 
 // ============================================================
 // TYPE DEFINITIONS
@@ -259,7 +261,12 @@ async function loadReferralPanel(): Promise<void> {
     renderStats(data);
     renderHistory(data.transactions || [], { reset: true });
   } catch (err) {
-    console.error('referrals load error', err);
+    ErrorHandler.handleError('referrals load error', {
+      category: ErrorCategory.DATABASE,
+      severity: ErrorSeverity.ERROR,
+      details: err,
+      showToUser: false
+    });
     showAlert('error', 'Referral error', ((err as any)?.message || 'Could not load referrals'));
   } finally {
     toggleLoading(false);
@@ -293,12 +300,17 @@ async function withdrawEarnings(): Promise<void> {
     }
 
     showToast('success', 'Withdraw completed', `You received ${formatCoins(result.withdrawn)}.`);
-    if (typeof window.playerMoney === 'object') {
-      window.playerMoney.value = result.newWalletBalance ?? window.playerMoney.value;
+    if (result.newWalletBalance !== undefined) {
+      stateManager.updateMoney(result.newWalletBalance);
     }
     await loadReferralPanel();
   } catch (err) {
-    console.error('withdraw error', err);
+    ErrorHandler.handleError('withdraw error', {
+      category: ErrorCategory.PAYMENT,
+      severity: ErrorSeverity.ERROR,
+      details: err,
+      showToUser: false
+    });
     showAlert('error', 'Withdraw error', ((err as any)?.message || 'Unable to withdraw'));
   } finally {
     withdrawBtn.classList.remove('loading');

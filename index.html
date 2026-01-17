@@ -21,6 +21,8 @@
   ">
   
   <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
+  <link rel="preconnect" href="https://js.hcaptcha.com">
+  <link rel="preconnect" href="https://hcaptcha.com">
   <title>Loot Skirmish</title>
   <link rel="stylesheet" href="./styles/main.css">
 </head>
@@ -772,9 +774,24 @@
     <div class="settings-section">
       <h3 data-translate>👤 Account</h3>
       <div class="settings-card">
+        <!-- 2FA Toggle at Top -->
+        <div class="setting-item toggle">
+          <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+            <label data-translate>🔐 Two-Factor Authentication</label>
+            <input type="checkbox" id="twofa-toggle" onchange="toggle2FA()">
+          </div>
+        </div>
+        <div class="setting-item">
+          <button class="setting-btn secondary" id="view-recovery-codes-btn" onclick="viewRecoveryCodes()" style="display: none;" data-translate>View Recovery Codes</button>
+        </div>
+        
+        <!-- Email & Username Card -->
         <div class="setting-item">
           <label data-translate>Email</label>
-          <input type="email" id="settings-email" value="user@example.com" disabled>
+          <div style="display: flex; gap: 10px; align-items: center;">
+            <input type="email" id="settings-email" value="user@example.com" disabled style="flex: 1;">
+            <button class="setting-btn secondary" onclick="viewFullEmail()" style="white-space: nowrap;" data-translate>View</button>
+          </div>
         </div>
         <div class="setting-item username-item">
           <div class="username-input-stack">
@@ -785,7 +802,7 @@
             <input type="text" id="settings-username" value="Username" disabled>
             <div class="username-helper-row">
               <span class="username-badge" id="username-cost-badge">First change is free</span>
-              <span class="username-helper" id="username-helper">3-16 chars • letters/numbers/._- • case-insensitive unique</span>
+              <span class="username-helper" id="username-helper">3-16 chars • letters and numbers only</span>
             </div>
           </div>
           <div class="username-actions">
