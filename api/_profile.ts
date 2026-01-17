@@ -1035,31 +1035,15 @@ async function handleSetup2FA(req: ApiRequest, res: ApiResponse, body: any) {
 // ============================================================
 
 /**
- * Fetch 2FA data from player_profiles with fallback to player_stats
+ * Fetch 2FA data from player_stats (only table we use)
  */
 async function fetchTwoFactorRow(userId: string, selectFields: string): Promise<{ data: any; error: any }> {
   try {
-    // Try player_profiles first
     const { data, error } = await supabase
-      .from('player_profiles')
+      .from('player_stats')
       .select(selectFields)
       .eq('user_id', userId)
       .single();
-    
-    if (!error && data) {
-      return { data, error: null };
-    }
-    
-    // Fallback to player_stats if column exists
-    if (error?.code === '42703') {
-      const { data: statsData, error: statsError } = await supabase
-        .from('player_stats')
-        .select(selectFields)
-        .eq('user_id', userId)
-        .single();
-      
-      return { data: statsData, error: statsError };
-    }
     
     return { data, error };
   } catch (err) {
@@ -1069,27 +1053,16 @@ async function fetchTwoFactorRow(userId: string, selectFields: string): Promise<
 }
 
 /**
- * Update 2FA data in player_profiles with fallback to player_stats
+ * Update 2FA data in player_stats (only table we use)
  */
 async function updateTwoFactorRow(userId: string, updates: Record<string, any>): Promise<{ error: any }> {
   try {
-    // Try player_profiles first
     const { error } = await supabase
-      .from('player_profiles')
-      .update(updates)
-      .eq('user_id', userId);
-    
-    if (!error || error?.code !== '42703') {
-      return { error };
-    }
-    
-    // Fallback to player_stats if column doesn't exist in profiles
-    const { error: statsError } = await supabase
       .from('player_stats')
       .update(updates)
       .eq('user_id', userId);
     
-    return { error: statsError };
+    return { error };
   } catch (err) {
     console.error('Failed to update 2FA row:', err);
     return { error: err };
@@ -1142,52 +1115,6 @@ function isMissingRelationError(error: any): boolean {
     || code === 'PGRST116'
     || status === '404'
     || (message.includes('relation') && message.includes('does not exist'));
-}
-
-async function fetchTwoFactorRow(userId: string, columns: string): Promise<{ data: any; error: any; table: 'player_profiles' | 'player_stats' }> {
-  const primary = await supabase
-    .from('player_profiles')
-    .select(columns)
-    .eq('user_id', userId)
-    .single();
-
-  if (!primary.error) {
-    return { data: primary.data, error: null, table: 'player_profiles' };
-  }
-
-  if (!isMissingRelationError(primary.error)) {
-    return { data: null, error: primary.error, table: 'player_profiles' };
-  }
-
-  const fallback = await supabase
-    .from('player_stats')
-    .select(columns)
-    .eq('user_id', userId)
-    .single();
-
-  return { data: fallback.data, error: fallback.error, table: 'player_stats' };
-}
-
-async function updateTwoFactorRow(userId: string, update: Record<string, any>): Promise<{ error: any; table: 'player_profiles' | 'player_stats' }> {
-  const primary = await supabase
-    .from('player_profiles')
-    .update(update)
-    .eq('user_id', userId);
-
-  if (!primary.error) {
-    return { error: null, table: 'player_profiles' };
-  }
-
-  if (!isMissingRelationError(primary.error)) {
-    return { error: primary.error, table: 'player_profiles' };
-  }
-
-  const fallback = await supabase
-    .from('player_stats')
-    .update(update)
-    .eq('user_id', userId);
-
-  return { error: fallback.error, table: 'player_stats' };
 }
 
 /**
