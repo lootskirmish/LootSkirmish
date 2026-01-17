@@ -1350,16 +1350,27 @@ async function handleViewRecoveryCodes(req: ApiRequest, res: ApiResponse, body: 
       return res.status(400).json({ error: 'Invalid authentication code' });
     }
 
-    // Return recovery codes (still hashed for display purposes)
-    const recoveryCodes = profile.two_factor_recovery_codes ? JSON.parse(profile.two_factor_recovery_codes) : [];
+    // Rotate recovery codes: generate fresh ones, store hashed, return plain to user
+    const newRecoveryCodes = generateRecoveryCodes();
+    const hashedRecoveryCodes = newRecoveryCodes.map(code => hashRecoveryCode(code));
+
+    const { error: updateError } = await updateTwoFactorRow(userId, {
+      two_factor_recovery_codes: JSON.stringify(hashedRecoveryCodes),
+      updated_at: new Date().toISOString()
+    });
+
+    if (updateError) {
+      console.error('Failed to rotate recovery codes:', updateError);
+      return res.status(500).json({ error: 'Failed to refresh recovery codes' });
+    }
     
-    logAudit(supabase, userId, '2FA_RECOVERY_CODES_VIEWED', {}, req as any).catch(() => {});
+    logAudit(supabase, userId, '2FA_RECOVERY_CODES_VIEWED', { rotated: true }, req as any).catch(() => {});
 
     return res.status(200).json({
       success: true,
-      message: 'Recovery codes retrieved',
-      recoveryCodes: recoveryCodes,
-      warning: '⚠️ These are your hashed recovery codes. Keep them safe!'
+      message: 'New recovery codes generated',
+      recoveryCodes: newRecoveryCodes,
+      warning: '⚠️ Each code can be used once. Store them safely. New codes invalidate old ones.'
     });
   } catch (err) {
     console.error('View recovery codes error:', err);
