@@ -211,15 +211,12 @@ async function openTwoFactorSetupModal(userId: string, authToken: string): Promi
   qrImg.height = 220;
   qrImg.style.borderRadius = '12px';
   qrImg.style.border = '1px solid var(--card-border)';
-  qrImg.src = 'data:image/svg+xml;base64,' + btoa(`<svg xmlns="http://www.w3.org/2000/svg" width="220" height="220"><foreignObject width="100%" height="100%"><div xmlns="http://www.w3.org/1999/xhtml" style="display:flex;align-items:center;justify-content:center;width:100%;height:100%;font-family:system-ui,Segoe UI,Roboto; color:#9ca3af;">Loading QR…</div></foreignObject></svg>`);
+  qrImg.style.background = '#fff';
   qrWrap.appendChild(qrImg);
   box.appendChild(qrWrap);
 
-  // Render QR using a simple image API (no Google)
-  const qrUrl = '/api/_utils_qr?data=' + encodeURIComponent(setup.qrCode);
-  // Fallback to public service if backend route not available
+  // Render QR using external service (fast, no backend changes needed)
   const externalQrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=' + encodeURIComponent(setup.qrCode);
-  // Try external first (fast, no backend changes)
   qrImg.src = externalQrUrl;
 
   // Secret display (manual entry)
