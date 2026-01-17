@@ -946,7 +946,7 @@ async function handleSetup2FA(req: ApiRequest, res: ApiResponse, body: any) {
     supabase,
     authToken,
     userId,
-    { select: 'user_id' }
+    { select: 'user_id, email' }
   );
   
   if (!session.valid) {
@@ -954,8 +954,14 @@ async function handleSetup2FA(req: ApiRequest, res: ApiResponse, body: any) {
   }
 
   try {
+    // Get user email from Supabase auth
+    const { data: { user } } = await supabase.auth.admin.getUserById(userId);
+    if (!user?.email) {
+      return res.status(400).json({ error: 'User email not found' });
+    }
+
     // Generate 2FA secret with QR code
-    const { secret, qrCode } = generateTwoFactorSecret(userId);
+    const { secret, qrCode } = generateTwoFactorSecret(user.email);
     
     // Don't save to database yet - user must verify the code first
     return res.status(200).json({

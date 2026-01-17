@@ -234,6 +234,13 @@ class StateManager {
   }
   
   /**
+   * Atualiza money (alias para setMoney)
+   */
+  updateMoney(value: number): void {
+    this.setMoney(value);
+  }
+  
+  /**
    * Adiciona money
    */
   addMoney(amount: number): void {
@@ -252,6 +259,13 @@ class StateManager {
    */
   setDiamonds(value: number): void {
     this.updateCurrency('diamonds', value);
+  }
+  
+  /**
+   * Atualiza diamonds (alias para setDiamonds)
+   */
+  updateDiamonds(value: number): void {
+    this.setDiamonds(value);
   }
   
   /**
